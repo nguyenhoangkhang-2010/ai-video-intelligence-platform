@@ -1,11 +1,16 @@
 # ==================================================
 # VERSION 2
 # ==================================================
+# Database
+sqlalchemy 
+psycopg[binary] 
+alembic
 # Vector Database
 qdrant-client
 faiss-cpu
 # Embedding
 FlagEmbedding
+sentence-transformers
 # LangChain
 langchain
 langchain-community
@@ -15,6 +20,7 @@ langchain-text-splitters
 transformers
 accelerate
 optimum
+safetensors
 # Tokenizer
 tiktoken
 # Retrieval
