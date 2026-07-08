@@ -15,7 +15,6 @@ from typing import Literal
 from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-
 # =============================================================================
 # Paths
 # =============================================================================
@@ -44,7 +43,6 @@ UPLOAD_DIR = STORAGE_DIR / "uploads"
 TEMP_DIR = STORAGE_DIR / "temp"
 
 CACHE_DIR = STORAGE_DIR / "cache"
-
 
 # =============================================================================
 # Application
