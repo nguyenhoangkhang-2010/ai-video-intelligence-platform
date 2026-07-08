@@ -40,3 +40,16 @@ def create_application() -> FastAPI:
     return application
 
 app = create_application()
+
+@app.get("/", tags=["Root"])
+async def root():
+    """
+    Root endpoint.
+    """
+    return {
+        "name": settings.app.name,
+        "version": settings.app.version,
+        "environment": settings.app.environment,
+        "docs": settings.app.docs_url,
+        "health": f"{settings.app.api_prefix}/health",
+    }
