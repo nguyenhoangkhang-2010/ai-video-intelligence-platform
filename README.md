@@ -1,5 +1,7 @@
 # AI Video Intelligence Platform
 
+<!-- refresh -->
+
 <p align="center">
 
 **An end-to-end AI platform for extracting, understanding, searching, and interacting with video content.**
