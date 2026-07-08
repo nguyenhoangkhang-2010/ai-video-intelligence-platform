@@ -15,6 +15,6 @@ async def health_check():
     """
     return {
         "status": "healthy",
-        "service": settings.PROJECT_NAME,
-        "version": settings.VERSION,
+        "service": settings.app.name,
+        "version": settings.app.version,
     }
