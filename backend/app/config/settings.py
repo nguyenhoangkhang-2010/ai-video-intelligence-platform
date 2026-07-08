@@ -151,30 +151,3 @@ class DatabaseSettings(BaseSettings):
             f"@{self.host}:{self.port}"
             f"/{self.database}"
         )
-        
-# =============================================================================
-# Global Settings Instance
-# =============================================================================
-class Settings(BaseSettings):
-    """
-    Main application settings.
-    Aggregates all configuration sections.
-    """
-    app: AppSettings = AppSettings()
-    server: ServerSettings = ServerSettings()
-    security: SecuritySettings = SecuritySettings()
-    database: DatabaseSettings = DatabaseSettings()
-
-    model_config = SettingsConfigDict(
-        env_file=".env",
-        env_file_encoding="utf-8",
-        case_sensitive=False,
-    )
-
-@lru_cache()
-def get_settings() -> Settings:
-    """
-    Return cached settings instance.
-    """
-    return Settings()
-settings = get_settings()
