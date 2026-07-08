@@ -15,10 +15,10 @@ async def lifespan(app: FastAPI):
     """
     # Startup
     print(
-        f"Starting {settings.PROJECT_NAME}..."
+        f"Starting {settings.app.name}..."
     )
     print(
-        f"Environment: {settings.ENVIRONMENT}"
+        f"Environment: {settings.app.environment}"
     )
     yield
     # Shutdown
