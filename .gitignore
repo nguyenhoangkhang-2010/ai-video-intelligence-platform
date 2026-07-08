@@ -1,0 +1,165 @@
+# ==========================================================
+# AI Video Intelligence Platform
+# ==========================================================
+############################
+# Python
+############################
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+*.pyd
+*.pyo
+############################
+# Virtual Environment
+############################
+.venv/
+venv/
+env/
+ENV/
+############################
+# Build
+############################
+build/
+dist/
+*.egg-info/
+.eggs/
+############################
+# Testing
+############################
+.pytest_cache/
+.coverage
+coverage.xml
+htmlcov/
+############################
+# Type Checking
+############################
+.mypy_cache/
+.pyre/
+.pytype/
+############################
+# Ruff
+############################
+.ruff_cache/
+############################
+# Jupyter
+############################
+.ipynb_checkpoints/
+############################
+# IDE
+############################
+.vscode/
+.idea/
+############################
+# OS
+############################
+.DS_Store
+Thumbs.db
+desktop.ini
+############################
+# Environment Variables
+############################
+.env
+.env.*
+!.env.example
+############################
+# Logs
+############################
+logs/
+*.log
+############################
+# Runtime
+############################
+*.pid
+############################
+# Node
+############################
+frontend/node_modules/
+frontend/.next/
+frontend/out/
+frontend/.turbo/
+frontend/.vercel/
+############################
+# Package Managers
+############################
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+############################
+# Docker
+############################
+docker-data/
+############################
+# AI Models
+############################
+models/
+checkpoints/
+weights/
+*.ckpt
+*.pt
+*.pth
+*.bin
+*.onnx
+*.gguf
+*.safetensors
+############################
+# HuggingFace
+############################
+.cache/
+huggingface/
+############################
+# Vector Database
+############################
+data/vector_db/*
+!data/vector_db/.gitkeep
+############################
+# Embeddings
+############################
+data/embeddings/*
+!data/embeddings/.gitkeep
+############################
+# Storage
+############################
+storage/videos/*
+!storage/videos/.gitkeep
+storage/audio/*
+!storage/audio/.gitkeep
+storage/subtitles/*
+!storage/subtitles/.gitkeep
+storage/thumbnails/*
+!storage/thumbnails/.gitkeep
+############################
+# Processed Data
+############################
+data/raw/*
+!data/raw/.gitkeep
+data/processed/*
+!data/processed/.gitkeep
+data/transcripts/*
+!data/transcripts/.gitkeep
+data/exports/*
+!data/exports/.gitkeep
+############################
+# Benchmark Outputs
+############################
+benchmark/
+results/
+############################
+# Monitoring
+############################
+prometheus_data/
+grafana_data/
+############################
+# Temporary
+############################
+tmp/
+temp/
+.cache/
+############################
+# Misc
+############################
+*.sqlite3
+*.db
+*.bak
+*.tmp
