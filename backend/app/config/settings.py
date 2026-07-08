@@ -12,7 +12,7 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Literal
 
-from pydantic import Field
+from pydantic import BaseModel, Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 # =============================================================================
@@ -29,12 +29,6 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 PROJECT_ROOT = Path(__file__).resolve().parents[3]
 
 ENV_FILE = PROJECT_ROOT / ".env"
-
-print("=" * 60)
-print("PROJECT_ROOT:", PROJECT_ROOT)
-print("ENV_FILE:", ENV_FILE)
-print("EXISTS:", ENV_FILE.exists())
-print("=" * 60)
 
 BACKEND_DIR = PROJECT_ROOT / "backend"
 
@@ -59,7 +53,7 @@ class BaseConfig(BaseSettings):
     """Base configuration shared by all settings."""
 
     model_config = SettingsConfigDict(
-        env_file=".env",
+        env_file=ENV_FILE,
         env_file_encoding="utf-8",
         case_sensitive=False,
         extra="ignore",
@@ -67,14 +61,28 @@ class BaseConfig(BaseSettings):
 
 class AppSettings(BaseConfig):
     """Application metadata."""
-    name: str = "AI Video Intelligence Platform"
-    version: str = "0.1.0"
+    name: str = Field(
+        default="AI Video Intelligence Platform",
+        alias="APP_NAME",
+    )
+
+    version: str = Field(
+        default="0.1.0",
+        alias="APP_VERSION",
+    )
     environment: Literal[
         "development",
         "testing",
         "production",
-    ] = "development"
-    debug: bool = True
+    ] = Field(
+        default="development",
+        alias="ENVIRONMENT",
+    )
+
+    debug: bool = Field(
+        default=True,
+        alias="DEBUG",
+    )
 
     api_prefix: str = "/api/v1"
 
@@ -90,8 +98,15 @@ class AppSettings(BaseConfig):
 # =============================================================================
 class ServerSettings(BaseConfig):
     """FastAPI server settings."""
-    host: str = "0.0.0.0"
-    port: int = 8000
+    host: str = Field(
+        default="0.0.0.0",
+        alias="HOST",
+    )
+
+    port: int = Field(
+        default=8000,
+        alias="PORT",
+    )
     workers: int = 1
     reload: bool = True
     timeout: int = 300
@@ -103,6 +118,7 @@ class SecuritySettings(BaseConfig):
     """Security configuration."""
     secret_key: str = Field(
         ...,
+        alias="SECRET_KEY",
         min_length=32,
     )
     algorithm: str = "HS256"
@@ -118,6 +134,7 @@ class SecuritySettings(BaseConfig):
 class DatabaseSettings(BaseConfig):
     """PostgreSQL configuration."""
     database_url: str = Field(
+        ...,
         alias="DATABASE_URL",
     )
     echo: bool = False
@@ -132,23 +149,17 @@ class DatabaseSettings(BaseConfig):
 # =============================================================================
 # Global Settings Instance
 # =============================================================================
-class Settings(BaseSettings):
+class Settings(BaseModel):
     """
     Main application settings.
     Aggregates all configuration sections.
     """
-    app: AppSettings = AppSettings()
-    server: ServerSettings = ServerSettings()
-    security: SecuritySettings = SecuritySettings()
-    database: DatabaseSettings = DatabaseSettings()
+    app: AppSettings = Field(default_factory=AppSettings)
+    server: ServerSettings = Field(default_factory=ServerSettings)
+    security: SecuritySettings = Field(default_factory=SecuritySettings)
+    database: DatabaseSettings = Field(default_factory=DatabaseSettings)
 
-    model_config = SettingsConfigDict(
-        env_file=".env",
-        env_file_encoding="utf-8",
-        case_sensitive=False,
-    )
-
-@lru_cache()
+@lru_cache
 def get_settings() -> Settings:
     """
     Return cached settings instance.
