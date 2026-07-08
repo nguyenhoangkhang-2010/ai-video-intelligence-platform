@@ -47,21 +47,25 @@ CACHE_DIR = STORAGE_DIR / "cache"
 # =============================================================================
 # Application
 # =============================================================================
+class BaseConfig(BaseSettings):
+    """Base configuration shared by all settings."""
 
+    model_config = SettingsConfigDict(
+        env_file=".env",
+        env_file_encoding="utf-8",
+        case_sensitive=False,
+        extra="ignore",
+    )
 
-class AppSettings(BaseSettings):
+class AppSettings(BaseConfig):
     """Application metadata."""
-
     name: str = "AI Video Intelligence Platform"
-
     version: str = "0.1.0"
-
     environment: Literal[
         "development",
         "testing",
         "production",
     ] = "development"
-
     debug: bool = True
 
     api_prefix: str = "/api/v1"
@@ -76,79 +80,46 @@ class AppSettings(BaseSettings):
 # =============================================================================
 # Server
 # =============================================================================
-
-
-class ServerSettings(BaseSettings):
+class ServerSettings(BaseConfig):
     """FastAPI server settings."""
-
     host: str = "0.0.0.0"
-
     port: int = 8000
-
     workers: int = 1
-
     reload: bool = True
-
     timeout: int = 300
-
-
+    
 # =============================================================================
 # Security
 # =============================================================================
-
-
-class SecuritySettings(BaseSettings):
+class SecuritySettings(BaseConfig):
     """Security configuration."""
-
     secret_key: str = Field(
-        default="CHANGE_ME",
+        ...,
         min_length=32,
     )
-
     algorithm: str = "HS256"
-
     access_token_expire_minutes: int = 60
-
     cors_origins: list[str] = [
         "http://localhost:3000",
         "http://127.0.0.1:3000",
     ]
 
-
 # =============================================================================
 # Database
 # =============================================================================
-
-
-class DatabaseSettings(BaseSettings):
+class DatabaseSettings(BaseConfig):
     """PostgreSQL configuration."""
-
-    host: str = "localhost"
-
-    port: int = 5432
-
-    username: str = "postgres"
-
-    password: str = "postgres"
-
-    database: str = "video_ai"
-
+    database_url: str = Field(
+        alias="DATABASE_URL",
+    )
     echo: bool = False
-
     pool_size: int = 10
-
     max_overflow: int = 20
-
+    
     @property
     def url(self) -> str:
-        """Return SQLAlchemy connection URL."""
-
-        return (
-            "postgresql+psycopg://"
-            f"{self.username}:{self.password}"
-            f"@{self.host}:{self.port}"
-            f"/{self.database}"
-        )
+        """Return database URL."""
+        return self.database_url
 
 # =============================================================================
 # Global Settings Instance
