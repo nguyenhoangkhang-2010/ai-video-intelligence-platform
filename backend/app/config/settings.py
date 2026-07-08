@@ -28,6 +28,14 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 PROJECT_ROOT = Path(__file__).resolve().parents[3]
 
+ENV_FILE = PROJECT_ROOT / ".env"
+
+print("=" * 60)
+print("PROJECT_ROOT:", PROJECT_ROOT)
+print("ENV_FILE:", ENV_FILE)
+print("EXISTS:", ENV_FILE.exists())
+print("=" * 60)
+
 BACKEND_DIR = PROJECT_ROOT / "backend"
 
 AI_DIR = PROJECT_ROOT / "ai"
