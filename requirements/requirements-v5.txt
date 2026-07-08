@@ -1,0 +1,33 @@
+# ==================================================
+# VERSION 5
+# ==================================================
+# Queue
+celery
+# RabbitMQ
+pika
+# Kafka
+kafka-python
+# Redis
+redis
+# Storage
+minio
+# AWS
+boto3
+# Docker SDK
+docker
+# Kubernetes
+kubernetes
+# Monitoring
+prometheus-client
+# Logging
+structlog
+# Metrics
+psutil
+# Async
+aiofiles
+# Async HTTP
+aiohttp
+# Production Server
+gunicorn
+# Config
+dynaconf

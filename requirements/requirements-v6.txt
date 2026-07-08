@@ -1,0 +1,27 @@
+# ==================================================
+# VERSION 6 (Windows)
+# Model Optimization & Evaluation
+# ==================================================
+# LLM Optimization
+optimum
+# Quantization
+bitsandbytes
+# PEFT
+peft
+# LoRA
+trl
+# GPU Optimization
+xformers
+# Distributed Computing
+ray
+# ONNX
+onnx
+onnxruntime
+# Evaluation
+ragas
+evaluate
+# Experiment Tracking
+mlflow
+wandb
+# Hyperparameter Optimization
+optuna

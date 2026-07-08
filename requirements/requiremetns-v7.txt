@@ -1,0 +1,22 @@
+Prefect
+Airflow
+DVC
+Hydra
+Great Expectations
+Feast
+DuckDB
+Polars
+PyArrow
+LanceDB
+Milvus
+Weaviate
+Neo4j
+RedisJSON
+OpenTelemetry
+Grafana API
+Sentry SDK
+pytest-cov
+mypy
+bandit
+ruff
+pre-commit

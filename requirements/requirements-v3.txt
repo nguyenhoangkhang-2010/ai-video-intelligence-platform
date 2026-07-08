@@ -1,0 +1,31 @@
+# ==================================================
+# VERSION 3
+# ==================================================
+# Translation
+deep-translator
+# Language Detection
+langdetect
+# Flashcard
+networkx
+# Mindmap
+graphviz
+pyvis
+# Quiz
+scikit-learn
+# TextRank
+summa
+# Visualization
+matplotlib
+plotly
+# Markdown
+markdown
+# HTML
+beautifulsoup4
+# Excel
+openpyxl
+# PDF Export
+reportlab
+# DOCX
+python-docx
+# PPT
+python-pptx

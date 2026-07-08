@@ -1,0 +1,30 @@
+# ==================================================
+# VERSION 4
+# ==================================================
+# Speaker Diarization
+pyannote.audio
+# Voice Activity Detection
+webrtcvad
+# Meeting Analytics
+pyAudioAnalysis
+# Dashboard
+streamlit
+# Charts
+plotly
+matplotlib
+# Authentication
+passlib[bcrypt]
+python-jose
+bcrypt
+# Redis
+redis
+# Cache
+diskcache
+# Scheduling
+apscheduler
+# Email
+emails
+# Websocket
+websockets
+# Admin
+sqladmin
