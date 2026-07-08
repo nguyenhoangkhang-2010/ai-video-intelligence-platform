@@ -120,16 +120,6 @@ class DatabaseSettings(BaseConfig):
     
     @property
     def url(self) -> str:
-<<<<<<< Updated upstream
-        """Return SQLAlchemy connection URL."""
-
-        return (
-            "postgresql+psycopg://"
-            f"{self.username}:{self.password}"
-            f"@{self.host}:{self.port}"
-            f"/{self.database}"
-        )
-=======
         """Return database URL."""
         return self.database_url
 
@@ -159,4 +149,3 @@ def get_settings() -> Settings:
     """
     return Settings()
 settings = get_settings()
->>>>>>> Stashed changes
