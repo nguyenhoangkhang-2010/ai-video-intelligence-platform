@@ -1,11 +1,25 @@
-from app.schemas.user import UserBase
-from app.schemas.user import UserCreate
-from app.schemas.user import UserRead
-from app.schemas.user import UserUpdate
+from app.schemas.user import (
+    UserBase,
+    UserCreate,
+    UserRead,
+    UserUpdate,
+)
+
+from app.schemas.video import (
+    VideoBase,
+    VideoCreate,
+    VideoRead,
+    VideoUpdate,
+)
+
 
 __all__ = [
     "UserBase",
     "UserCreate",
     "UserRead",
     "UserUpdate",
+    "VideoBase",
+    "VideoCreate",
+    "VideoRead",
+    "VideoUpdate",
 ]
