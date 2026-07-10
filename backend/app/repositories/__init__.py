@@ -3,6 +3,7 @@ from app.repositories.user import UserRepository
 from app.repositories.video import VideoRepository
 from app.repositories.transcript import TranscriptRepository
 from app.repositories.summary import SummaryRepository
+from app.repositories.chapter import ChapterRepository
 
 __all__ = [
     "BaseRepository",
@@ -10,4 +11,5 @@ __all__ = [
     "VideoRepository",
     "TranscriptRepository",
     "SummaryRepository",
+    "ChapterRepository",
 ]
