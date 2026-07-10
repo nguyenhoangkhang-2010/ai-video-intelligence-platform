@@ -9,6 +9,7 @@ from app.repositories.translation import TranslationRepository
 from app.repositories.flashcard import FlashcardRepository
 from app.repositories.quiz import QuizRepository
 from app.repositories.processing_job import ProcessingJobRepository
+from app.repositories.chat_history import ChatHistoryRepository
 
 __all__ = [
     "BaseRepository",
@@ -22,4 +23,5 @@ __all__ = [
     "FlashcardRepository",
     "QuizRepository",
     "ProcessingJobRepository",
+    "ChatHistoryRepository",
 ]
