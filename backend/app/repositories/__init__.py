@@ -4,6 +4,7 @@ from app.repositories.video import VideoRepository
 from app.repositories.transcript import TranscriptRepository
 from app.repositories.summary import SummaryRepository
 from app.repositories.chapter import ChapterRepository
+from app.repositories.embedding import EmbeddingRepository
 
 __all__ = [
     "BaseRepository",
@@ -12,4 +13,5 @@ __all__ = [
     "TranscriptRepository",
     "SummaryRepository",
     "ChapterRepository",
+    "EmbeddingRepository",
 ]
