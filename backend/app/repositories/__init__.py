@@ -7,6 +7,7 @@ from app.repositories.chapter import ChapterRepository
 from app.repositories.embedding import EmbeddingRepository
 from app.repositories.translation import TranslationRepository
 from app.repositories.flashcard import FlashcardRepository
+from app.repositories.quiz import QuizRepository
 
 __all__ = [
     "BaseRepository",
@@ -18,4 +19,5 @@ __all__ = [
     "EmbeddingRepository",
     "TranslationRepository",
     "FlashcardRepository",
+    "QuizRepository",
 ]
