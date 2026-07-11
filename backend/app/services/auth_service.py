@@ -1,8 +1,13 @@
+from app.auth.jwt import create_access_token
 from app.repositories.user import UserRepository
+from app.core.exceptions import InvalidCredentialsError
 from app.core.exceptions import UserAlreadyExistsError
 from app.core.security import hash_password
+from app.core.security import verify_password
 from app.models.user import User
 from app.schemas.user import UserCreate
+from app.schemas.user import UserLogin
+
 
 class AuthService:
     """Business logic for authentication."""
@@ -41,3 +46,11 @@ class AuthService:
         return self.user_repository.create(
             user,
         )
+        
+    def login(
+        self,
+        login_data: UserLogin,
+    ) -> str:
+        """Authenticate user and return JWT."""
+
+        raise NotImplementedError
