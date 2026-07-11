@@ -13,6 +13,12 @@ class UserBase(BaseModel):
 class UserCreate(UserBase):
     """Schema for creating a user."""
     password: str
+    
+class UserLogin(BaseModel):
+    """Schema for user login."""
+
+    email: EmailStr
+    password: str
 
 class UserUpdate(BaseModel):
     """Schema for updating a user."""
