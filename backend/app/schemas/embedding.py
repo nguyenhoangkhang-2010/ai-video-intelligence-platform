@@ -4,18 +4,16 @@ from pydantic import BaseModel
 from pydantic import ConfigDict
 
 
-class SummaryBase(BaseModel):
-    type: str
-    content: str
-    model_name: str
+class EmbeddingBase(BaseModel):
+    chunk_index: int
+    chunk_text: str
+    embedding_model: str
+    vector_id: str
 
-class SummaryCreate(SummaryBase):
+class EmbeddingCreate(EmbeddingBase):
     video_id: int
 
-class SummaryUpdate(BaseModel):
-    content: str | None = None
-
-class SummaryRead(SummaryBase):
+class EmbeddingRead(EmbeddingBase):
     id: int
     video_id: int
     created_at: datetime

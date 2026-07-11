@@ -4,18 +4,17 @@ from pydantic import BaseModel
 from pydantic import ConfigDict
 
 
-class SummaryBase(BaseModel):
-    type: str
-    content: str
-    model_name: str
+class TranslationBase(BaseModel):
+    language: str
+    subtitle: str
 
-class SummaryCreate(SummaryBase):
+class TranslationCreate(TranslationBase):
     video_id: int
 
-class SummaryUpdate(BaseModel):
-    content: str | None = None
+class TranslationUpdate(BaseModel):
+    subtitle: str | None = None
 
-class SummaryRead(SummaryBase):
+class TranslationRead(TranslationBase):
     id: int
     video_id: int
     created_at: datetime
