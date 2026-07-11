@@ -2,8 +2,7 @@ from app.repositories.user import UserRepository
 
 
 class AuthService:
-    """Authentication service."""
-
+    """Business logic for authentication."""
     def __init__(
         self,
         user_repository: UserRepository,
