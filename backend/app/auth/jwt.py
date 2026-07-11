@@ -4,7 +4,7 @@ from datetime import timezone
 
 from jose import jwt
 
-from app.config import settings
+from app.config.settings import settings
 
 
 ALGORITHM = "HS256"
@@ -18,7 +18,7 @@ def create_access_token(
 
     if expires_delta is None:
         expires_delta = timedelta(
-            minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES,
+            minutes=settings.security.access_token_expire_minutes,
         )
 
     expire = datetime.now(
@@ -32,7 +32,7 @@ def create_access_token(
 
     return jwt.encode(
         payload,
-        settings.SECRET_KEY,
+        settings.security.secret_key,
         algorithm=ALGORITHM,
     )
     
@@ -43,6 +43,6 @@ def decode_token(
 
     return jwt.decode(
         token,
-        settings.SECRET_KEY,
+        settings.security.secret_key,
         algorithms=[ALGORITHM],
     )

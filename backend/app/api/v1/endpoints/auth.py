@@ -9,6 +9,7 @@ from app.database.session import get_db
 
 from app.schemas.user import UserCreate
 from app.schemas.user import UserRead
+from app.schemas.user import UserLogin
 
 from app.services.auth_service import AuthService
 
@@ -36,3 +37,28 @@ def register(
     )
 
     return service.register(user_data)
+
+@router.post(
+    "/login",
+)
+
+def login(
+    login_data: UserLogin,
+    db: Session = Depends(get_db),
+):
+    """Login user and return JWT token."""
+
+    user_repository = UserRepository(db)
+
+    service = AuthService(
+        user_repository=user_repository,
+    )
+
+    access_token = service.login(
+        login_data,
+    )
+
+    return {
+        "access_token": access_token,
+        "token_type": "bearer",
+    }

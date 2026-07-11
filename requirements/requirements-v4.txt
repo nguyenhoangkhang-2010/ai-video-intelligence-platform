@@ -13,9 +13,8 @@ streamlit
 plotly
 matplotlib
 # Authentication
-passlib[bcrypt]
+pwdlib
 python-jose
-bcrypt
 # Redis
 redis
 # Cache
