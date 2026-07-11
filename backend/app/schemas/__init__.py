@@ -46,33 +46,63 @@ from app.schemas.translation import(
     TranslationUpdate,
 )
 
+from app.schemas.flashcard import (
+    FlashcardBase,
+    FlashcardCreate,
+    FlashcardRead,
+    FlashcardUpdate,
+)
+
+from app.schemas.quiz import (
+    QuizBase,
+    QuizCreate,
+    QuizRead,
+    QuizUpdate,
+)
+
 
 __all__ = [
     "UserBase",
     "UserCreate",
     "UserRead",
     "UserUpdate",
+    
     "VideoBase",
     "VideoCreate",
     "VideoRead",
     "VideoUpdate",
+    
     "TranscriptBase",
     "TranscriptCreate",
     "TranscriptRead",
     "TranscriptUpdate",
+    
     "SummaryBase",
     "SummaryCreate",
     "SummaryRead",
     "SummaryUpdate",
+    
     "ChapterBase",
     "ChapterCreate",
     "ChapterRead",
     "ChapterUpdate",
+    
     "EmbeddingBase",
     "EmbeddingCreate",
     "EmbeddingRead",
+    
     "TranslationBase",
     "TranslationCreate",
     "TranslationRead",
     "TranslationUpdate",
+    
+    "FlashcardBase",
+    "FlashcardCreate",
+    "FlashcardRead",
+    "FlashcardUpdate",
+
+    "QuizBase",
+    "QuizCreate",
+    "QuizRead",
+    "QuizUpdate",
 ]
