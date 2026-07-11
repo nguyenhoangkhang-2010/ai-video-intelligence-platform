@@ -30,4 +30,14 @@ class AuthService:
             raise UserAlreadyExistsError(
                 "Username already exists.",
             )
-        raise NotImplementedError
+        user = User(
+            username=user_data.username,
+            email=user_data.email,
+            hashed_password=hash_password(
+                user_data.password,
+            ),
+        )
+
+        return self.user_repository.create(
+            user,
+        )
