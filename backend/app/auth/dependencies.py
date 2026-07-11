@@ -3,6 +3,7 @@ from fastapi import Depends
 
 from fastapi import HTTPException
 from fastapi import status
+from fastapi.security import HTTPAuthorizationCredentials
 
 from sqlalchemy.orm import Session
 
@@ -12,16 +13,19 @@ from app.database.session import get_db
 
 from app.repositories.user import UserRepository
 
+from app.models.user import User
+
 
 def get_current_user(
-    token: str = Depends(
-        oauth2_scheme,
+    credentials: HTTPAuthorizationCredentials = Depends(
+        oauth2_scheme
     ),
     db: Session = Depends(
         get_db,
     )
-):
+) -> User:
     try:
+        token = credentials.credentials
         payload = decode_token(token)
 
         user_id = payload.get("sub")
@@ -31,6 +35,8 @@ def get_current_user(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="Invalid token",
             )
+            
+        user_id = int(user_id)
 
     except JWTError:
         raise HTTPException(
