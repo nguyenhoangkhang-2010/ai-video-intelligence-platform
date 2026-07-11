@@ -52,5 +52,25 @@ class AuthService:
         login_data: UserLogin,
     ) -> str:
         """Authenticate user and return JWT."""
+        user = self.user_repository.get_by_email(
+            login_data.email,
+        )
+        
+        if user is None:
+            raise InvalidCredentialsError(
+                "Invalid email or password.",
+            )
 
-        raise NotImplementedError
+        if not verify_password(
+            login_data.password,
+            user.hashed_password,
+        ):
+            raise InvalidCredentialsError(
+                "Invalid email or password.",
+            )
+
+        access_token = create_access_token(
+            subject=str(user.id),
+        )
+
+        return access_token
