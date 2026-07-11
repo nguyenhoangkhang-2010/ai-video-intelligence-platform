@@ -60,6 +60,19 @@ from app.schemas.quiz import (
     QuizUpdate,
 )
 
+from app.schemas.processing_job import (
+    ProcessingJobBase,
+    ProcessingJobCreate,
+    ProcessingJobRead,
+    ProcessingJobUpdate,
+)
+
+from app.schemas.chat_history import (
+    ChatHistoryBase,
+    ChatHistoryCreate,
+    ChatHistoryRead,
+)
+
 
 __all__ = [
     "UserBase",
@@ -105,4 +118,13 @@ __all__ = [
     "QuizCreate",
     "QuizRead",
     "QuizUpdate",
+    
+    "ProcessingJobBase",
+    "ProcessingJobCreate",
+    "ProcessingJobRead",
+    "ProcessingJobUpdate",
+
+    "ChatHistoryBase",
+    "ChatHistoryCreate",
+    "ChatHistoryRead",
 ]
