@@ -1,5 +1,7 @@
 from app.repositories.video import VideoRepository
 
+from fastapi import HTTPException
+from fastapi import status
 
 class VideoService:
     """Service for video business logic."""
@@ -17,3 +19,24 @@ class VideoService:
         return self.repository.get_by_owner(
             owner_id=user_id,
         )
+        
+    def get_video(
+        self,
+        video_id: int,
+        user_id: int,
+    ):
+        """
+        Get a video by ID for the current user.
+        """
+        video = self.repository.get_by_id_and_owner(
+            video_id=video_id,
+            owner_id=user_id,
+        )
+
+        if video is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Video not found",
+            )
+
+        return video

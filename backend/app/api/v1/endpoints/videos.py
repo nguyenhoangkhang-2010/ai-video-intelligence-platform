@@ -28,3 +28,20 @@ def get_my_videos(
     return service.get_user_videos(
         user_id=current_user.id,
     )
+    
+@router.get(
+    "/{video_id}",
+    response_model=VideoRead,
+)
+def get_video(
+    video_id: int,
+    current_user: User = Depends(get_current_user),
+    service: VideoService = Depends(get_video_service),
+):
+    """
+    Get a single video by ID.
+    """
+    return service.get_video(
+        video_id=video_id,
+        user_id=current_user.id,
+    )
