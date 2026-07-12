@@ -1,5 +1,7 @@
 from fastapi import APIRouter
 from fastapi import Depends
+from fastapi import UploadFile
+from fastapi import File
 
 from app.auth.dependencies import get_current_user
 from app.models.user import User
@@ -8,6 +10,9 @@ from app.api.deps import get_video_service
 
 from app.services.video import VideoService
 from app.schemas.video import VideoRead
+
+from pathlib import Path
+import shutil
 
 router = APIRouter(
     prefix="/videos",
@@ -45,3 +50,31 @@ def get_video(
         video_id=video_id,
         user_id=current_user.id,
     )
+    
+@router.post(
+    "/upload",
+)
+async def upload_video(
+    file: UploadFile = File(...),
+):
+    """
+    Upload a video file.
+    """
+    upload_dir = Path("uploads/videos")
+    upload_dir.mkdir(
+        parents=True,
+        exist_ok=True,
+    )
+
+    file_path = upload_dir / file.filename
+
+    with file_path.open("wb") as buffer:
+        shutil.copyfileobj(
+            file.file,
+            buffer,
+        )
+    return {
+        "filename": file.filename,
+        "content_type": file.content_type,
+        "path": str(file_path),
+    }
