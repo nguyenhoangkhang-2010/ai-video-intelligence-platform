@@ -9,13 +9,17 @@ from app.models.user import User
 
 from app.repositories.video import VideoRepository
 from app.services.video import VideoService
+from app.schemas.video import VideoRead
 
 router = APIRouter(
     prefix="/videos",
     tags=["Videos"],
 )
 
-@router.get("")
+@router.get(
+    "",
+    response_model=list[VideoRead],
+)
 def get_my_videos(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
