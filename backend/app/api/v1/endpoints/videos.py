@@ -56,6 +56,8 @@ def get_video(
 )
 async def upload_video(
     file: UploadFile = File(...),
+    current_user: User = Depends(get_current_user),
+    service: VideoService = Depends(get_video_service),
 ):
     """
     Upload a video file.
@@ -73,8 +75,8 @@ async def upload_video(
             file.file,
             buffer,
         )
-    return {
-        "filename": file.filename,
-        "content_type": file.content_type,
-        "path": str(file_path),
-    }
+    return service.upload_video(
+        owner_id=current_user.id,
+        title=file.filename,
+        filename=file.filename,
+    )

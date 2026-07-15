@@ -3,6 +3,8 @@ from app.repositories.video import VideoRepository
 from fastapi import HTTPException
 from fastapi import status
 
+from app.models.video import Video
+
 class VideoService:
     """Service for video business logic."""
 
@@ -40,3 +42,26 @@ class VideoService:
             )
 
         return video
+    
+    def upload_video(
+        self,
+        owner_id: int,
+        title: str,
+        filename: str,
+        language: str = "unknown",
+        duration: int = 0,
+    ) -> Video:
+        """
+        Save uploaded video metadata.
+        """
+
+        video = Video(
+            owner_id=owner_id,
+            title=title,
+            filename=filename,
+            language=language,
+            duration=duration,
+            status="uploaded",
+        )
+
+        return self.repository.create(video)
