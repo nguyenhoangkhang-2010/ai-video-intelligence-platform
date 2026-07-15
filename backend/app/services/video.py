@@ -48,8 +48,8 @@ class VideoService:
         owner_id: int,
         title: str,
         filename: str,
-        language: str = "unknown",
-        duration: int = 0,
+        language: str,
+        duration: int,
     ) -> Video:
         """
         Save uploaded video metadata.

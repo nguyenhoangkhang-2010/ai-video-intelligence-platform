@@ -86,6 +86,8 @@ async def upload_video(
         owner_id=current_user.id,
         title=file.filename,
         filename=file.filename,
+        language="unknown",  # TODO: Detect language using Whisper
+        duration=0,          # TODO: Extract duration using FFmpeg
     )
 
     processing_service.create_processing_job(
