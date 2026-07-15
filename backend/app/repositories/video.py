@@ -86,3 +86,12 @@ class VideoRepository(BaseRepository[Video]):
         self.db.commit()
 
         return True
+    
+    def update(
+        self,
+        video: Video,
+    ):
+        self.db.commit()
+        self.db.refresh(video)
+
+        return video

@@ -85,3 +85,29 @@ class VideoService:
         return {
             "message": "Video deleted successfully",
         }
+        
+    def update_video(
+        self,
+        video_id: int,
+        user_id: int,
+        title: str | None,
+        language: str | None,
+    ):
+        video = self.repository.get_by_id_and_owner(
+            video_id=video_id,
+            owner_id=user_id,
+        )
+
+        if video is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Video not found",
+            )
+
+        if title is not None:
+            video.title = title
+
+        if language is not None:
+            video.language = language
+
+        return self.repository.update(video)

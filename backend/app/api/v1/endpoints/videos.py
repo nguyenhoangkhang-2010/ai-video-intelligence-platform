@@ -12,6 +12,7 @@ from app.api.deps import get_processing_job_service
 from app.services.processing_job import ProcessingJobService
 from app.services.video import VideoService
 from app.schemas.video import VideoRead
+from app.schemas.video import VideoUpdate
 
 from pathlib import Path
 import shutil
@@ -107,4 +108,24 @@ def delete_video(
     return service.delete_video(
         video_id=video_id,
         user_id=current_user.id,
+    )
+    
+@router.put(
+    "/{video_id}",
+    response_model=VideoRead,
+)
+def update_video(
+    video_id: int,
+    video_update: VideoUpdate,
+    current_user: User = Depends(get_current_user),
+    service: VideoService = Depends(get_video_service),
+):
+    """
+    Update video metadata.
+    """
+    return service.update_video(
+        video_id=video_id,
+        user_id=current_user.id,
+        title=video_update.title,
+        language=video_update.language,
     )
