@@ -13,6 +13,7 @@ from app.services.processing_job import ProcessingJobService
 from app.services.video import VideoService
 from app.schemas.video import VideoRead
 from app.schemas.video import VideoUpdate
+from app.schemas.video import VideoStatusResponse
 
 from pathlib import Path
 import shutil
@@ -53,6 +54,25 @@ def get_video(
         video_id=video_id,
         user_id=current_user.id,
     )
+    
+@router.get(
+    "/{video_id}/status",
+    response_model=VideoStatusResponse,
+)
+def get_video_status(
+    video_id: int,
+    current_user: User = Depends(get_current_user),
+    service: VideoService = Depends(get_video_service),
+):
+    """
+    Get processing status of a video.
+    """
+    video = service.get_video(
+        video_id=video_id,
+        user_id=current_user.id,
+    )
+
+    return video
     
 @router.post(
     "/upload",

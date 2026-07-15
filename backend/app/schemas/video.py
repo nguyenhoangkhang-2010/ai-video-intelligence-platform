@@ -31,3 +31,13 @@ class VideoRead(VideoBase):
     model_config = ConfigDict(
         from_attributes=True,
     )
+    
+class VideoStatusResponse(BaseModel):
+    """Schema for video processing status."""
+
+    id: int
+    status: str
+
+    model_config = ConfigDict(
+        from_attributes=True,
+    )
