@@ -65,3 +65,23 @@ class VideoService:
         )
 
         return self.repository.create(video)
+    
+    def delete_video(
+        self,
+        video_id: int,
+        user_id: int,
+    ):
+        success = self.repository.delete_by_owner(
+            video_id=video_id,
+            owner_id=user_id,
+        )
+
+        if not success:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Video not found",
+            )
+
+        return {
+            "message": "Video deleted successfully",
+        }

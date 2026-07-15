@@ -64,3 +64,25 @@ class VideoRepository(BaseRepository[Video]):
             )
             .first()
         )
+        
+    def delete_by_owner(
+        self,
+        video_id: int,
+        owner_id: int,
+    ) -> bool:
+        video = (
+            self.db.query(Video)
+            .filter(
+                Video.id == video_id,
+                Video.owner_id == owner_id,
+            )
+            .first()
+        )
+
+        if video is None:
+            return False
+
+        self.db.delete(video)
+        self.db.commit()
+
+        return True

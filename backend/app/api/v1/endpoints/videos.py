@@ -80,3 +80,19 @@ async def upload_video(
         title=file.filename,
         filename=file.filename,
     )
+    
+@router.delete(
+    "/{video_id}",
+)
+def delete_video(
+    video_id: int,
+    current_user: User = Depends(get_current_user),
+    service: VideoService = Depends(get_video_service),
+):
+    """
+    Delete a video.
+    """
+    return service.delete_video(
+        video_id=video_id,
+        user_id=current_user.id,
+    )
