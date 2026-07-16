@@ -34,3 +34,11 @@ class ProcessingJobService:
         return self.repository.get_by_video_id(
             video_id=video_id,
         )
+        
+    def get_all_jobs(
+        self,
+    ):
+        """
+        Get all processing jobs.
+        """
+        return self.repository.get_all()
