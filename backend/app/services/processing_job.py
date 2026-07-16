@@ -23,3 +23,14 @@ class ProcessingJobService:
         )
 
         return self.repository.create(job)
+    
+    def get_jobs_by_video(
+        self,
+        video_id: int,
+    ):
+        """
+        Get all processing jobs of a video.
+        """
+        return self.repository.get_by_video_id(
+            video_id=video_id,
+        )

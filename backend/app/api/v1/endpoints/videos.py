@@ -15,6 +15,8 @@ from app.schemas.video import VideoRead
 from app.schemas.video import VideoUpdate
 from app.schemas.video import VideoStatusResponse
 
+from app.schemas.processing_job import ProcessingJobRead
+
 from pathlib import Path
 import shutil
 
@@ -73,6 +75,30 @@ def get_video_status(
     )
 
     return video
+    
+@router.get(
+    "/{video_id}/processing-jobs",
+    response_model=list[ProcessingJobRead],
+)
+def get_processing_jobs(
+    video_id: int,
+    current_user: User = Depends(get_current_user),
+    service: VideoService = Depends(get_video_service),
+    processing_service: ProcessingJobService = Depends(
+        get_processing_job_service,
+    ),
+):
+    """
+    Get all processing jobs of a video.
+    """
+    service.get_video(
+        video_id=video_id,
+        user_id=current_user.id,
+    )
+
+    return processing_service.get_jobs_by_video(
+        video_id=video_id,
+    )
     
 @router.post(
     "/upload",
