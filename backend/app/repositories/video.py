@@ -47,3 +47,51 @@ class VideoRepository(BaseRepository[Video]):
             .filter(Video.status == status)
             .all()
         )
+        
+    def get_by_id_and_owner(
+        self,
+        video_id: int,
+        owner_id: int,
+    ) -> Video | None:
+        """
+        Get a video by its ID that belongs to the specified owner.
+        """
+        return (
+            self.db.query(Video)
+            .filter(
+                Video.id == video_id,
+                Video.owner_id == owner_id,
+            )
+            .first()
+        )
+        
+    def delete_by_owner(
+        self,
+        video_id: int,
+        owner_id: int,
+    ) -> bool:
+        video = (
+            self.db.query(Video)
+            .filter(
+                Video.id == video_id,
+                Video.owner_id == owner_id,
+            )
+            .first()
+        )
+
+        if video is None:
+            return False
+
+        self.db.delete(video)
+        self.db.commit()
+
+        return True
+    
+    def update(
+        self,
+        video: Video,
+    ):
+        self.db.commit()
+        self.db.refresh(video)
+
+        return video
