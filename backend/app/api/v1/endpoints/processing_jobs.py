@@ -4,6 +4,7 @@ from fastapi import Depends
 from app.api.deps import get_processing_job_service
 from app.services.processing_job import ProcessingJobService
 from app.schemas.processing_job import ProcessingJobRead
+from app.schemas.processing_job import ProcessingJobStatusUpdate
 
 router = APIRouter(
     prefix="/processing-jobs",
@@ -39,4 +40,24 @@ def get_processing_job(
     """
     return service.get_job(
         job_id=job_id,
+    )
+    
+@router.patch(
+    "/{job_id}",
+    response_model=ProcessingJobRead,
+)
+def update_processing_job(
+    job_id: int,
+    job_update: ProcessingJobStatusUpdate,
+    service: ProcessingJobService = Depends(
+        get_processing_job_service,
+    ),
+):
+    """
+    Update processing job status.
+    """
+    return service.update_job_status(
+        job_id=job_id,
+        status=job_update.status,
+        error_message=job_update.error_message,
     )

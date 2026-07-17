@@ -61,3 +61,27 @@ class ProcessingJobService:
             )
 
         return job
+    
+    def update_job_status(
+        self,
+        job_id: int,
+        status: str,
+        error_message: str | None = None,
+    ) -> ProcessingJob:
+        """
+        Update processing job status.
+        """
+        job = self.repository.get_by_id(job_id)
+
+        if job is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Processing job not found",
+            )
+
+        job.status = status
+
+        if error_message is not None:
+            job.error_message = error_message
+
+        return self.repository.update(job)
