@@ -19,6 +19,11 @@ class ProcessingJobUpdate(BaseModel):
     error_message: str | None = None
     finished_at: datetime | None = None
 
+class ProcessingJobStatusUpdate(BaseModel):
+    """Schema for updating processing job status."""
+    status: str
+    error_message: str | None = None
+
 class ProcessingJobRead(ProcessingJobBase):
     """Schema for reading processing job data."""
     id: int

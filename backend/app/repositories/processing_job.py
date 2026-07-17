@@ -48,3 +48,11 @@ class ProcessingJobRepository(BaseRepository[ProcessingJob]):
             .filter(ProcessingJob.job_type == job_type)
             .all()
         )
+        
+    def update(
+        self,
+        job: ProcessingJob,
+    ) -> ProcessingJob:
+        self.db.commit()
+        self.db.refresh(job)
+        return job
