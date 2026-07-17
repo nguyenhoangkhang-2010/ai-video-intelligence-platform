@@ -2,6 +2,7 @@ from fastapi import APIRouter
 from fastapi import Depends
 from fastapi import UploadFile
 from fastapi import File
+from fastapi import BackgroundTasks
 
 from app.auth.dependencies import get_current_user
 from app.models.user import User
@@ -9,6 +10,7 @@ from app.models.user import User
 from app.api.deps import get_video_service
 from app.api.deps import get_processing_job_service
 
+from app.workers.video_processor import process_video
 from app.services.processing_job import ProcessingJobService
 from app.services.video import VideoService
 from app.schemas.video import VideoRead
@@ -105,6 +107,7 @@ def get_processing_jobs(
     response_model=VideoRead,
 )
 async def upload_video(
+    background_tasks: BackgroundTasks,
     file: UploadFile = File(...),
     current_user: User = Depends(get_current_user),
     service: VideoService = Depends(get_video_service),
@@ -138,6 +141,11 @@ async def upload_video(
 
     processing_service.create_processing_job(
         video_id=video.id,
+    )
+    
+    background_tasks.add_task(
+        process_video,
+        video.id,
     )
 
     return video
