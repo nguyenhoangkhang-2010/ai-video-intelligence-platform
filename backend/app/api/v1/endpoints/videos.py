@@ -146,6 +146,7 @@ async def upload_video(
     background_tasks.add_task(
         process_video,
         video.id,
+        str(file_path)
     )
 
     return video

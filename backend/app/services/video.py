@@ -111,3 +111,23 @@ class VideoService:
             video.language = language
 
         return self.repository.update(video)
+    
+    def update_duration(
+        self,
+        video_id: int,
+        duration: int,
+    ) -> Video:
+        """
+        Update video duration after metadata extraction.
+        """
+        video = self.repository.get_by_id(video_id)
+
+        if video is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Video not found",
+            )
+
+        video.duration = duration
+
+        return self.repository.update(video)
