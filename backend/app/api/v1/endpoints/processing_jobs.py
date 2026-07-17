@@ -23,3 +23,20 @@ def get_processing_jobs(
     Get all processing jobs.
     """
     return service.get_all_jobs()
+
+@router.get(
+    "/{job_id}",
+    response_model=ProcessingJobRead,
+)
+def get_processing_job(
+    job_id: int,
+    service: ProcessingJobService = Depends(
+        get_processing_job_service,
+    ),
+):
+    """
+    Get processing job by ID.
+    """
+    return service.get_job(
+        job_id=job_id,
+    )

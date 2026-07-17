@@ -1,6 +1,8 @@
 from app.models.processing_job import ProcessingJob
 from app.repositories.processing_job import ProcessingJobRepository
 
+from fastapi import HTTPException
+from fastapi import status
 
 class ProcessingJobService:
     """Service for processing job business logic."""
@@ -27,7 +29,7 @@ class ProcessingJobService:
     def get_jobs_by_video(
         self,
         video_id: int,
-    ):
+    ) -> list[ProcessingJob]:
         """
         Get all processing jobs of a video.
         """
@@ -37,8 +39,25 @@ class ProcessingJobService:
         
     def get_all_jobs(
         self,
-    ):
+    ) -> list[ProcessingJob]:
         """
         Get all processing jobs.
         """
         return self.repository.get_all()
+    
+    def get_job(
+        self,
+        job_id: int,
+    ) -> ProcessingJob:
+        """
+        Get processing job by ID.
+        """
+        job = self.repository.get_by_id(job_id)
+
+        if job is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Processing job not found",
+            )
+
+        return job
