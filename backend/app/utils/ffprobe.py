@@ -1,7 +1,7 @@
 import json
 import subprocess
 
-from backend.app.types.video_metadata import VideoMetadata
+from app.types.video_metadata import VideoMetadata
 
 def extract_metadata(
     file_path: str,

@@ -1,6 +1,12 @@
 from app.utils.ffprobe import extract_metadata
+from app.services.video import VideoService
 
 class VideoPipelineService:
+    def __init__(
+        self,
+        video_service: VideoService,
+    ):
+        self.video_service = video_service
     """
     AI processing pipeline for uploaded videos.
     """
@@ -39,4 +45,8 @@ class VideoPipelineService:
         """
         print(f"[Pipeline] Extract metadata for video {video_id}")
         metadata = extract_metadata(file_path)
-        print(metadata)        
+        print(metadata)
+        self.video_service.update_metadata(
+            video_id=video_id,
+            metadata=metadata,
+        )
