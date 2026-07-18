@@ -39,4 +39,4 @@ class VideoPipelineService:
         """
         print(f"[Pipeline] Extract metadata for video {video_id}")
         metadata = extract_metadata(file_path)
-        print(metadata)
+        print(metadata)        

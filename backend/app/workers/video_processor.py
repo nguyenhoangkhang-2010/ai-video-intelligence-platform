@@ -1,7 +1,7 @@
 import json
 import subprocess
 
-from app.pipelines.video_pipiline import(
+from app.pipelines.video_pipeline import(
     VideoPipelineService
 )
 
@@ -12,38 +12,6 @@ def process_video(
     pipeline = VideoPipelineService()
 
     pipeline.process(
-        video_id,
-        file_path,
+        video_id= video_id,
+        file_path= file_path,
     )
-    
-def extract_duration(
-    file_path: str,
-) -> int:
-    """
-    Extract video duration using ffprobe.
-    """
-
-    command = [
-        "ffprobe",
-        "-v",
-        "quiet",
-        "-print_format",
-        "json",
-        "-show_format",
-        file_path,
-    ]
-
-    result = subprocess.run(
-        command,
-        capture_output=True,
-        text=True,
-        check=True,
-    )
-
-    metadata = json.loads(result.stdout)
-
-    duration = float(
-        metadata["format"]["duration"]
-    )
-
-    return int(duration)
