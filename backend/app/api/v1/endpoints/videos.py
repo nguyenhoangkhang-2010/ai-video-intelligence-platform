@@ -139,12 +139,13 @@ async def upload_video(
         duration=0,          # TODO: Extract duration using FFmpeg
     )
 
-    processing_service.create_processing_job(
+    job = processing_service.create_processing_job(
         video_id=video.id,
     )
     
     background_tasks.add_task(
         process_video,
+        job.id,
         video.id,
         str(file_path)
     )
