@@ -4,6 +4,8 @@ from app.repositories.processing_job import ProcessingJobRepository
 from fastapi import HTTPException
 from fastapi import status
 
+from datetime import datetime
+
 class ProcessingJobService:
     """Service for processing job business logic."""
 
@@ -83,5 +85,67 @@ class ProcessingJobService:
 
         if error_message is not None:
             job.error_message = error_message
+
+        return self.repository.update(job)
+    
+    def start_job(
+        self,
+        job_id: int,
+    ) -> ProcessingJob:
+        """
+        Mark a processing job as RUNNING.
+        """
+        job = self.repository.get_by_id(job_id)
+
+        if job is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Processing job not found",
+            )
+
+        job.status = "RUNNING"
+        job.started_at = datetime.utcnow()
+
+        return self.repository.update(job)
+        
+    def complete_job(
+        self,
+        job_id: int,
+    ) -> ProcessingJob:
+        """
+        Mark a processing job as COMPLETED.
+        """
+        job = self.repository.get_by_id(job_id)
+
+        if job is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Processing job not found",
+            )
+
+        job.status = "COMPLETED"
+        job.finished_at = datetime.utcnow()
+
+        return self.repository.update(job)
+    
+    def fail_job(
+        self,
+        job_id: int,
+        error: str,
+    ) -> ProcessingJob:
+        """
+        Mark a processing job as FAILED.
+        """
+        job = self.repository.get_by_id(job_id)
+
+        if job is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Processing job not found",
+            )
+
+        job.status = "FAILED"
+        job.error_message = error
+        job.finished_at = datetime.utcnow()
 
         return self.repository.update(job)

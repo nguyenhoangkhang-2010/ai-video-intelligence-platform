@@ -90,7 +90,7 @@ class VideoRepository(BaseRepository[Video]):
     def update(
         self,
         video: Video,
-    ):
+    ) -> Video:
         self.db.commit()
         self.db.refresh(video)
 

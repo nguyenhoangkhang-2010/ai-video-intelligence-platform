@@ -1,4 +1,5 @@
 from app.repositories.video import VideoRepository
+from app.types.video_metadata import VideoMetadata
 
 from fastapi import HTTPException
 from fastapi import status
@@ -110,4 +111,41 @@ class VideoService:
         if language is not None:
             video.language = language
 
+        return self.repository.update(video)
+    
+    def update_duration(
+        self,
+        video_id: int,
+        duration: int,
+    ) -> Video:
+        """
+        Update video duration after metadata extraction.
+        """
+        video = self.repository.get_by_id(video_id)
+
+        if video is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Video not found",
+            )
+
+        video.duration = duration
+
+        return self.repository.update(video)
+    
+    def update_metadata(
+        self,
+        video_id: int,
+        metadata: VideoMetadata,
+    ) -> Video:
+        """
+        Update video metadata extracted by FFprobe.
+        """
+        video = self.repository.get_by_id(video_id)
+        if video is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Video not found",
+            )
+        video.duration = metadata.duration
         return self.repository.update(video)
