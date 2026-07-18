@@ -10,6 +10,9 @@ from app.services.video import VideoService
 from app.repositories.processing_job import ProcessingJobRepository
 from app.services.processing_job import ProcessingJobService
 
+from app.repositories.transcript import TranscriptRepository
+from app.services.transcript import TranscriptService
+
 def get_video_service(
     db: Session = Depends(get_db),
 ) -> VideoService:
@@ -25,3 +28,9 @@ def get_processing_job_service(
 ) -> ProcessingJobService:
     repository = ProcessingJobRepository(db)
     return ProcessingJobService(repository)
+
+def get_transcript_service(
+    db: Session = Depends(get_db),
+) -> TranscriptService:
+    repository = TranscriptRepository(db)
+    return TranscriptService(repository)
