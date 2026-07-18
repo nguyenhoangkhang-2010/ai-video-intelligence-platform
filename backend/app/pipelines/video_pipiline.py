@@ -1,8 +1,9 @@
+from app.utils.ffprobe import extract_metadata
+
 class VideoPipelineService:
     """
     AI processing pipeline for uploaded videos.
     """
-
     def process(
         self,
         video_id: int,
@@ -11,9 +12,9 @@ class VideoPipelineService:
         """
         Execute the complete AI pipeline.
         """
-        self.extract_metadata(
-            video_id,
-            file_path,
+        self.metadata_stage(
+            video_id=video_id,
+            file_path=file_path,
         )
         # TODO
         # self.transcribe()
@@ -28,11 +29,14 @@ class VideoPipelineService:
         # TODO
         # self.generate_flashcards()
         
-    def extract_metadata(
+    def metadata_stage(
         self,
         video_id: int,
         file_path: str,
     ):
-        print(
-            f"[Pipeline] Extract metadata for {video_id}"
-        )
+        """
+        Extract video metadata using FFprobe.
+        """
+        print(f"[Pipeline] Extract metadata for video {video_id}")
+        metadata = extract_metadata(file_path)
+        print(metadata)
