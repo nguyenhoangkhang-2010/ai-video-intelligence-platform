@@ -14,7 +14,7 @@ router = APIRouter(
 
 
 @router.get(
-    "/videos/{video_id}",
+    "/{video_id}",
     response_model=TranscriptRead,
 )
 def get_transcript_by_video(
