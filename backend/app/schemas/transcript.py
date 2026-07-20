@@ -2,11 +2,18 @@ from datetime import datetime
 
 from pydantic import BaseModel
 from pydantic import ConfigDict
+from pydantic import Field
 
 
 class TranscriptBase(BaseModel):
-    language: str
-    text: str
+    language: str = Field(
+        min_length=2,
+        max_length=20,
+    )
+
+    text: str = Field(
+        min_length=1,
+    )
 
 class TranscriptCreate(TranscriptBase):
     video_id: int
