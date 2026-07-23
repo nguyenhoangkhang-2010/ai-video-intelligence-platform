@@ -1,30 +1,41 @@
 from app.utils.ffprobe import extract_metadata
 from app.services.video import VideoService
+from app.services.transcript import TranscriptService
 from app.workers.transcription_worker import TranscriptionWorker
+
+from app.schemas.transcript import TranscriptCreate
 
 class VideoPipelineService:
     def __init__(
         self,
         video_service: VideoService,
+        transcript_service: TranscriptService,
     ):
         self.video_service = video_service
+        self.transcript_service = transcript_service
         self.transcription_worker = TranscriptionWorker()
         
     def transcription_stage(
         self,
+        video_id: int,
         file_path: str,
     ):
         """
-        Run Whisper transcription.
+        Run Whisper transcription and persist transcript.
         """
         print("[Pipeline] Start transcription")
-
-        transcript = self.transcription_worker.process(
+        result = self.transcription_worker.process(
             video_path=file_path,
         )
-
         print(
-            f"[Pipeline] Language: {transcript['language']}"
+            f"[Pipeline] Language: {result['language']}"
+        )
+        transcript = self.transcript_service.create_transcript(
+            TranscriptCreate(
+                video_id=video_id,
+                language=result["language"],
+                text=result["text"],
+            )
         )
         return transcript
     """
@@ -44,6 +55,7 @@ class VideoPipelineService:
         )
 
         transcript = self.transcription_stage(
+            video_id=video_id,
             file_path=file_path,
         )
 

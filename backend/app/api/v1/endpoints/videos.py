@@ -7,6 +7,8 @@ from fastapi import BackgroundTasks
 from app.auth.dependencies import get_current_user
 from app.models.user import User
 
+from app.utils.ffprobe import extract_metadata
+
 from app.api.deps import get_video_service
 from app.api.deps import get_processing_job_service
 
@@ -131,12 +133,16 @@ async def upload_video(
             file.file,
             buffer,
         )
+        
+    metadata = extract_metadata(
+        str(file_path)
+    )
     video = service.upload_video(
         owner_id=current_user.id,
         title=file.filename,
         filename=file.filename,
         language="unknown",  # TODO: Detect language using Whisper
-        duration=0,          # TODO: Extract duration using FFmpeg
+        duration=metadata.duration,          # TODO: Extract duration using FFmpeg
     )
 
     job = processing_service.create_processing_job(
@@ -147,7 +153,7 @@ async def upload_video(
         process_video,
         job.id,
         video.id,
-        str(file_path)
+        str(file_path),
     )
 
     return video
