@@ -26,10 +26,11 @@ def process_video(
 
         pipeline = VideoPipelineService(video_service)
         
-        pipeline.process(
+        transcript = pipeline.process(
             video_id=video_id,
             file_path=file_path,
         )
+        print(transcript)
         
         processing_service.complete_job(job_id)
 

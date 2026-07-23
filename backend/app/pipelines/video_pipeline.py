@@ -1,5 +1,6 @@
 from app.utils.ffprobe import extract_metadata
 from app.services.video import VideoService
+from app.workers.transcription_worker import TranscriptionWorker
 
 class VideoPipelineService:
     def __init__(
@@ -7,6 +8,25 @@ class VideoPipelineService:
         video_service: VideoService,
     ):
         self.video_service = video_service
+        self.transcription_worker = TranscriptionWorker()
+        
+    def transcription_stage(
+        self,
+        file_path: str,
+    ):
+        """
+        Run Whisper transcription.
+        """
+        print("[Pipeline] Start transcription")
+
+        transcript = self.transcription_worker.process(
+            video_path=file_path,
+        )
+
+        print(
+            f"[Pipeline] Language: {transcript['language']}"
+        )
+        return transcript
     """
     AI processing pipeline for uploaded videos.
     """
@@ -22,6 +42,12 @@ class VideoPipelineService:
             video_id=video_id,
             file_path=file_path,
         )
+
+        transcript = self.transcription_stage(
+            file_path=file_path,
+        )
+
+        return transcript
         # TODO
         # self.transcribe()
         # TODO
