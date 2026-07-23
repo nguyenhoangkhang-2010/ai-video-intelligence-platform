@@ -7,6 +7,10 @@ from app.pipelines.video_pipeline import VideoPipelineService
 from app.repositories.processing_job import ProcessingJobRepository
 from app.services.processing_job import ProcessingJobService
 
+from app.repositories.transcript import TranscriptRepository
+from app.services.transcript import TranscriptService
+from app.schemas.transcript import TranscriptCreate
+
 def process_video(
     job_id: int,
     video_id: int,
@@ -23,6 +27,9 @@ def process_video(
 
         processing_repository = ProcessingJobRepository(db)
         processing_service = ProcessingJobService(processing_repository)
+        
+        transcript_repository = TranscriptRepository(db)
+        transcript_service = TranscriptService(transcript_repository)
 
         pipeline = VideoPipelineService(video_service)
         
@@ -30,7 +37,14 @@ def process_video(
             video_id=video_id,
             file_path=file_path,
         )
-        print(transcript)
+        
+        transcript_service.create_transcript(
+            TranscriptCreate(
+                video_id=video_id,
+                language=transcript["language"],
+                text=transcript["text"],
+            )
+        )
         
         processing_service.complete_job(job_id)
 

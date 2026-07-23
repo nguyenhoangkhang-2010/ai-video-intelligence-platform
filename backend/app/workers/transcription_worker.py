@@ -1,19 +1,26 @@
 from pathlib import Path
 import tempfile
 
-from ai.speech.faster_whisper import FasterWhisperTranscriber
+from backend.ai.speech.faster_whisper import FasterWhisperTranscriber
 from app.utils.audio import AudioExtractor
 
+from app.schemas.transcript import TranscriptCreate
+from app.services.transcript import TranscriptService
 
 class TranscriptionWorker:
     """Worker for speech-to-text transcription."""
 
-    def __init__(self):
+    def __init__(
+        self,
+        transcript_service: TranscriptService,
+    ):
         self.extractor = AudioExtractor()
         self.transcriber = FasterWhisperTranscriber()
+        self.transcript_service = transcript_service
 
     def process(
         self,
+        video_id: int,
         video_path: str,
     ) -> dict:
         """
@@ -34,4 +41,11 @@ class TranscriptionWorker:
             result = self.transcriber.transcribe(
                 str(wav_path),
             )
-            return result
+            transcript = self.transcript_service.create_transcript(
+                TranscriptCreate(
+                    video_id=video_id,
+                    language=result["language"],
+                    text=result["text"],
+                )
+            )
+            return transcript

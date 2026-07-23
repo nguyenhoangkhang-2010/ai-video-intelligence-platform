@@ -26,3 +26,24 @@ class TranscriptRepository(BaseRepository[Transcript]):
             .filter(Transcript.video_id == video_id)
             .first()
         )
+        
+    def update(
+        self,
+        transcript: Transcript,
+    ) -> Transcript:
+        self.db.commit()
+        self.db.refresh(transcript)
+        return transcript
+    
+    def exists(
+        self,
+        video_id: int,
+    ) -> bool:
+        return (
+            self.db.query(Transcript)
+            .filter(
+                Transcript.video_id == video_id,
+            )
+            .first()
+            is not None
+        )

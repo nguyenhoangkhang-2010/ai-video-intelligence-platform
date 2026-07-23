@@ -4,7 +4,7 @@ import sys
 ROOT_DIR = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT_DIR))
 
-from ai.speech import FasterWhisperTranscriber
+from backend.ai.speech import FasterWhisperTranscriber
 
 
 def main():
