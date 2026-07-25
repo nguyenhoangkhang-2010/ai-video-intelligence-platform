@@ -10,6 +10,9 @@ from app.services.processing_job import ProcessingJobService
 from app.repositories.transcript import TranscriptRepository
 from app.services.transcript import TranscriptService
 
+from app.core.celery_app import celery_app
+
+@celery_app.task
 def process_video(
     job_id: int,
     video_id: int,
