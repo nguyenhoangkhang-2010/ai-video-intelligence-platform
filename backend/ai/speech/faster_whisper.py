@@ -1,6 +1,6 @@
 from faster_whisper import WhisperModel
 
-from backend.ai.speech.transcriber import BaseTranscriber
+from ai.speech.transcriber import BaseTranscriber
 
 
 class FasterWhisperTranscriber(BaseTranscriber):

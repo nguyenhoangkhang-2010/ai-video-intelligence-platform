@@ -1,7 +1,7 @@
 from pathlib import Path
 import tempfile
 
-from backend.ai.speech.faster_whisper import FasterWhisperTranscriber
+from ai.speech.faster_whisper import FasterWhisperTranscriber
 from app.utils.audio import AudioExtractor
 
 class TranscriptionWorker:
