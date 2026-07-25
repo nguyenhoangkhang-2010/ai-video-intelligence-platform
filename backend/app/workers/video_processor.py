@@ -35,7 +35,9 @@ def process_video(
             transcript_service=transcript_service,
         )
         
-        transcript = pipeline.process(
+        processing_service.start_job(job_id)
+        
+        pipeline.process(
             video_id=video_id,
             file_path=file_path,
         )

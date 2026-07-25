@@ -4,7 +4,7 @@ from app.repositories.processing_job import ProcessingJobRepository
 from fastapi import HTTPException
 from fastapi import status
 
-from datetime import datetime
+from datetime import datetime, UTC
 
 class ProcessingJobService:
     """Service for processing job business logic."""
@@ -104,7 +104,7 @@ class ProcessingJobService:
             )
 
         job.status = "RUNNING"
-        job.started_at = datetime.utcnow()
+        job.started_at = datetime.now(UTC)
 
         return self.repository.update(job)
         
@@ -124,7 +124,7 @@ class ProcessingJobService:
             )
 
         job.status = "COMPLETED"
-        job.finished_at = datetime.utcnow()
+        job.finished_at = datetime.now(UTC)
 
         return self.repository.update(job)
     
