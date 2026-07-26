@@ -74,3 +74,15 @@ class ProcessingJobRepository(BaseRepository[ProcessingJob]):
         self.db.refresh(job)
 
         return job
+    
+    def get_by_id(
+        self,
+        job_id:int
+    ):
+        return (
+            self.db.query(ProcessingJob)
+            .filter(
+                ProcessingJob.id == job_id
+            )
+            .first()
+        )

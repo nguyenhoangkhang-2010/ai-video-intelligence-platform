@@ -82,6 +82,15 @@ class ProcessingJobService:
             )
 
         job.status = status
+        
+        if status == "RUNNING" and job.started_at is None:
+            job.started_at = datetime.now(UTC)
+
+        if status == "COMPLETED":
+            job.finished_at = datetime.now(UTC)
+
+        if status == "FAILED":
+            job.finished_at = datetime.now(UTC)
 
         if error_message is not None:
             job.error_message = error_message
@@ -168,8 +177,6 @@ class ProcessingJobService:
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="Processing job not found",
             )
-
-        print(f"[Progress] {progress}% - {current_step}")
 
         return self.repository.update_progress(
             job=job,
