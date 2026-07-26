@@ -1,3 +1,5 @@
+import logging
+
 from app.utils.ffprobe import extract_metadata
 from app.services.video import VideoService
 from app.services.processing_job import ProcessingJobService
@@ -5,6 +7,10 @@ from app.services.transcript import TranscriptService
 from app.workers.transcription_worker import TranscriptionWorker
 
 from app.schemas.transcript import TranscriptCreate
+from app.models.transcript import Transcript
+
+logger = logging.getLogger(__name__)
+
 
 class VideoPipelineService:
     """
@@ -21,22 +27,25 @@ class VideoPipelineService:
         self.processing_job_service = processing_job_service
         self.transcription_worker = TranscriptionWorker()
         
+        
     def transcription_stage(
         self,
         job_id: int,
         video_id: int,
         file_path: str,
-    ):
+    ) -> Transcript:
         """
         Run Whisper transcription and persist transcript.
         """
         self.processing_job_service.update_progress(
             job_id=job_id,
             progress=25,
-            current_step="Extract Audio",
+            current_step="Preparing Transcription",
         )
         
-        print("[Pipeline] Start transcription")
+        logger.info(
+            "Start transcription stage"
+        )
         
         self.processing_job_service.update_progress(
             job_id=job_id,
@@ -48,8 +57,9 @@ class VideoPipelineService:
             video_path=file_path,
         )
         
-        print(
-            f"[Pipeline] Language: {result['language']}"
+        logger.info(
+            "Detected language: %s",
+            result["language"],
         )
         
         self.processing_job_service.update_progress(
@@ -122,9 +132,17 @@ class VideoPipelineService:
             progress=10,
             current_step="Extract Metadata",
         )
-        print(f"[Pipeline] Extract metadata for video {video_id}")
+        logger.info(
+            "Extract metadata for video %s",
+            video_id,
+        )
+
         metadata = extract_metadata(file_path)
-        print(metadata)
+
+        logger.info(
+            "Metadata extraction completed for video %s",
+            metadata,
+        )
         self.video_service.update_metadata(
             video_id=video_id,
             metadata=metadata,

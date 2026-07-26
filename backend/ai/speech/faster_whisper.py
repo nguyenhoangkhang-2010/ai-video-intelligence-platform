@@ -2,6 +2,10 @@ from faster_whisper import WhisperModel
 
 from ai.speech.transcriber import BaseTranscriber
 
+import logging
+
+logger = logging.getLogger(__name__)
+
 
 class FasterWhisperTranscriber(BaseTranscriber):
     """Speech-to-text implementation using Faster-Whisper."""
@@ -20,6 +24,10 @@ class FasterWhisperTranscriber(BaseTranscriber):
         self,
         audio_path: str,
     ) -> dict:
+        logger.info(
+            "Start Whisper transcription: %s",
+            audio_path,
+        )
         segments, info = self.model.transcribe(
             audio_path,
             beam_size=5,
@@ -35,6 +43,10 @@ class FasterWhisperTranscriber(BaseTranscriber):
                     "text": segment.text,
                 }
             )
+        logger.info(
+            "Whisper completed. Language=%s",
+            info.language
+        )
         return {
             "language": info.language,
             "text": text.strip(),
