@@ -36,11 +36,13 @@ def process_video(
         pipeline = VideoPipelineService(
             video_service=video_service,
             transcript_service=transcript_service,
+            processing_job_service=processing_service,
         )
         
         processing_service.start_job(job_id)
         
         pipeline.process(
+            job_id=job_id,
             video_id=video_id,
             file_path=file_path,
         )

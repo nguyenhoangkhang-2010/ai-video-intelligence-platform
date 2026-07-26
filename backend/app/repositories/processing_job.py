@@ -48,11 +48,29 @@ class ProcessingJobRepository(BaseRepository[ProcessingJob]):
             .filter(ProcessingJob.job_type == job_type)
             .all()
         )
-        
+    
     def update(
         self,
         job: ProcessingJob,
     ) -> ProcessingJob:
         self.db.commit()
         self.db.refresh(job)
+        return job
+    
+    def update_progress(
+        self,
+        job: ProcessingJob,
+        progress: int,
+        current_step: str,
+        status: str | None = None,
+    ) -> ProcessingJob:
+        job.progress = progress
+        job.current_step = current_step
+
+        if status is not None:
+            job.status = status
+
+        self.db.commit()
+        self.db.refresh(job)
+
         return job

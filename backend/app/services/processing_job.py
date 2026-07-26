@@ -146,6 +146,34 @@ class ProcessingJobService:
 
         job.status = "FAILED"
         job.error_message = error
-        job.finished_at = datetime.utcnow()
+        job.finished_at = datetime.now(UTC)
 
         return self.repository.update(job)
+    
+    def update_progress(
+        self,
+        job_id: int,
+        progress: int,
+        current_step: str,
+        status: str | None = None,
+    ) -> ProcessingJob:
+        """
+        Update processing progress of a job.
+        """
+
+        job = self.repository.get_by_id(job_id)
+
+        if job is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Processing job not found",
+            )
+
+        print(f"[Progress] {progress}% - {current_step}")
+
+        return self.repository.update_progress(
+            job=job,
+            progress=progress,
+            current_step=current_step,
+            status=status,
+        )
