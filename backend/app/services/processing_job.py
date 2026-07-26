@@ -4,7 +4,7 @@ from app.repositories.processing_job import ProcessingJobRepository
 from fastapi import HTTPException
 from fastapi import status
 
-from datetime import datetime
+from datetime import datetime, UTC
 
 class ProcessingJobService:
     """Service for processing job business logic."""
@@ -82,6 +82,17 @@ class ProcessingJobService:
             )
 
         job.status = status
+        
+        if status == "RUNNING" and job.started_at is None:
+            job.started_at = datetime.now(UTC)
+
+        if status == "COMPLETED":
+            job.finished_at = datetime.now(UTC)
+
+        if status == "FAILED":
+            job.finished_at = datetime.now(UTC)
+            job.current_step = "Failed"
+            job.progress = 100
 
         if error_message is not None:
             job.error_message = error_message
@@ -104,7 +115,7 @@ class ProcessingJobService:
             )
 
         job.status = "RUNNING"
-        job.started_at = datetime.utcnow()
+        job.started_at = datetime.now(UTC)
 
         return self.repository.update(job)
         
@@ -124,7 +135,7 @@ class ProcessingJobService:
             )
 
         job.status = "COMPLETED"
-        job.finished_at = datetime.utcnow()
+        job.finished_at = datetime.now(UTC)
 
         return self.repository.update(job)
     
@@ -145,7 +156,35 @@ class ProcessingJobService:
             )
 
         job.status = "FAILED"
+        job.progress = 100
+        job.current_step = "Failed"
         job.error_message = error
-        job.finished_at = datetime.utcnow()
+        job.finished_at = datetime.now(UTC)
 
         return self.repository.update(job)
+    
+    def update_progress(
+        self,
+        job_id: int,
+        progress: int,
+        current_step: str,
+        status: str | None = None,
+    ) -> ProcessingJob:
+        """
+        Update processing progress of a job.
+        """
+
+        job = self.repository.get_by_id(job_id)
+
+        if job is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Processing job not found",
+            )
+
+        return self.repository.update_progress(
+            job=job,
+            progress=progress,
+            current_step=current_step,
+            status=status,
+        )

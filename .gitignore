@@ -167,3 +167,10 @@ temp/
 # Database
 ############################
 uploads/
+############################
+# Large Demo Files
+############################
+assets/demo/*.mp4
+assets/demo/*.wav
+assets/demo/*.mov
+assets/demo/*.mkv

@@ -28,6 +28,8 @@ class ProcessingJobRead(ProcessingJobBase):
     """Schema for reading processing job data."""
     id: int
     video_id: int
+    progress: int
+    current_step: str | None
     started_at: datetime | None
     finished_at: datetime | None
     error_message: str | None
