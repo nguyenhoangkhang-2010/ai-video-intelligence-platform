@@ -91,6 +91,8 @@ class ProcessingJobService:
 
         if status == "FAILED":
             job.finished_at = datetime.now(UTC)
+            job.current_step = "Failed"
+            job.progress = 100
 
         if error_message is not None:
             job.error_message = error_message
@@ -154,6 +156,8 @@ class ProcessingJobService:
             )
 
         job.status = "FAILED"
+        job.progress = 100
+        job.current_step = "Failed"
         job.error_message = error
         job.finished_at = datetime.now(UTC)
 

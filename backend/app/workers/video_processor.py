@@ -1,3 +1,5 @@
+import logging
+
 from app.database.session import SessionLocal
 
 from app.repositories.video import VideoRepository
@@ -11,6 +13,10 @@ from app.repositories.transcript import TranscriptRepository
 from app.services.transcript import TranscriptService
 
 from app.core.celery_app import celery_app
+
+
+logger = logging.getLogger(__name__)
+
 
 @celery_app.task
 def process_video(
@@ -50,6 +56,11 @@ def process_video(
         processing_service.complete_job(job_id)
 
     except Exception as e:
+        logger.exception(
+            "Video processing failed. job_id=%s",
+            job_id,
+        )
+        
         processing_service.fail_job(
             job_id=job_id,
             error=str(e),

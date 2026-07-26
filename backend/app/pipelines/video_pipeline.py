@@ -57,6 +57,15 @@ class VideoPipelineService:
             video_path=file_path,
         )
         
+        if not result["text"].strip():
+            logger.warning(
+                "No speech detected in video %s",
+                video_id,
+            )
+            raise ValueError(
+                "No speech detected in audio."
+            )
+        
         logger.info(
             "Detected language: %s",
             result["language"],
