@@ -12,6 +12,9 @@ from app.services.processing_job import ProcessingJobService
 from app.repositories.transcript import TranscriptRepository
 from app.services.transcript import TranscriptService
 
+from app.repositories.summary import SummaryRepository
+from app.services.summary import SummaryService
+
 from app.core.celery_app import celery_app
 
 
@@ -38,10 +41,14 @@ def process_video(
         
         transcript_repository = TranscriptRepository(db)
         transcript_service = TranscriptService(transcript_repository)
+        
+        summary_repository = SummaryRepository(db)
+        summary_service = SummaryService(summary_repository)
 
         pipeline = VideoPipelineService(
             video_service=video_service,
             transcript_service=transcript_service,
+            summary_service=summary_service,
             processing_job_service=processing_service,
         )
         

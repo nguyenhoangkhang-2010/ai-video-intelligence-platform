@@ -9,6 +9,12 @@ from app.workers.transcription_worker import TranscriptionWorker
 from app.schemas.transcript import TranscriptCreate
 from app.models.transcript import Transcript
 
+from app.services.summary import SummaryService
+from app.workers.summary_worker import SummaryWorker
+
+from app.schemas.summary import SummaryCreate
+from app.models.summary import Summary
+
 logger = logging.getLogger(__name__)
 
 
@@ -20,11 +26,14 @@ class VideoPipelineService:
         self,
         video_service: VideoService,
         transcript_service: TranscriptService,
+        summary_service: SummaryService,
         processing_job_service: ProcessingJobService,
     ):
         self.video_service = video_service
         self.transcript_service = transcript_service
         self.processing_job_service = processing_job_service
+        self.summary_service = summary_service
+        self.summary_worker = SummaryWorker()
         self.transcription_worker = TranscriptionWorker()
         
         
@@ -86,6 +95,44 @@ class VideoPipelineService:
         )
         return transcript
     
+    def summary_stage(
+        self,
+        job_id: int,
+        video_id: int,
+        transcript: Transcript,
+    ) -> Summary:
+        """
+        Generate summary from transcript.
+        """
+        self.processing_job_service.update_progress(
+            job_id=job_id,
+            progress=95,
+            current_step="Generating Summary",
+        )
+
+        logger.info(
+            "Start summary stage",
+        )
+
+        result = self.summary_worker.process(
+            transcript=transcript.text,
+        )
+
+        summary = self.summary_service.create_summary(
+            SummaryCreate(
+                video_id=video_id,
+                type=result["type"],
+                content=result["content"],
+                model_name=result["model_name"],
+            )
+        )
+
+        logger.info(
+            "Summary generated.",
+        )
+
+        return summary
+    
     def process(
         self,
         job_id: int,
@@ -107,13 +154,19 @@ class VideoPipelineService:
             file_path=file_path,
         )
 
+        summary = self.summary_stage(
+            job_id=job_id,
+            video_id=video_id,
+            transcript=transcript,
+        )
+
         self.processing_job_service.update_progress(
             job_id=job_id,
             progress=100,
             current_step="Completed",
         )
 
-        return transcript
+        return summary
         # TODO
         # self.transcribe()
         # TODO
