@@ -15,6 +15,11 @@ from app.workers.summary_worker import SummaryWorker
 from app.schemas.summary import SummaryCreate
 from app.models.summary import Summary
 
+from app.services.embedding import EmbeddingService
+from app.workers.embedding_worker import EmbeddingWorker
+
+from app.schemas.embedding import EmbeddingCreate
+
 logger = logging.getLogger(__name__)
 
 
@@ -27,13 +32,16 @@ class VideoPipelineService:
         video_service: VideoService,
         transcript_service: TranscriptService,
         summary_service: SummaryService,
+        embedding_service: EmbeddingService,
         processing_job_service: ProcessingJobService,
     ):
         self.video_service = video_service
         self.transcript_service = transcript_service
         self.processing_job_service = processing_job_service
         self.summary_service = summary_service
+        self.embedding_service = embedding_service
         self.summary_worker = SummaryWorker()
+        self.embedding_worker = EmbeddingWorker()
         self.transcription_worker = TranscriptionWorker()
         
         
@@ -133,6 +141,46 @@ class VideoPipelineService:
 
         return summary
     
+    def embedding_stage(
+        self,
+        job_id: int,
+        video_id: int,
+        transcript: Transcript,
+    ):
+        """
+        Generate embeddings from transcript.
+        """
+        self.processing_job_service.update_progress(
+            job_id=job_id,
+            progress=98,
+            current_step="Generating Embeddings",
+        )
+
+        logger.info(
+            "Start embedding stage",
+        )
+
+        embeddings = self.embedding_worker.process(
+            transcript=transcript.text,
+        )
+
+        for embedding in embeddings:
+            self.embedding_service.create_embedding(
+                EmbeddingCreate(
+                    video_id=video_id,
+                    chunk_index=embedding["chunk_index"],
+                    chunk_text=embedding["chunk_text"],
+                    embedding_model=embedding["embedding_model"],
+                    vector_id=embedding["vector_id"],
+                )
+            )
+
+        logger.info(
+            "Embedding generation completed.",
+        )
+        
+        return embeddings
+    
     def process(
         self,
         job_id: int,
@@ -154,7 +202,13 @@ class VideoPipelineService:
             file_path=file_path,
         )
 
-        summary = self.summary_stage(
+        self.summary_stage(
+            job_id=job_id,
+            video_id=video_id,
+            transcript=transcript,
+        )
+        
+        self.embedding_stage(
             job_id=job_id,
             video_id=video_id,
             transcript=transcript,
@@ -166,7 +220,6 @@ class VideoPipelineService:
             current_step="Completed",
         )
 
-        return summary
         # TODO
         # self.transcribe()
         # TODO
