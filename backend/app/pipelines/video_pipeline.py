@@ -20,6 +20,12 @@ from app.workers.embedding_worker import EmbeddingWorker
 
 from app.schemas.embedding import EmbeddingCreate
 
+from app.services.translation import TranslationService
+from app.workers.translation_worker import TranslationWorker
+
+from app.schemas.translation import TranslationCreate
+from app.models.translation import Translation
+
 logger = logging.getLogger(__name__)
 
 
@@ -33,6 +39,7 @@ class VideoPipelineService:
         transcript_service: TranscriptService,
         summary_service: SummaryService,
         embedding_service: EmbeddingService,
+        translation_service: TranslationService,
         processing_job_service: ProcessingJobService,
     ):
         self.video_service = video_service
@@ -40,8 +47,10 @@ class VideoPipelineService:
         self.processing_job_service = processing_job_service
         self.summary_service = summary_service
         self.embedding_service = embedding_service
+        self.translation_service = translation_service
         self.summary_worker = SummaryWorker()
         self.embedding_worker = EmbeddingWorker()
+        self.translation_worker = TranslationWorker()
         self.transcription_worker = TranscriptionWorker()
         
         
@@ -181,6 +190,45 @@ class VideoPipelineService:
         
         return embeddings
     
+    def translation_stage(
+        self,
+        job_id: int,
+        video_id: int,
+        transcript: Transcript,
+    ) -> Translation:
+        """
+        Generate translated subtitle.
+        """
+
+        self.processing_job_service.update_progress(
+            job_id=job_id,
+            progress=99,
+            current_step="Generating Translation",
+        )
+
+        logger.info(
+            "Start translation stage",
+        )
+
+        result = self.translation_worker.process(
+            transcript=transcript.text,
+            target_language="en",
+        )
+
+        translation = self.translation_service.create_translation(
+            TranslationCreate(
+                video_id=video_id,
+                language=result["language"],
+                subtitle=result["subtitle"],
+            )
+        )
+
+        logger.info(
+            "Translation completed.",
+        )
+
+        return translation
+    
     def process(
         self,
         job_id: int,
@@ -209,6 +257,12 @@ class VideoPipelineService:
         )
         
         self.embedding_stage(
+            job_id=job_id,
+            video_id=video_id,
+            transcript=transcript,
+        )
+        
+        self.translation_stage(
             job_id=job_id,
             video_id=video_id,
             transcript=transcript,

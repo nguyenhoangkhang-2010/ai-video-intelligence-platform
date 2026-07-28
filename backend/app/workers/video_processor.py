@@ -18,6 +18,9 @@ from app.services.summary import SummaryService
 from app.repositories.embedding import EmbeddingRepository
 from app.services.embedding import EmbeddingService
 
+from app.repositories.translation import TranslationRepository
+from app.services.translation import TranslationService
+
 from app.core.celery_app import celery_app
 
 
@@ -50,12 +53,16 @@ def process_video(
 
         embedding_repository = EmbeddingRepository(db)
         embedding_service = EmbeddingService(embedding_repository)
+        
+        translation_repository = TranslationRepository(db)
+        translation_service = TranslationService(translation_repository)
 
         pipeline = VideoPipelineService(
             video_service=video_service,
             transcript_service=transcript_service,
             summary_service=summary_service,
             embedding_service=embedding_service,
+            translation_service=translation_service,
             processing_job_service=processing_service,
         )
         
