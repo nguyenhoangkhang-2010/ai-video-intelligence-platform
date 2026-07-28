@@ -2,6 +2,8 @@ import logging
 
 from fastapi import APIRouter
 
+from app.schemas.search import SearchRequest
+from app.schemas.search import SemanticSearchResponse
 from app.services.semantic_search import SemanticSearchService
 
 
@@ -19,10 +21,11 @@ service = SemanticSearchService()
 
 @router.post(
     "/videos/{video_id}",
+    response_model=SemanticSearchResponse,
 )
 def search_video(
     video_id: int,
-    query: str,
+    request: SearchRequest,
 ):
     """
     Semantic search inside video content.
@@ -31,15 +34,16 @@ def search_video(
     logger.info(
         "Searching video %s with query: %s",
         video_id,
-        query,
+        request.query,
     )
 
     results = service.search(
-        query=query,
+        query=request.query,
+        top_k=request.top_k,
     )
 
     return {
         "video_id": video_id,
-        "query": query,
+        "query": request.query,
         "results": results,
     }
