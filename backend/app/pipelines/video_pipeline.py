@@ -26,6 +26,8 @@ from app.workers.translation_worker import TranslationWorker
 from app.schemas.translation import TranslationCreate
 from app.models.translation import Translation
 
+from ai.embedding.vector_store import VectorStore
+
 logger = logging.getLogger(__name__)
 
 
@@ -171,6 +173,17 @@ class VideoPipelineService:
 
         embeddings = self.embedding_worker.process(
             transcript=transcript.text,
+        )
+        
+        vector_store = VectorStore(
+            dimension=1024,
+        )
+
+        vector_store.add(
+            [
+                embedding["vector"]
+                for embedding in embeddings
+            ]
         )
 
         for embedding in embeddings:
