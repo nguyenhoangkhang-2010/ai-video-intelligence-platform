@@ -177,5 +177,5 @@ assets/demo/*.mkv
 ############################
 # FAISS index
 ############################
-storage/faiss/*
-!storage/faiss/.gitkeep
+backend/storage/faiss/*
+!backend/storage/faiss/.gitkeep
