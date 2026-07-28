@@ -41,11 +41,26 @@ class SemanticSearchService:
             top_k,
         )
 
+        results = []
+
+        for index, distance in zip(
+            indices[0],
+            distances[0],
+        ):
+
+            if index == -1:
+                continue
+
+            results.append(
+                {
+                    "index": int(index),
+                    "distance": float(distance),
+                }
+            )
+            
         logger.info(
-            "Semantic search completed.",
+            "Semantic search completed. Found %s results.",
+            len(results),
         )
 
-        return {
-            "indices": indices.tolist(),
-            "distances": distances.tolist(),
-        }
+        return results

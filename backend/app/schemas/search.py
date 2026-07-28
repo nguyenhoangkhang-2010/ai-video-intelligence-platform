@@ -7,11 +7,11 @@ class SearchRequest(BaseModel):
 
 
 class SearchResult(BaseModel):
-    indices: list[list[int]]
-    distances: list[list[float]]
+    index: int
+    distance: float
 
 
 class SemanticSearchResponse(BaseModel):
     video_id: int
     query: str
-    results: SearchResult
+    results: list[SearchResult]
