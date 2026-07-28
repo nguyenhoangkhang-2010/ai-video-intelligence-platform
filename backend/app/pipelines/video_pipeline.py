@@ -183,7 +183,11 @@ class VideoPipelineService:
             [
                 embedding["vector"]
                 for embedding in embeddings
-            ]
+            ],
+            vector_ids=[
+                embedding["vector_id"]
+                for embedding in embeddings
+            ],
         )
 
         for embedding in embeddings:
