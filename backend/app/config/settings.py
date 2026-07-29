@@ -36,7 +36,7 @@ AI_DIR = PROJECT_ROOT / "ai"
 
 DATA_DIR = PROJECT_ROOT / "data"
 
-STORAGE_DIR = PROJECT_ROOT / "storage"
+STORAGE_DIR = BACKEND_DIR / "storage"
 
 LOG_DIR = PROJECT_ROOT / "logs"
 
@@ -145,6 +145,17 @@ class DatabaseSettings(BaseConfig):
     def url(self) -> str:
         """Return database URL."""
         return self.database_url
+    
+# =============================================================================
+# HuggingFace
+# =============================================================================
+class HuggingFaceSettings(BaseConfig):
+    """HuggingFace configuration."""
+
+    token: str | None = Field(
+        default=None,
+        alias="HF_TOKEN",
+    )
 
 # =============================================================================
 # Global Settings Instance
@@ -158,6 +169,7 @@ class Settings(BaseModel):
     server: ServerSettings = Field(default_factory=ServerSettings)
     security: SecuritySettings = Field(default_factory=SecuritySettings)
     database: DatabaseSettings = Field(default_factory=DatabaseSettings)
+    huggingface: HuggingFaceSettings =Field(default_factory=HuggingFaceSettings)
 
 @lru_cache
 def get_settings() -> Settings:

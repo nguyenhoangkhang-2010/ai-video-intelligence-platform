@@ -1,7 +1,15 @@
 import logging
 
+from fastapi import Depends
+from sqlalchemy.orm import Session
+
 from fastapi import APIRouter
 
+from app.database.session import get_db
+from app.repositories.embedding import EmbeddingRepository
+
+from app.schemas.search import SearchRequest
+from app.schemas.search import SemanticSearchResponse
 from app.services.semantic_search import SemanticSearchService
 
 
@@ -14,15 +22,14 @@ router = APIRouter(
 )
 
 
-service = SemanticSearchService()
-
-
 @router.post(
     "/videos/{video_id}",
+    response_model=SemanticSearchResponse,
 )
 def search_video(
     video_id: int,
-    query: str,
+    request: SearchRequest,
+    db: Session = Depends(get_db),
 ):
     """
     Semantic search inside video content.
@@ -31,15 +38,24 @@ def search_video(
     logger.info(
         "Searching video %s with query: %s",
         video_id,
-        query,
+        request.query,
+    )
+
+    embedding_repository = EmbeddingRepository(
+        db=db,
+    )
+
+    service = SemanticSearchService(
+        embedding_repository=embedding_repository,
     )
 
     results = service.search(
-        query=query,
+        query=request.query,
+        top_k=request.top_k,
     )
 
     return {
         "video_id": video_id,
-        "query": query,
+        "query": request.query,
         "results": results,
     }

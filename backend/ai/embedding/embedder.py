@@ -1,7 +1,10 @@
 import logging
+import os
 import uuid
 
 from FlagEmbedding import BGEM3FlagModel
+
+from app.config.settings import settings
 
 
 logger = logging.getLogger(__name__)
@@ -13,6 +16,9 @@ class Embedder:
     def __init__(
         self,
     ):
+        if settings.huggingface.token:
+            os.environ["HF_TOKEN"] = settings.huggingface.token
+        
         self.model = BGEM3FlagModel(
             "BAAI/bge-m3",
             use_fp16=False,
