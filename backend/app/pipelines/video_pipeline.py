@@ -99,6 +99,12 @@ class VideoPipelineService:
             result["language"],
         )
         
+        self.video_service.update_processing_result(
+            video_id=video_id,
+            language=result["language"],
+            status="processed",
+        )
+        
         self.processing_job_service.update_progress(
             job_id=job_id,
             progress=90,

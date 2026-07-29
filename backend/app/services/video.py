@@ -1,3 +1,5 @@
+import logging
+
 from app.repositories.video import VideoRepository
 from app.types.video_metadata import VideoMetadata
 
@@ -5,6 +7,9 @@ from fastapi import HTTPException
 from fastapi import status
 
 from app.models.video import Video
+
+logger = logging.getLogger(__name__)
+
 
 class VideoService:
     """Service for video business logic."""
@@ -93,6 +98,7 @@ class VideoService:
         user_id: int,
         title: str | None,
         language: str | None,
+        status: str | None,
     ):
         video = self.repository.get_by_id_and_owner(
             video_id=video_id,
@@ -110,6 +116,9 @@ class VideoService:
 
         if language is not None:
             video.language = language
+            
+        if status is not None:
+            video.status = status
 
         return self.repository.update(video)
     
@@ -148,4 +157,23 @@ class VideoService:
                 detail="Video not found",
             )
         video.duration = metadata.duration
+        return self.repository.update(video)
+    
+    def update_processing_result(
+        self,
+        video_id: int,
+        language: str,
+        status: str,
+    ) -> Video:
+        video = self.repository.get_by_id(video_id)
+
+        if video is None:
+            raise HTTPException(
+                status_code=404,
+                detail="Video not found",
+            )
+
+        video.language = language
+        video.status = status
+
         return self.repository.update(video)

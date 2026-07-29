@@ -40,7 +40,9 @@ STORAGE_DIR = BACKEND_DIR / "storage"
 
 LOG_DIR = PROJECT_ROOT / "logs"
 
-UPLOAD_DIR = STORAGE_DIR / "uploads"
+UPLOAD_DIR = BACKEND_DIR / "uploads"
+
+VIDEO_UPLOAD_DIR = UPLOAD_DIR / "videos"
 
 TEMP_DIR = STORAGE_DIR / "temp"
 
