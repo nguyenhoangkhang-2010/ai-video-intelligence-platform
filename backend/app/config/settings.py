@@ -36,7 +36,7 @@ AI_DIR = PROJECT_ROOT / "ai"
 
 DATA_DIR = PROJECT_ROOT / "data"
 
-STORAGE_DIR = PROJECT_ROOT / "storage"
+STORAGE_DIR = BACKEND_DIR / "storage"
 
 LOG_DIR = PROJECT_ROOT / "logs"
 

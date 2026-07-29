@@ -7,7 +7,10 @@ class SearchRequest(BaseModel):
 
 
 class SearchResult(BaseModel):
-    index: int
+    vector_id: str
+    video_id: int
+    chunk_index: int
+    chunk_text: str
     distance: float
 
 
