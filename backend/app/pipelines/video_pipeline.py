@@ -28,6 +28,11 @@ from app.models.translation import Translation
 
 from ai.embedding.vector_store import VectorStore
 
+from app.services.quiz import QuizService
+from app.workers.quiz_worker import QuizWorker
+
+from app.schemas.quiz import QuizCreate
+
 logger = logging.getLogger(__name__)
 
 
@@ -43,6 +48,7 @@ class VideoPipelineService:
         embedding_service: EmbeddingService,
         translation_service: TranslationService,
         processing_job_service: ProcessingJobService,
+        quiz_service: QuizService,
     ):
         self.video_service = video_service
         self.transcript_service = transcript_service
@@ -54,6 +60,8 @@ class VideoPipelineService:
         self.embedding_worker = EmbeddingWorker()
         self.translation_worker = TranslationWorker()
         self.transcription_worker = TranscriptionWorker()
+        self.quiz_service = quiz_service
+        self.quiz_worker = QuizWorker()
         
         
     def transcription_stage(
@@ -252,6 +260,50 @@ class VideoPipelineService:
 
         return translation
     
+    def quiz_stage(
+        self,
+        job_id: int,
+        video_id: int,
+        transcript: Transcript,
+    ):
+
+        self.processing_job_service.update_progress(
+            job_id=job_id,
+            progress=99,
+            current_step="Generating Quiz",
+        )
+
+
+        logger.info(
+            "Start quiz stage",
+        )
+
+
+        quizzes = self.quiz_worker.process(
+            transcript=transcript.text,
+        )
+
+
+        for quiz in quizzes:
+
+            self.quiz_service.create_quiz(
+                QuizCreate(
+                    video_id=video_id,
+                    type=quiz["type"],
+                    question=quiz["question"],
+                    answer=quiz["answer"],
+                    options=quiz["options"],
+                )
+            )
+
+
+        logger.info(
+            "Quiz generation completed.",
+        )
+
+
+        return quizzes
+    
     def process(
         self,
         job_id: int,
@@ -286,6 +338,12 @@ class VideoPipelineService:
         )
         
         self.translation_stage(
+            job_id=job_id,
+            video_id=video_id,
+            transcript=transcript,
+        )
+
+        self.quiz_stage(
             job_id=job_id,
             video_id=video_id,
             transcript=transcript,

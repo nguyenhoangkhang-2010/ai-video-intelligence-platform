@@ -21,6 +21,9 @@ from app.services.embedding import EmbeddingService
 from app.repositories.translation import TranslationRepository
 from app.services.translation import TranslationService
 
+from app.repositories.quiz import QuizRepository
+from app.services.quiz import QuizService
+
 from app.core.celery_app import celery_app
 
 
@@ -56,6 +59,9 @@ def process_video(
         
         translation_repository = TranslationRepository(db)
         translation_service = TranslationService(translation_repository)
+        
+        quiz_repository = QuizRepository(db)
+        quiz_service = QuizService(quiz_repository)
 
         pipeline = VideoPipelineService(
             video_service=video_service,
@@ -64,6 +70,7 @@ def process_video(
             embedding_service=embedding_service,
             translation_service=translation_service,
             processing_job_service=processing_service,
+            quiz_service=quiz_service,
         )
         
         processing_service.start_job(job_id)
