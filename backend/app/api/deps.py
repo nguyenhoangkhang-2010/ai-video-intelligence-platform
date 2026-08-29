@@ -19,6 +19,9 @@ from app.services.quiz import QuizService
 from app.repositories.summary import SummaryRepository
 from app.services.summary import SummaryService
 
+from app.repositories.translation import TranslationRepository
+from app.services.translation import TranslationService
+
 def get_video_service(
     db: Session = Depends(get_db),
 ) -> VideoService:
@@ -52,3 +55,9 @@ def get_summary_service(
 ) -> SummaryService:
     repository = SummaryRepository(db)
     return SummaryService(repository)
+
+def get_translation_service(
+    db: Session = Depends(get_db),
+) -> TranslationService:
+    repository = TranslationRepository(db)
+    return TranslationService(repository)
