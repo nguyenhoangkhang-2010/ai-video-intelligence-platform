@@ -158,6 +158,22 @@ class HuggingFaceSettings(BaseConfig):
         default=None,
         alias="HF_TOKEN",
     )
+    
+# =============================================================================
+# LLM
+# =============================================================================
+class LLMSettings(BaseConfig):
+    """LLM configuration."""
+
+    ollama_base_url: str = Field(
+        default="http://localhost:11434",
+        alias="OLLAMA_BASE_URL",
+    )
+
+    default_llm: str = Field(
+        default="qwen3:8b",
+        alias="DEFAULT_LLM",
+    )
 
 # =============================================================================
 # Global Settings Instance
@@ -172,6 +188,7 @@ class Settings(BaseModel):
     security: SecuritySettings = Field(default_factory=SecuritySettings)
     database: DatabaseSettings = Field(default_factory=DatabaseSettings)
     huggingface: HuggingFaceSettings =Field(default_factory=HuggingFaceSettings)
+    llm: LLMSettings =Field(default_factory=LLMSettings)
 
 @lru_cache
 def get_settings() -> Settings:
