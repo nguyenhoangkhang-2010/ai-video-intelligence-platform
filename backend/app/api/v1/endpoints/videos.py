@@ -20,8 +20,10 @@ from app.schemas.video import VideoStatusResponse
 
 from app.schemas.processing_job import ProcessingJobRead
 
-from pathlib import Path
+import uuid
 import shutil
+
+from app.config.settings import VIDEO_UPLOAD_DIR
 
 router = APIRouter(
     prefix="/videos",
@@ -94,13 +96,13 @@ def get_processing_jobs(
     """
     Get all processing jobs of a video.
     """
-    service.get_video(
+    video = service.get_video(
         video_id=video_id,
         user_id=current_user.id,
     )
 
     return processing_service.get_jobs_by_video(
-        video_id=video_id,
+        video_id=video.id,
     )
     
 @router.post(
@@ -118,13 +120,16 @@ async def upload_video(
     """
     Upload a video file.
     """
-    upload_dir = Path("uploads/videos")
-    upload_dir.mkdir(
+    VIDEO_UPLOAD_DIR.mkdir(
         parents=True,
         exist_ok=True,
     )
 
-    file_path = upload_dir / file.filename
+    unique_filename = (
+        f"{uuid.uuid4()}_{file.filename}"
+    )
+
+    file_path = VIDEO_UPLOAD_DIR / unique_filename
 
     with file_path.open("wb") as buffer:
         shutil.copyfileobj(
@@ -138,7 +143,7 @@ async def upload_video(
     video = service.upload_video(
         owner_id=current_user.id,
         title=file.filename,
-        filename=file.filename,
+        filename=unique_filename,
         language="unknown",  # TODO: Detect language using Whisper
         duration=metadata.duration,          # TODO: Extract duration using FFmpeg
     )
@@ -189,4 +194,6 @@ def update_video(
         user_id=current_user.id,
         title=video_update.title,
         language=video_update.language,
+        status=video_update.status,
     )
+    

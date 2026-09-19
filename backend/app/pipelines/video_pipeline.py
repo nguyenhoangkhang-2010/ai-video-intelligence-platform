@@ -28,6 +28,11 @@ from app.models.translation import Translation
 
 from ai.embedding.vector_store import VectorStore
 
+from app.services.quiz import QuizService
+from app.workers.quiz_worker import QuizWorker
+
+from app.schemas.quiz import QuizCreate
+
 logger = logging.getLogger(__name__)
 
 
@@ -43,6 +48,7 @@ class VideoPipelineService:
         embedding_service: EmbeddingService,
         translation_service: TranslationService,
         processing_job_service: ProcessingJobService,
+        quiz_service: QuizService,
     ):
         self.video_service = video_service
         self.transcript_service = transcript_service
@@ -54,6 +60,8 @@ class VideoPipelineService:
         self.embedding_worker = EmbeddingWorker()
         self.translation_worker = TranslationWorker()
         self.transcription_worker = TranscriptionWorker()
+        self.quiz_service = quiz_service
+        self.quiz_worker = QuizWorker()
         
         
     def transcription_stage(
@@ -97,6 +105,11 @@ class VideoPipelineService:
         logger.info(
             "Detected language: %s",
             result["language"],
+        )
+        
+        self.video_service.update_processing_result(
+            video_id=video_id,
+            language=result["language"],
         )
         
         self.processing_job_service.update_progress(
@@ -158,9 +171,7 @@ class VideoPipelineService:
         video_id: int,
         transcript: Transcript,
     ):
-        """
-        Generate embeddings from transcript.
-        """
+        
         self.processing_job_service.update_progress(
             job_id=job_id,
             progress=98,
@@ -168,26 +179,40 @@ class VideoPipelineService:
         )
 
         logger.info(
-            "Start embedding stage",
+            "Start embedding stage for video %s",
+            video_id,
         )
 
         embeddings = self.embedding_worker.process(
             transcript=transcript.text,
         )
-        
+
+        if not embeddings:
+            logger.warning(
+                "No embeddings generated for video %s",
+                video_id,
+            )
+            raise ValueError(
+                "Failed to generate transcript embeddings."
+            )
+
         vector_store = VectorStore(
             dimension=1024,
         )
 
+        vectors = [
+            embedding["vector"]
+            for embedding in embeddings
+        ]
+
+        vector_ids = [
+            embedding["vector_id"]
+            for embedding in embeddings
+        ]
+
         vector_store.add(
-            [
-                embedding["vector"]
-                for embedding in embeddings
-            ],
-            vector_ids=[
-                embedding["vector_id"]
-                for embedding in embeddings
-            ],
+            vectors=vectors,
+            vector_ids=vector_ids,
         )
 
         for embedding in embeddings:
@@ -202,9 +227,12 @@ class VideoPipelineService:
             )
 
         logger.info(
-            "Embedding generation completed.",
+            "Embedding generation completed for video %s. "
+            "Generated %s chunks.",
+            video_id,
+            len(embeddings),
         )
-        
+
         return embeddings
     
     def translation_stage(
@@ -246,6 +274,50 @@ class VideoPipelineService:
 
         return translation
     
+    def quiz_stage(
+        self,
+        job_id: int,
+        video_id: int,
+        transcript: Transcript,
+    ):
+
+        self.processing_job_service.update_progress(
+            job_id=job_id,
+            progress=99,
+            current_step="Generating Quiz",
+        )
+
+
+        logger.info(
+            "Start quiz stage",
+        )
+
+
+        quizzes = self.quiz_worker.process(
+            transcript=transcript.text,
+        )
+
+
+        for quiz in quizzes:
+
+            self.quiz_service.create_quiz(
+                QuizCreate(
+                    video_id=video_id,
+                    type=quiz["type"],
+                    question=quiz["question"],
+                    answer=quiz["answer"],
+                    options=quiz["options"],
+                )
+            )
+
+
+        logger.info(
+            "Quiz generation completed.",
+        )
+
+
+        return quizzes
+    
     def process(
         self,
         job_id: int,
@@ -285,24 +357,22 @@ class VideoPipelineService:
             transcript=transcript,
         )
 
+        self.quiz_stage(
+            job_id=job_id,
+            video_id=video_id,
+            transcript=transcript,
+        )
+        
+        self.video_service.update_status(
+            video_id=video_id,
+            status="processed",
+        )
+
         self.processing_job_service.update_progress(
             job_id=job_id,
             progress=100,
             current_step="Completed",
         )
-
-        # TODO
-        # self.transcribe()
-        # TODO
-        # self.generate_summary()
-        # TODO
-        # self.create_embeddings()
-        # TODO
-        # self.translate()
-        # TODO
-        # self.generate_quiz()
-        # TODO
-        # self.generate_flashcards()
         
     def metadata_stage(
         self,

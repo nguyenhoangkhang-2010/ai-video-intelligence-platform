@@ -32,19 +32,21 @@ ENV_FILE = PROJECT_ROOT / ".env"
 
 BACKEND_DIR = PROJECT_ROOT / "backend"
 
-AI_DIR = PROJECT_ROOT / "ai"
+AI_DIR = BACKEND_DIR / "ai"
 
 DATA_DIR = PROJECT_ROOT / "data"
 
-STORAGE_DIR = BACKEND_DIR / "storage"
+STORAGE_DIR = PROJECT_ROOT / "storage"
 
-LOG_DIR = PROJECT_ROOT / "logs"
+UPLOAD_DIR = STORAGE_DIR / "videos"
 
-UPLOAD_DIR = STORAGE_DIR / "uploads"
+VIDEO_UPLOAD_DIR = STORAGE_DIR / "videos"
 
 TEMP_DIR = STORAGE_DIR / "temp"
 
 CACHE_DIR = STORAGE_DIR / "cache"
+
+LOG_DIR = PROJECT_ROOT / "logs"
 
 # =============================================================================
 # Application
@@ -156,6 +158,22 @@ class HuggingFaceSettings(BaseConfig):
         default=None,
         alias="HF_TOKEN",
     )
+    
+# =============================================================================
+# LLM
+# =============================================================================
+class LLMSettings(BaseConfig):
+    """LLM configuration."""
+
+    ollama_base_url: str = Field(
+        default="http://localhost:11434",
+        alias="OLLAMA_BASE_URL",
+    )
+
+    default_llm: str = Field(
+        default="qwen3:8b",
+        alias="DEFAULT_LLM",
+    )
 
 # =============================================================================
 # Global Settings Instance
@@ -170,6 +188,7 @@ class Settings(BaseModel):
     security: SecuritySettings = Field(default_factory=SecuritySettings)
     database: DatabaseSettings = Field(default_factory=DatabaseSettings)
     huggingface: HuggingFaceSettings =Field(default_factory=HuggingFaceSettings)
+    llm: LLMSettings =Field(default_factory=LLMSettings)
 
 @lru_cache
 def get_settings() -> Settings:
