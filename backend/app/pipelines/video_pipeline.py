@@ -185,20 +185,29 @@ class VideoPipelineService:
 
         embeddings = self.embedding_worker.process(
             transcript=transcript.text,
+            video_id=video_id,
         )
 
         if not embeddings:
             logger.warning(
-                "No embeddings generated for video %s",
+                "No embeddings generated for video %s. "
+                "Existing embeddings, if any, are left untouched.",
                 video_id,
             )
             raise ValueError(
                 "Failed to generate transcript embeddings."
             )
 
-        vector_store = VectorStore(
-            dimension=1024,
-        )
+        # Generation succeeded: it is now safe to replace whatever
+        # embeddings this video already had. Capture the old
+        # vector_ids before deleting so FAISS knows exactly what to
+        # drop during the rebuild.
+        old_vector_ids = {
+            embedding.vector_id
+            for embedding in self.embedding_service.get_by_video_id(
+                video_id,
+            )
+        }
 
         vectors = [
             embedding["vector"]
@@ -210,21 +219,65 @@ class VideoPipelineService:
             for embedding in embeddings
         ]
 
-        vector_store.add(
-            vectors=vectors,
-            vector_ids=vector_ids,
+        logger.info(
+            "Replacing embeddings for video %s: %s existing "
+            "vector(s) to remove, %s newly generated chunk(s).",
+            video_id,
+            len(old_vector_ids),
+            len(embeddings),
         )
 
-        for embedding in embeddings:
-            self.embedding_service.create_embedding(
-                EmbeddingCreate(
-                    video_id=video_id,
-                    chunk_index=embedding["chunk_index"],
-                    chunk_text=embedding["chunk_text"],
-                    embedding_model=embedding["embedding_model"],
-                    vector_id=embedding["vector_id"],
-                )
+        self.embedding_service.delete_by_video_id(
+            video_id,
+        )
+
+        vector_store = VectorStore(
+            dimension=1024,
+        )
+
+        try:
+            vector_store.replace(
+                remove_vector_ids=old_vector_ids,
+                vectors=vectors,
+                vector_ids=vector_ids,
             )
+        except Exception:
+            logger.exception(
+                "FAISS replacement failed for video %s after its "
+                "%s old embedding row(s) were already deleted from "
+                "the database. %s newly generated chunk(s) were not "
+                "persisted to FAISS or the database. Leaving this "
+                "as a failed processing job for the existing "
+                "retry mechanism to reprocess from scratch.",
+                video_id,
+                len(old_vector_ids),
+                len(embeddings),
+            )
+            raise
+
+        try:
+            for embedding in embeddings:
+                self.embedding_service.create_embedding(
+                    EmbeddingCreate(
+                        video_id=video_id,
+                        chunk_index=embedding["chunk_index"],
+                        chunk_text=embedding["chunk_text"],
+                        embedding_model=embedding["embedding_model"],
+                        vector_id=embedding["vector_id"],
+                    )
+                )
+        except Exception:
+            logger.exception(
+                "FAISS replacement for video %s completed "
+                "successfully (%s vector(s) persisted), but "
+                "persisting the corresponding embedding rows to the "
+                "database failed. FAISS and the database are now "
+                "inconsistent for this video until the processing "
+                "job is retried.",
+                video_id,
+                len(embeddings),
+            )
+            raise
 
         logger.info(
             "Embedding generation completed for video %s. "

@@ -1,7 +1,10 @@
 import logging
+import os
 from pathlib import Path
 
 import faiss
+
+from app.config.settings import STORAGE_DIR
 
 
 logger = logging.getLogger(__name__)
@@ -13,10 +16,14 @@ class IndexBuilder:
     def __init__(
         self,
         dimension: int,
-        index_path: str = "storage/faiss/video.index",
+        index_path: str | Path | None = None,
     ):
         self.dimension = dimension
-        self.index_path = Path(index_path)
+        self.index_path = (
+            Path(index_path)
+            if index_path is not None
+            else STORAGE_DIR / "faiss" / "video.index"
+        )
 
         self.index_path.parent.mkdir(
             parents=True,
@@ -42,15 +49,26 @@ class IndexBuilder:
         index: faiss.Index,
     ) -> None:
         """
-        Save FAISS index to disk.
+        Save FAISS index to disk atomically (write to a temp file,
+        then rename over the target so a crash mid-write can never
+        leave a corrupt/partial index on disk).
         """
         logger.info(
             "Saving FAISS index.",
         )
 
+        tmp_path = self.index_path.with_name(
+            self.index_path.name + ".tmp",
+        )
+
         faiss.write_index(
             index,
-            str(self.index_path),
+            str(tmp_path),
+        )
+
+        os.replace(
+            tmp_path,
+            self.index_path,
         )
 
     def load_index(

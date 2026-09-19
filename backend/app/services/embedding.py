@@ -34,6 +34,17 @@ class EmbeddingService:
             vector_id,
         )
 
+    def delete_by_video_id(
+        self,
+        video_id: int,
+    ) -> None:
+        """
+        Delete all embeddings belonging to a video.
+        """
+        self.repository.delete_by_video_id(
+            video_id,
+        )
+
     def create_embedding(
         self,
         embedding_data: EmbeddingCreate,

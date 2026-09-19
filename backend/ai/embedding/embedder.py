@@ -10,6 +10,13 @@ from app.config.settings import settings
 
 logger = logging.getLogger(__name__)
 
+EMBEDDING_MODEL_NAME = "BAAI/bge-m3"
+
+_VECTOR_ID_NAMESPACE = uuid.uuid5(
+    uuid.NAMESPACE_DNS,
+    "ai-video-intelligence-platform.embeddings",
+)
+
 
 class Embedder:
 
@@ -21,7 +28,7 @@ class Embedder:
             os.environ["HF_TOKEN"] = settings.huggingface.token
 
         self.model = BGEM3FlagModel(
-            "BAAI/bge-m3",
+            EMBEDDING_MODEL_NAME,
             use_fp16=False,
         )
 
@@ -33,8 +40,12 @@ class Embedder:
             )
         )
 
-    def embed(self, text: str) -> list[dict]:
-        
+    def embed(
+        self,
+        text: str,
+        video_id: int | str | None = None,
+    ) -> list[dict]:
+
         if not text or not text.strip():
             return []
 
@@ -60,9 +71,12 @@ class Embedder:
                 {
                     "chunk_index": chunk_index,
                     "chunk_text": chunk_text,
-                    "embedding_model": "BAAI/bge-m3",
+                    "embedding_model": EMBEDDING_MODEL_NAME,
                     "vector": vector.tolist(),
-                    "vector_id": str(uuid.uuid4()),
+                    "vector_id": self._build_vector_id(
+                        video_id=video_id,
+                        chunk_index=chunk_index,
+                    ),
                 }
             )
 
@@ -72,7 +86,30 @@ class Embedder:
         )
 
         return embeddings
-    
+
+    def _build_vector_id(
+        self,
+        video_id: int | str | None,
+        chunk_index: int,
+    ) -> str:
+        """
+        Deterministic vector id so the same video + chunk position
+        always resolves to the same identity across retries/reprocessing.
+        Falls back to a random id when no owning document identity is
+        given, keeping the method usable standalone.
+        """
+        if video_id is None:
+            return str(uuid.uuid4())
+
+        seed = f"{video_id}:{chunk_index}:{EMBEDDING_MODEL_NAME}"
+
+        return str(
+            uuid.uuid5(
+                _VECTOR_ID_NAMESPACE,
+                seed,
+            )
+        )
+
     def embed_query(self, query: str) -> list[float]:
         
         if not query or not query.strip():
