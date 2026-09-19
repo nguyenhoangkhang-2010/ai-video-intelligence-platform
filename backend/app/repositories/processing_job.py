@@ -1,3 +1,5 @@
+from datetime import datetime, UTC
+
 from sqlalchemy.orm import Session
 
 from app.models.processing_job import ProcessingJob
@@ -56,6 +58,44 @@ class ProcessingJobRepository(BaseRepository[ProcessingJob]):
         self.db.commit()
         self.db.refresh(job)
         return job
+
+    def claim_for_running(
+        self,
+        job_id: int,
+    ) -> ProcessingJob | None:
+        """
+        Atomically transition a job PENDING -> RUNNING and stamp
+        started_at, but only if it is still PENDING.
+
+        This is a conditional UPDATE ... WHERE status = 'PENDING'. If
+        two deliveries of the same Celery task race to claim the same
+        job, the database's row-level locking on the UPDATE ensures
+        only one of them can ever match the row and win; the other
+        sees 0 updated rows and gets None back, signalling "already
+        claimed elsewhere, skip".
+        """
+
+        updated_rows = (
+            self.db.query(ProcessingJob)
+            .filter(
+                ProcessingJob.id == job_id,
+                ProcessingJob.status == "PENDING",
+            )
+            .update(
+                {
+                    ProcessingJob.status: "RUNNING",
+                    ProcessingJob.started_at: datetime.now(UTC),
+                },
+                synchronize_session=False,
+            )
+        )
+
+        self.db.commit()
+
+        if updated_rows == 0:
+            return None
+
+        return self.get_by_id(job_id)
     
     def update_progress(
         self,

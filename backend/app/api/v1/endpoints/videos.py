@@ -10,8 +10,9 @@ from app.utils.ffprobe import extract_metadata
 
 from app.api.deps import get_video_service
 from app.api.deps import get_processing_job_service
+from app.api.deps import get_upload_pipeline
 
-from app.workers.video_processor import process_video
+from app.pipelines.upload_pipeline import UploadPipeline
 from app.services.processing_job import ProcessingJobService
 from app.services.video import VideoService
 from app.schemas.video import VideoRead
@@ -113,8 +114,8 @@ async def upload_video(
     file: UploadFile = File(...),
     current_user: User = Depends(get_current_user),
     service: VideoService = Depends(get_video_service),
-    processing_service: ProcessingJobService = Depends(
-        get_processing_job_service,
+    upload_pipeline: UploadPipeline = Depends(
+        get_upload_pipeline,
     ),
 ):
     """
@@ -148,14 +149,9 @@ async def upload_video(
         duration=metadata.duration,          # TODO: Extract duration using FFmpeg
     )
 
-    job = processing_service.create_processing_job(
+    upload_pipeline.process(
         video_id=video.id,
-    )
-    
-    process_video.delay(
-        job.id,
-        video.id,
-        str(file_path),
+        video_path=str(file_path),
     )
 
     return video

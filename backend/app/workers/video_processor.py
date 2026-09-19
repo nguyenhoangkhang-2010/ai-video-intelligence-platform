@@ -5,6 +5,7 @@ from app.database.session import SessionLocal
 from app.repositories.video import VideoRepository
 from app.services.video import VideoService
 from app.pipelines.video_pipeline import VideoPipelineService
+from app.pipelines.processing_pipeline import ProcessingPipeline
 
 from app.repositories.processing_job import ProcessingJobRepository
 from app.services.processing_job import ProcessingJobService
@@ -37,7 +38,12 @@ def process_video(
     file_path: str,
 ):
     """
-    Background worker for processing uploaded videos.
+    Celery entry point for video processing.
+
+    Only wires up dependencies for one DB session/request; every
+    lifecycle decision (claiming the job, marking it
+    running/completed/failed, propagating exceptions) is delegated to
+    ProcessingPipeline.
     """
     db = SessionLocal()
 
@@ -47,23 +53,23 @@ def process_video(
 
         processing_repository = ProcessingJobRepository(db)
         processing_service = ProcessingJobService(processing_repository)
-        
+
         transcript_repository = TranscriptRepository(db)
         transcript_service = TranscriptService(transcript_repository)
-        
+
         summary_repository = SummaryRepository(db)
         summary_service = SummaryService(summary_repository)
 
         embedding_repository = EmbeddingRepository(db)
         embedding_service = EmbeddingService(embedding_repository)
-        
+
         translation_repository = TranslationRepository(db)
         translation_service = TranslationService(translation_repository)
-        
+
         quiz_repository = QuizRepository(db)
         quiz_service = QuizService(quiz_repository)
 
-        pipeline = VideoPipelineService(
+        video_pipeline = VideoPipelineService(
             video_service=video_service,
             transcript_service=transcript_service,
             summary_service=summary_service,
@@ -72,39 +78,18 @@ def process_video(
             processing_job_service=processing_service,
             quiz_service=quiz_service,
         )
-        
-        processing_service.start_job(job_id)
-        
-        video_service.update_status(
-            video_id=video_id,
-            status="processing",
+
+        processing_pipeline = ProcessingPipeline(
+            processing_job_service=processing_service,
+            video_service=video_service,
+            video_pipeline=video_pipeline,
         )
-        
-        pipeline.process(
+
+        processing_pipeline.run(
             job_id=job_id,
             video_id=video_id,
             file_path=file_path,
         )
-        
-        processing_service.complete_job(job_id)
-
-    except Exception as e:
-        logger.exception(
-            "Video processing failed. job_id=%s",
-            job_id,
-        )
-
-        try:
-            processing_service.fail_job(
-                job_id=job_id,
-                error=str(e),
-            )
-        finally:
-            video_service.update_status(
-                video_id=video_id,
-                status="failed",
-            )
-        raise
 
     finally:
         db.close()

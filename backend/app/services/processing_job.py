@@ -99,6 +99,24 @@ class ProcessingJobService:
 
         return self.repository.update(job)
     
+    def start_if_pending(
+        self,
+        job_id: int,
+    ) -> ProcessingJob | None:
+        """
+        Atomically claim a PENDING job for processing. Returns None
+        if the job could not be claimed (not found, or already
+        running/completed/failed) - the caller should treat that as
+        "already handled by a concurrent delivery" and skip re-running
+        the pipeline, rather than an error. Unlike other methods on
+        this service, this intentionally does not raise 404 on a
+        miss, since that outcome is expected under Celery task
+        redelivery/retry.
+        """
+        return self.repository.claim_for_running(
+            job_id,
+        )
+
     def start_job(
         self,
         job_id: int,

@@ -1,10 +1,17 @@
+import logging
+
 from app.services.processing_job import ProcessingJobService
-from app.workers.tasks import process_video_task
+from app.workers.video_processor import process_video
+
+
+logger = logging.getLogger(__name__)
 
 
 class UploadPipeline:
     """
-    Handle video upload workflow.
+    Canonical orchestration for kicking off processing after a video
+    is uploaded: create its ProcessingJob and dispatch the canonical
+    Celery task.
     """
     def __init__(
         self,
@@ -25,7 +32,14 @@ class UploadPipeline:
                 job_type="transcription",
             )
         )
-        process_video_task.delay(
+
+        logger.info(
+            "Dispatching processing job %s for video %s.",
+            job.id,
+            video_id,
+        )
+
+        process_video.delay(
             job.id,
             video_id,
             video_path,
