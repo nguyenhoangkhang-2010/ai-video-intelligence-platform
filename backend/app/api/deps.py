@@ -26,6 +26,7 @@ from app.repositories.embedding import EmbeddingRepository
 from app.services.embedding import EmbeddingService
 from app.services.semantic_search import SemanticSearchService
 from app.pipelines.rag_pipeline import RAGPipeline
+from app.pipelines.upload_pipeline import UploadPipeline
 
 def get_video_service(
     db: Session = Depends(get_db),
@@ -83,4 +84,17 @@ def get_rag_pipeline(
     return RAGPipeline(
         semantic_search_service=semantic_search_service,
         embedding_service=embedding_service,
+    )
+
+def get_upload_pipeline(
+    db: Session = Depends(get_db),
+) -> UploadPipeline:
+    """
+    Dependency that provides an UploadPipeline instance.
+    """
+    repository = ProcessingJobRepository(db)
+    processing_job_service = ProcessingJobService(repository)
+
+    return UploadPipeline(
+        processing_job_service=processing_job_service,
     )
