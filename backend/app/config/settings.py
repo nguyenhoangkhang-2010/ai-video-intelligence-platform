@@ -32,21 +32,21 @@ ENV_FILE = PROJECT_ROOT / ".env"
 
 BACKEND_DIR = PROJECT_ROOT / "backend"
 
-AI_DIR = PROJECT_ROOT / "ai"
+AI_DIR = BACKEND_DIR / "ai"
 
 DATA_DIR = PROJECT_ROOT / "data"
 
-STORAGE_DIR = BACKEND_DIR / "storage"
+STORAGE_DIR = PROJECT_ROOT / "storage"
 
-LOG_DIR = PROJECT_ROOT / "logs"
+UPLOAD_DIR = STORAGE_DIR / "videos"
 
-UPLOAD_DIR = BACKEND_DIR / "uploads"
-
-VIDEO_UPLOAD_DIR = UPLOAD_DIR / "videos"
+VIDEO_UPLOAD_DIR = STORAGE_DIR / "videos"
 
 TEMP_DIR = STORAGE_DIR / "temp"
 
 CACHE_DIR = STORAGE_DIR / "cache"
+
+LOG_DIR = PROJECT_ROOT / "logs"
 
 # =============================================================================
 # Application

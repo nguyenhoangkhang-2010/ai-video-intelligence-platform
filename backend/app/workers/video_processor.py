@@ -24,7 +24,7 @@ from app.services.translation import TranslationService
 from app.repositories.quiz import QuizRepository
 from app.services.quiz import QuizService
 
-from app.core.celery_app import celery_app
+from app.workers.celery_app import celery_app
 
 
 logger = logging.getLogger(__name__)
@@ -75,6 +75,11 @@ def process_video(
         
         processing_service.start_job(job_id)
         
+        video_service.update_status(
+            video_id=video_id,
+            status="processing",
+        )
+        
         pipeline.process(
             job_id=job_id,
             video_id=video_id,
@@ -88,11 +93,17 @@ def process_video(
             "Video processing failed. job_id=%s",
             job_id,
         )
-        
-        processing_service.fail_job(
-            job_id=job_id,
-            error=str(e),
-        )
+
+        try:
+            processing_service.fail_job(
+                job_id=job_id,
+                error=str(e),
+            )
+        finally:
+            video_service.update_status(
+                video_id=video_id,
+                status="failed",
+            )
         raise
 
     finally:

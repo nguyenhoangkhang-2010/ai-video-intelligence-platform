@@ -4,7 +4,6 @@ import numpy as np
 
 from ai.embedding.embedder import Embedder
 from ai.embedding.vector_store import VectorStore
-
 from app.repositories.embedding import EmbeddingRepository
 
 
@@ -22,7 +21,6 @@ class SemanticSearchService:
         self.vector_store = VectorStore(
             dimension=1024,
         )
-        
         self.embedding_repository = embedding_repository
 
     def search(
@@ -31,23 +29,31 @@ class SemanticSearchService:
         top_k: int = 5,
     ) -> list[dict]:
         """
-        Search nearest vectors.
+        Search transcript chunks using semantic similarity.
         """
+        if not query or not query.strip():
+            return []
 
-        query_embedding = self.embedder.embed(query)
+        query_vector = self.embedder.embed_query(
+            query,
+        )
 
-        if not query_embedding:
-            logger.warning("Failed to generate query embedding.")
+        if not query_vector:
+            logger.warning(
+                "Failed to generate query embedding."
+            )
             return []
 
         vector = np.asarray(
-            [query_embedding[0]["vector"]],
+            [query_vector],
             dtype=np.float32,
         )
 
-        distances, indices = self.vector_store.index.search(
-            vector,
-            top_k,
+        distances, indices = (
+            self.vector_store.index.search(
+                vector,
+                top_k,
+            )
         )
 
         results = []
@@ -56,12 +62,13 @@ class SemanticSearchService:
             indices[0],
             distances[0],
         ):
-
             if index == -1:
                 continue
 
-            vector_id = self.vector_store.get_vector_id(
-                int(index)
+            vector_id = (
+                self.vector_store.get_vector_id(
+                    int(index),
+                )
             )
 
             if vector_id is None:
@@ -71,8 +78,9 @@ class SemanticSearchService:
                 )
                 continue
 
-            embedding_record = self.embedding_repository.get_by_vector_id(
-                vector_id,
+            embedding_record = (
+                self.embedding_repository
+                .get_by_vector_id(vector_id)
             )
 
             if embedding_record is None:
@@ -85,15 +93,22 @@ class SemanticSearchService:
             results.append(
                 {
                     "vector_id": vector_id,
-                    "video_id": embedding_record.video_id,
-                    "chunk_index": embedding_record.chunk_index,
-                    "chunk_text": embedding_record.chunk_text,
+                    "video_id": (
+                        embedding_record.video_id
+                    ),
+                    "chunk_index": (
+                        embedding_record.chunk_index
+                    ),
+                    "chunk_text": (
+                        embedding_record.chunk_text
+                    ),
                     "distance": float(distance),
                 }
             )
-            
+
         logger.info(
-            "Semantic search completed. Found %s results.",
+            "Semantic search completed. "
+            "Found %s results.",
             len(results),
         )
 

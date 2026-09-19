@@ -8,6 +8,7 @@ logger = logging.getLogger(__name__)
 
 class SummaryWorker:
     """Worker for transcript summarization."""
+
     def __init__(
         self,
     ):
@@ -20,17 +21,21 @@ class SummaryWorker:
         """
         Generate summary from transcript.
         """
+
         logger.info(
-            "Start summary worker.",
+            "Start summary worker."
         )
+
         summary = self.summarizer.summarize(
             transcript,
         )
+
         logger.info(
-            "Summary completed.",
+            "Summary completed."
         )
+
         return {
             "type": "default",
             "content": summary,
-            "model_name": "stub",
+            "model_name": self.summarizer.llm_client.model,
         }

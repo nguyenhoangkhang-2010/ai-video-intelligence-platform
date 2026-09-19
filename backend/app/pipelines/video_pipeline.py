@@ -110,7 +110,6 @@ class VideoPipelineService:
         self.video_service.update_processing_result(
             video_id=video_id,
             language=result["language"],
-            status="processed",
         )
         
         self.processing_job_service.update_progress(
@@ -172,9 +171,7 @@ class VideoPipelineService:
         video_id: int,
         transcript: Transcript,
     ):
-        """
-        Generate embeddings from transcript.
-        """
+        
         self.processing_job_service.update_progress(
             job_id=job_id,
             progress=98,
@@ -182,26 +179,40 @@ class VideoPipelineService:
         )
 
         logger.info(
-            "Start embedding stage",
+            "Start embedding stage for video %s",
+            video_id,
         )
 
         embeddings = self.embedding_worker.process(
             transcript=transcript.text,
         )
-        
+
+        if not embeddings:
+            logger.warning(
+                "No embeddings generated for video %s",
+                video_id,
+            )
+            raise ValueError(
+                "Failed to generate transcript embeddings."
+            )
+
         vector_store = VectorStore(
             dimension=1024,
         )
 
+        vectors = [
+            embedding["vector"]
+            for embedding in embeddings
+        ]
+
+        vector_ids = [
+            embedding["vector_id"]
+            for embedding in embeddings
+        ]
+
         vector_store.add(
-            [
-                embedding["vector"]
-                for embedding in embeddings
-            ],
-            vector_ids=[
-                embedding["vector_id"]
-                for embedding in embeddings
-            ],
+            vectors=vectors,
+            vector_ids=vector_ids,
         )
 
         for embedding in embeddings:
@@ -216,9 +227,12 @@ class VideoPipelineService:
             )
 
         logger.info(
-            "Embedding generation completed.",
+            "Embedding generation completed for video %s. "
+            "Generated %s chunks.",
+            video_id,
+            len(embeddings),
         )
-        
+
         return embeddings
     
     def translation_stage(
@@ -348,25 +362,17 @@ class VideoPipelineService:
             video_id=video_id,
             transcript=transcript,
         )
+        
+        self.video_service.update_status(
+            video_id=video_id,
+            status="processed",
+        )
 
         self.processing_job_service.update_progress(
             job_id=job_id,
             progress=100,
             current_step="Completed",
         )
-
-        # TODO
-        # self.transcribe()
-        # TODO
-        # self.generate_summary()
-        # TODO
-        # self.create_embeddings()
-        # TODO
-        # self.translate()
-        # TODO
-        # self.generate_quiz()
-        # TODO
-        # self.generate_flashcards()
         
     def metadata_stage(
         self,

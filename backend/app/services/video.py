@@ -163,17 +163,32 @@ class VideoService:
         self,
         video_id: int,
         language: str,
+    ) -> Video:
+        video = self.repository.get_by_id(video_id)
+
+        if video is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Video not found",
+            )
+
+        video.language = language
+
+        return self.repository.update(video)
+
+    def update_status(
+        self,
+        video_id: int,
         status: str,
     ) -> Video:
         video = self.repository.get_by_id(video_id)
 
         if video is None:
             raise HTTPException(
-                status_code=404,
+                status_code=status.HTTP_404_NOT_FOUND,
                 detail="Video not found",
             )
 
-        video.language = language
         video.status = status
 
         return self.repository.update(video)
