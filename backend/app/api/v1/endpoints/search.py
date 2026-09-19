@@ -50,6 +50,7 @@ def search_video(
     )
 
     results = service.search(
+        video_id=video_id,
         query=request.query,
         top_k=request.top_k,
     )

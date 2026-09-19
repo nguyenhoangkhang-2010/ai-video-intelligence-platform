@@ -38,3 +38,20 @@ class EmbeddingRepository(BaseRepository[Embedding]):
             .filter(Embedding.vector_id == vector_id)
             .first()
         )
+
+    def delete_by_video_id(
+        self,
+        video_id: int,
+    ) -> None:
+        """
+        Bulk-delete all embeddings belonging to a video in a single
+        statement/commit (used when replacing a video's embeddings).
+        """
+
+        (
+            self.db.query(Embedding)
+            .filter(Embedding.video_id == video_id)
+            .delete(synchronize_session=False)
+        )
+
+        self.db.commit()
