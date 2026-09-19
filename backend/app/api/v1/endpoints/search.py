@@ -5,9 +5,19 @@ from sqlalchemy.orm import Session
 
 from fastapi import APIRouter
 
+from app.auth.dependencies import get_current_user
+from app.models.user import User
+
 from app.database.session import get_db
 from app.repositories.embedding import EmbeddingRepository
 
+from app.api.deps import get_rag_pipeline
+from app.api.deps import get_video_service
+
+from app.pipelines.rag_pipeline import RAGPipeline
+from app.services.video import VideoService
+
+from app.schemas.rag import RAGResult
 from app.schemas.search import SearchRequest
 from app.schemas.search import SemanticSearchResponse
 from app.services.semantic_search import SemanticSearchService
@@ -60,3 +70,37 @@ def search_video(
         "query": request.query,
         "results": results,
     }
+
+
+@router.post(
+    "/videos/{video_id}/rag",
+    response_model=RAGResult,
+)
+def ask_video(
+    video_id: int,
+    request: SearchRequest,
+    current_user: User = Depends(get_current_user),
+    video_service: VideoService = Depends(get_video_service),
+    rag_pipeline: RAGPipeline = Depends(get_rag_pipeline),
+):
+    """
+    Ask a question grounded in a video's transcript content, using
+    retrieval-augmented generation scoped to that video only.
+    """
+
+    video_service.get_video(
+        video_id=video_id,
+        user_id=current_user.id,
+    )
+
+    logger.info(
+        "RAG query for video %s: %s",
+        video_id,
+        request.query,
+    )
+
+    return rag_pipeline.ask(
+        video_id=video_id,
+        query=request.query,
+        top_k=request.top_k,
+    )

@@ -22,6 +22,11 @@ from app.services.summary import SummaryService
 from app.repositories.translation import TranslationRepository
 from app.services.translation import TranslationService
 
+from app.repositories.embedding import EmbeddingRepository
+from app.services.embedding import EmbeddingService
+from app.services.semantic_search import SemanticSearchService
+from app.pipelines.rag_pipeline import RAGPipeline
+
 def get_video_service(
     db: Session = Depends(get_db),
 ) -> VideoService:
@@ -61,3 +66,21 @@ def get_translation_service(
 ) -> TranslationService:
     repository = TranslationRepository(db)
     return TranslationService(repository)
+
+def get_rag_pipeline(
+    db: Session = Depends(get_db),
+) -> RAGPipeline:
+    """
+    Dependency that provides a RAGPipeline instance.
+    """
+    embedding_repository = EmbeddingRepository(db)
+    embedding_service = EmbeddingService(embedding_repository)
+
+    semantic_search_service = SemanticSearchService(
+        embedding_repository=embedding_repository,
+    )
+
+    return RAGPipeline(
+        semantic_search_service=semantic_search_service,
+        embedding_service=embedding_service,
+    )
