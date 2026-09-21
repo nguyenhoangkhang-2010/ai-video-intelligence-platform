@@ -31,14 +31,42 @@ from app.services.chapter import ChapterService
 from app.repositories.flashcard import FlashcardRepository
 from app.services.flashcard import FlashcardService
 
+from app.config.settings import settings
+from app.core.retry import TRANSIENT_EXCEPTIONS
 from app.workers.celery_app import celery_app
 
 
 logger = logging.getLogger(__name__)
 
 
-@celery_app.task
+@celery_app.task(
+    bind=True,
+    # Bounded, backed-off retry scoped to TRANSIENT_EXCEPTIONS only
+    # (DB/Redis connectivity, network-level failures to Ollama, etc.)
+    # - see app.core.retry. This only provides real recovery for a
+    # failure that happens *before* the ProcessingJob is claimed
+    # (e.g. SessionLocal() or the claim query itself hitting a
+    # transient DB hiccup): the job is still PENDING, so a retry
+    # legitimately re-attempts the whole run.
+    #
+    # Once a job IS claimed (PENDING -> RUNNING), ProcessingPipeline.
+    # run() always marks it FAILED and re-raises on any exception
+    # (including a transient one that survived OllamaClient's own
+    # internal retry) before this decorator ever sees it. A Celery-
+    # level retry after that point is a deliberate, safe no-op:
+    # start_if_pending() finds the job no longer PENDING and skips
+    # re-running the pipeline (see ProcessingPipeline.run's
+    # docstring), so a FAILED job is never silently duplicated or
+    # resurrected - it stays FAILED, correctly, for manual/reprocess
+    # follow-up.
+    autoretry_for=TRANSIENT_EXCEPTIONS,
+    retry_backoff=True,
+    retry_backoff_max=settings.celery.task_retry_backoff_max,
+    retry_jitter=True,
+    max_retries=settings.celery.task_max_retries,
+)
 def process_video(
+    self,
     job_id: int,
     video_id: int,
     file_path: str,
