@@ -45,3 +45,12 @@ class LocalFilesystemStorage:
             path.unlink()
         except FileNotFoundError:
             pass
+
+    def get_local_path(self, key: str) -> Path | None:
+        path = self._resolve(key)
+        return path if path.exists() else None
+
+    def get_url(self, key: str, expires_in: int = 3600) -> str | None:
+        # No directly-fetchable URL for a local filesystem path -
+        # callers should serve the file themselves via get_local_path.
+        return None

@@ -69,3 +69,20 @@ class S3StorageBackend:
 
     def delete(self, key: str) -> None:
         self._client.delete_object(Bucket=self.bucket, Key=key)
+
+    def get_local_path(self, key: str):
+        # No real filesystem path for an S3 object.
+        return None
+
+    def get_url(self, key: str, expires_in: int = 3600) -> str | None:
+        """
+        Presigned, time-limited GET URL - lets a client (browser
+        <video> element, HTTP client) fetch the object directly from
+        S3/MinIO, including Range-request support for seeking, without
+        proxying the bytes through this application.
+        """
+        return self._client.generate_presigned_url(
+            "get_object",
+            Params={"Bucket": self.bucket, "Key": key},
+            ExpiresIn=expires_in,
+        )

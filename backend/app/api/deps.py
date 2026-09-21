@@ -28,6 +28,15 @@ from app.services.semantic_search import SemanticSearchService
 from app.pipelines.rag_pipeline import RAGPipeline
 from app.pipelines.upload_pipeline import UploadPipeline
 
+from app.repositories.chapter import ChapterRepository
+from app.services.chapter import ChapterService
+
+from app.repositories.flashcard import FlashcardRepository
+from app.services.flashcard import FlashcardService
+
+from app.storage.base import StorageBackend
+from app.storage.factory import get_storage_backend as _get_storage_backend
+
 def get_video_service(
     db: Session = Depends(get_db),
 ) -> VideoService:
@@ -98,3 +107,23 @@ def get_upload_pipeline(
     return UploadPipeline(
         processing_job_service=processing_job_service,
     )
+
+def get_chapter_service(
+    db: Session = Depends(get_db),
+) -> ChapterService:
+    repository = ChapterRepository(db)
+    return ChapterService(repository)
+
+def get_flashcard_service(
+    db: Session = Depends(get_db),
+) -> FlashcardService:
+    repository = FlashcardRepository(db)
+    return FlashcardService(repository)
+
+def get_storage_backend() -> StorageBackend:
+    """
+    Dependency that provides the configured StorageBackend (local or
+    S3/MinIO, per settings.storage.backend) - reused as-is from
+    app.storage.factory, not reimplemented here.
+    """
+    return _get_storage_backend()

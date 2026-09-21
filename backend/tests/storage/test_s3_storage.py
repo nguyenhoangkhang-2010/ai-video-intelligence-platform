@@ -81,3 +81,39 @@ def test_exists_reraises_non_404_client_errors():
 
     with pytest.raises(ClientError):
         backend.exists("key.txt")
+
+
+def test_get_local_path_always_returns_none():
+    backend = _make_backend(MagicMock())
+
+    assert backend.get_local_path("videos/clip.mp4") is None
+
+
+def test_get_url_returns_presigned_url_from_client():
+    mock_client = MagicMock()
+    mock_client.generate_presigned_url.return_value = (
+        "https://bucket.s3.example.com/videos/clip.mp4?sig=abc"
+    )
+    backend = _make_backend(mock_client)
+
+    url = backend.get_url("videos/clip.mp4", expires_in=900)
+
+    assert url == "https://bucket.s3.example.com/videos/clip.mp4?sig=abc"
+    mock_client.generate_presigned_url.assert_called_once_with(
+        "get_object",
+        Params={"Bucket": "test-bucket", "Key": "videos/clip.mp4"},
+        ExpiresIn=900,
+    )
+
+
+def test_get_url_uses_default_expiry_of_one_hour():
+    mock_client = MagicMock()
+    backend = _make_backend(mock_client)
+
+    backend.get_url("videos/clip.mp4")
+
+    mock_client.generate_presigned_url.assert_called_once_with(
+        "get_object",
+        Params={"Bucket": "test-bucket", "Key": "videos/clip.mp4"},
+        ExpiresIn=3600,
+    )
