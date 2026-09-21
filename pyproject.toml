@@ -21,3 +21,9 @@ include = [
     "ai*",
     "backend.app*",
 ]
+
+
+[tool.pytest.ini_options]
+pythonpath = [
+    "backend",
+]
