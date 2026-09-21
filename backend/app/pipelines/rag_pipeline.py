@@ -1,6 +1,10 @@
 import logging
 
 from ai.llm.rag_answerer import RagAnswerer
+from ai.reranking.reranker import Reranker
+from ai.retrieval.dense_retriever import DenseRetriever
+from ai.retrieval.pipeline import RetrievalPipeline
+from ai.retrieval.retriever import RetrievalResult, Retriever
 
 from app.schemas.rag import RAGResult
 from app.schemas.search import SearchResult
@@ -26,10 +30,18 @@ class RAGPipeline:
     Retrieval-augmented question answering scoped to a single video.
 
     query + video_id
-        -> SemanticSearchService (video-scoped retrieval, reused as-is)
+        -> RetrievalPipeline (dense retrieval, reused from the
+           existing SemanticSearchService, + optional reranking)
         -> context construction
         -> RagAnswerer (Ollama, reused as-is)
         -> RAGResult
+
+    Backward compatible by default: unless a `retriever`/`reranker`
+    is explicitly supplied, this still only ever retrieves through
+    the existing SemanticSearchService (same FAISS/dense results,
+    same video_id scoping, same top_k semantics as before this
+    retrieval layer existed) with no reranking - the four terminal
+    statuses and the RAGResult/API contract are unchanged.
     """
 
     def __init__(
@@ -37,12 +49,25 @@ class RAGPipeline:
         semantic_search_service: SemanticSearchService,
         embedding_service: EmbeddingService,
         answerer: RagAnswerer | None = None,
+        retriever: Retriever | None = None,
+        reranker: Reranker | None = None,
     ):
-        self.semantic_search_service = semantic_search_service
         self.embedding_service = embedding_service
         self.answerer = (
             answerer
             or RagAnswerer()
+        )
+
+        retriever = (
+            retriever
+            or DenseRetriever(
+                semantic_search_service=semantic_search_service,
+            )
+        )
+
+        self.retrieval_pipeline = RetrievalPipeline(
+            retriever=retriever,
+            reranker=reranker,
         )
 
     def ask(
@@ -81,9 +106,9 @@ class RAGPipeline:
                 sources=[],
             )
 
-        results = self.semantic_search_service.search(
-            video_id=video_id,
+        results = self.retrieval_pipeline.retrieve(
             query=query,
+            video_id=video_id,
             top_k=top_k,
         )
 
@@ -120,30 +145,54 @@ class RAGPipeline:
             status="answered",
             answer=answer,
             sources=[
-                SearchResult(**result)
+                self._to_search_result(result)
                 for result in results
             ],
         )
 
     @staticmethod
+    def _to_search_result(result: RetrievalResult) -> SearchResult:
+        """
+        Reconstruct the existing SearchResult API contract from a
+        generic RetrievalResult. DenseRetriever always populates
+        `chunk_index`/`distance` in metadata, and neither
+        RetrievalPipeline's dedup step nor any Reranker is allowed to
+        drop/rename metadata keys (only add to them) or change
+        id/video_id/text, so this reconstruction is exact for the
+        default (dense, unreranked) path and stays accurate if a
+        reranker is layered in.
+        """
+        return SearchResult(
+            vector_id=result.id,
+            video_id=result.video_id,
+            chunk_index=result.metadata.get("chunk_index", 0),
+            chunk_text=result.text,
+            distance=result.metadata.get("distance", 0.0),
+        )
+
+    @staticmethod
     def _build_context(
-        chunks: list[dict],
+        results: list[RetrievalResult],
     ) -> str:
         """
         Assemble retrieved chunks (already ordered most-relevant-first
-        by SemanticSearchService) into a bounded, numbered context
-        block. Greedily includes chunks until MAX_CONTEXT_CHARS would
-        be exceeded, always keeping at least the first one.
+        by RetrievalPipeline) into a bounded, numbered context block.
+        Greedily includes chunks until MAX_CONTEXT_CHARS would be
+        exceeded, always keeping at least the first one.
         """
 
         parts = []
         total_chars = 0
 
-        for position, chunk in enumerate(chunks, start=1):
+        for position, result in enumerate(results, start=1):
+            chunk_index = result.metadata.get(
+                "chunk_index", position - 1,
+            )
+
             block = (
                 f"[Source {position}] "
-                f"(chunk_index: {chunk['chunk_index']})\n"
-                f"{chunk['chunk_text']}"
+                f"(chunk_index: {chunk_index})\n"
+                f"{result.text}"
             )
 
             if parts and total_chars + len(block) > MAX_CONTEXT_CHARS:

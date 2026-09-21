@@ -176,6 +176,27 @@ class LLMSettings(BaseConfig):
     )
 
 # =============================================================================
+# Retrieval & Reranking
+# =============================================================================
+class RetrievalSettings(BaseConfig):
+    """Retrieval and reranking configuration."""
+
+    cross_encoder_model: str = Field(
+        default="cross-encoder/ms-marco-MiniLM-L-6-v2",
+        alias="CROSS_ENCODER_MODEL",
+    )
+
+    rrf_k: int = Field(
+        default=60,
+        alias="RETRIEVAL_RRF_K",
+    )
+
+    candidate_multiplier: int = Field(
+        default=4,
+        alias="RETRIEVAL_CANDIDATE_MULTIPLIER",
+    )
+
+# =============================================================================
 # Global Settings Instance
 # =============================================================================
 class Settings(BaseModel):
@@ -189,6 +210,7 @@ class Settings(BaseModel):
     database: DatabaseSettings = Field(default_factory=DatabaseSettings)
     huggingface: HuggingFaceSettings =Field(default_factory=HuggingFaceSettings)
     llm: LLMSettings =Field(default_factory=LLMSettings)
+    retrieval: RetrievalSettings = Field(default_factory=RetrievalSettings)
 
 @lru_cache
 def get_settings() -> Settings:
