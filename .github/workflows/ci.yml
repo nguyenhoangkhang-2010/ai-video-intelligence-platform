@@ -1,0 +1,76 @@
+# Frontend CI. Backend CI lives in tests.yml (pytest) and lint.yml
+# (ruff) - this workflow covers the other half of the stack described
+# in the repository's DevOps spec ("Backend CI" / "Frontend CI").
+name: CI (Frontend)
+
+"on":
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ci-frontend-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  frontend:
+    name: Frontend (install / lint / build)
+    runs-on: ubuntu-latest
+
+    defaults:
+      run:
+        working-directory: frontend
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      # frontend/ is currently an empty scaffold (no name/dependencies/
+      # scripts in package.json, no lockfile) - there is nothing to
+      # install/build yet. Detect that and skip gracefully instead of
+      # failing CI on a pre-existing repository condition that this
+      # workflow did not create. Once real application code and a
+      # package-lock.json exist, the steps below activate
+      # automatically - nothing here needs to change.
+      - name: Detect buildable frontend
+        id: detect
+        run: |
+          if [ -s package.json ] && [ -f package-lock.json ] && \
+             node -e "process.exit(require('./package.json').scripts && require('./package.json').scripts.build ? 0 : 1)"; then
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::frontend/ has no installable package.json/lockfile or build script yet - skipping install/lint/build."
+          fi
+
+      - name: Install dependencies
+        if: steps.detect.outputs.ready == 'true'
+        run: npm ci
+
+      - name: Lint
+        if: steps.detect.outputs.ready == 'true'
+        run: |
+          if node -e "process.exit(require('./package.json').scripts && require('./package.json').scripts.lint ? 0 : 1)"; then
+            npm run lint
+          else
+            echo "::notice::No \"lint\" script defined - skipping."
+          fi
+
+      - name: Build
+        if: steps.detect.outputs.ready == 'true'
+        run: npm run build
+
+      - name: Test
+        if: steps.detect.outputs.ready == 'true'
+        run: |
+          if node -e "process.exit(require('./package.json').scripts && require('./package.json').scripts.test ? 0 : 1)"; then
+            npm test -- --ci
+          else
+            echo "::notice::No \"test\" script defined - skipping."
+          fi

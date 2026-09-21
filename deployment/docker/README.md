@@ -1,0 +1,24 @@
+# Production Docker artifacts
+
+| File | Purpose |
+|------|---------|
+| `backend.Dockerfile` | Multi-stage, hardened production image for the FastAPI backend. Also used, with a different `command:`, for the Celery worker. |
+| `frontend.Dockerfile` | Multi-stage production image for the Next.js frontend (`frontend/`). Cannot be built yet - see note below. |
+| `docker-compose.prod.yml` | Production/staging stack composing `db`, `redis`, `api`, `worker`, `nginx`, and (profile-gated) `frontend`. |
+
+## Usage
+
+Run from the repository root, with a `.env.production` file (never committed) providing real values for the variables listed in `.env.example`:
+
+```bash
+docker compose -f deployment/docker/docker-compose.prod.yml \
+  --env-file .env.production up -d --build
+```
+
+## Relationship to the root Dockerfile / docker-compose.yml
+
+The root `./Dockerfile` and `./docker-compose.yml` are for **local development** only (bind-mounted storage, published ports for every service, simpler single-stage image). This directory is the **production** counterpart: multi-stage builds, no bind mounts, no unnecessary published ports, `nginx` as the sole public entry point.
+
+## Known limitation
+
+`frontend/` is currently an empty scaffold (no application code, no lockfile), so `frontend.Dockerfile` cannot actually be built until real Next.js code and a `package-lock.json` exist. The `frontend` service is defined under the `frontend` Compose profile so the rest of the stack is unaffected.

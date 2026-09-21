@@ -1,4 +1,36 @@
+# Local development stack: backend API, Celery worker, Redis, Postgres,
+# and (optional, --profile frontend) the frontend app. Not for
+# production use - see deployment/docker/docker-compose.prod.yml for
+# that. Internal services talk to each other using these Compose
+# service names (db/redis/api), never localhost.
 services:
+  db:
+    image: postgres:16-alpine
+    container_name: ai-video-db
+    restart: unless-stopped
+
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      POSTGRES_DB: ${POSTGRES_DB:-ai_video}
+
+    ports:
+      - "5432:5432"
+
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "pg_isready -U ${POSTGRES_USER:-postgres} -d ${POSTGRES_DB:-ai_video}",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
   redis:
     image: redis:7-alpine
     container_name: ai-video-redis
@@ -9,6 +41,13 @@ services:
 
     volumes:
       - redis_data:/data
+
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 5s
 
   api:
     build:
@@ -25,6 +64,8 @@ services:
       - .env
 
     environment:
+      DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@db:5432/${POSTGRES_DB:-ai_video}
+      REDIS_URL: redis://redis:6379/0
       CELERY_BROKER_URL: redis://redis:6379/0
       CELERY_RESULT_BACKEND: redis://redis:6379/0
 
@@ -32,7 +73,17 @@ services:
       - ./storage:/app/storage
 
     depends_on:
-      - redis
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/api/v1/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
 
   celery:
     build:
@@ -53,6 +104,8 @@ services:
       - .env
 
     environment:
+      DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@db:5432/${POSTGRES_DB:-ai_video}
+      REDIS_URL: redis://redis:6379/0
       CELERY_BROKER_URL: redis://redis:6379/0
       CELERY_RESULT_BACKEND: redis://redis:6379/0
 
@@ -60,7 +113,33 @@ services:
       - ./storage:/app/storage
 
     depends_on:
-      - redis
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  # Not started by a plain `docker compose up` - the frontend app
+  # (frontend/) is currently an empty scaffold with no installable
+  # package.json, so its build would fail. Activate explicitly once
+  # real frontend code exists with `docker compose --profile frontend up`.
+  frontend:
+    profiles: ["frontend"]
+
+    build:
+      context: ./frontend
+      dockerfile: ../deployment/docker/frontend.Dockerfile
+      args:
+        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:8001}
+
+    container_name: ai-video-frontend
+    restart: unless-stopped
+
+    ports:
+      - "3000:3000"
+
+    depends_on:
+      - api
 
 volumes:
   redis_data:
+  postgres_data:
