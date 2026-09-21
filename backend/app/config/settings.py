@@ -176,6 +176,62 @@ class LLMSettings(BaseConfig):
     )
 
 # =============================================================================
+# Speech Intelligence
+# =============================================================================
+class SpeechSettings(BaseConfig):
+    """Speech recognition, VAD, language detection, and diarization configuration."""
+
+    whisper_model: str = Field(
+        default="base",
+        alias="WHISPER_MODEL",
+    )
+
+    device: Literal["cpu", "cuda"] = Field(
+        default="cpu",
+        alias="WHISPER_DEVICE",
+    )
+
+    compute_type: str = Field(
+        default="int8",
+        alias="WHISPER_COMPUTE_TYPE",
+    )
+
+    beam_size: int = Field(
+        default=5,
+        alias="WHISPER_BEAM_SIZE",
+    )
+
+    vad_enabled: bool = Field(
+        default=True,
+        alias="SPEECH_VAD_ENABLED",
+    )
+
+    vad_threshold: float = Field(
+        default=0.5,
+        alias="SPEECH_VAD_THRESHOLD",
+    )
+
+    vad_min_silence_duration_ms: int = Field(
+        default=2000,
+        alias="SPEECH_VAD_MIN_SILENCE_DURATION_MS",
+    )
+
+    language_detection_fallback_threshold: float = Field(
+        default=0.5,
+        alias="LANGUAGE_DETECTION_FALLBACK_THRESHOLD",
+    )
+
+    diarization_enabled: bool = Field(
+        default=False,
+        alias="SPEECH_DIARIZATION_ENABLED",
+    )
+
+    diarization_model: str = Field(
+        default="pyannote/speaker-diarization-3.1",
+        alias="DIARIZATION_MODEL",
+    )
+
+# =============================================================================
 # Retrieval & Reranking
 # =============================================================================
 class RetrievalSettings(BaseConfig):
@@ -211,6 +267,7 @@ class Settings(BaseModel):
     huggingface: HuggingFaceSettings =Field(default_factory=HuggingFaceSettings)
     llm: LLMSettings =Field(default_factory=LLMSettings)
     retrieval: RetrievalSettings = Field(default_factory=RetrievalSettings)
+    speech: SpeechSettings = Field(default_factory=SpeechSettings)
 
 @lru_cache
 def get_settings() -> Settings:
