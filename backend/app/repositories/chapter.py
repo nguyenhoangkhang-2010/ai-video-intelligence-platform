@@ -27,3 +27,21 @@ class ChapterRepository(BaseRepository[Chapter]):
             .order_by(Chapter.start_time)
             .all()
         )
+
+    def delete_by_video_id(
+        self,
+        video_id: int,
+    ) -> None:
+        """
+        Bulk-delete all chapters belonging to a video in a single
+        statement/commit (used when replacing a video's chapters on
+        reprocess) - mirrors EmbeddingRepository.delete_by_video_id.
+        """
+
+        (
+            self.db.query(Chapter)
+            .filter(Chapter.video_id == video_id)
+            .delete(synchronize_session=False)
+        )
+
+        self.db.commit()
