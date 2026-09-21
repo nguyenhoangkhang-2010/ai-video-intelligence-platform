@@ -14,6 +14,7 @@ def _make_pipeline():
     processing_job_service = MagicMock(name="processing_job_service")
     quiz_service = MagicMock(name="quiz_service")
     chapter_service = MagicMock(name="chapter_service")
+    flashcard_service = MagicMock(name="flashcard_service")
 
     with (
         patch("app.pipelines.video_pipeline.TranscriptionWorker"),
@@ -22,6 +23,7 @@ def _make_pipeline():
         patch("app.pipelines.video_pipeline.TranslationWorker"),
         patch("app.pipelines.video_pipeline.QuizWorker"),
         patch("app.pipelines.video_pipeline.ChapterTopicPipeline"),
+        patch("app.pipelines.video_pipeline.FlashcardWorker"),
     ):
         pipeline = VideoPipelineService(
             video_service=video_service,
@@ -32,6 +34,7 @@ def _make_pipeline():
             processing_job_service=processing_job_service,
             quiz_service=quiz_service,
             chapter_service=chapter_service,
+            flashcard_service=flashcard_service,
         )
 
     return pipeline, chapter_service

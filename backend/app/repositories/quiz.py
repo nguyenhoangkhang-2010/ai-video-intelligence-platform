@@ -41,3 +41,21 @@ class QuizRepository(BaseRepository[Quiz]):
             )
             .all()
         )
+
+    def delete_by_video_id(
+        self,
+        video_id: int,
+    ) -> None:
+        """
+        Bulk-delete all quizzes belonging to a video in a single
+        statement/commit (used when replacing a video's quizzes on
+        reprocess) - mirrors ChapterRepository.delete_by_video_id.
+        """
+
+        (
+            self.db.query(Quiz)
+            .filter(Quiz.video_id == video_id)
+            .delete(synchronize_session=False)
+        )
+
+        self.db.commit()

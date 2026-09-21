@@ -36,6 +36,11 @@ from app.schemas.quiz import QuizCreate
 from app.services.chapter import ChapterService
 from app.schemas.chapter import ChapterCreate
 
+from app.services.flashcard import FlashcardService
+from app.workers.flashcard_worker import FlashcardWorker
+
+from app.schemas.flashcard import FlashcardCreate
+
 from ai.chapter_detection.pipeline import ChapterTopicPipeline
 from ai.speech.speech_result import SpeechSegment
 
@@ -56,6 +61,7 @@ class VideoPipelineService:
         processing_job_service: ProcessingJobService,
         quiz_service: QuizService,
         chapter_service: ChapterService,
+        flashcard_service: FlashcardService,
     ):
         self.video_service = video_service
         self.transcript_service = transcript_service
@@ -71,6 +77,8 @@ class VideoPipelineService:
         self.quiz_worker = QuizWorker()
         self.chapter_service = chapter_service
         self.chapter_pipeline = ChapterTopicPipeline()
+        self.flashcard_service = flashcard_service
+        self.flashcard_worker = FlashcardWorker()
         
         
     def transcription_stage(
@@ -351,6 +359,14 @@ class VideoPipelineService:
         video_id: int,
         transcript: Transcript,
     ):
+        """
+        Generate and persist quiz questions from the transcript.
+
+        Mirrors embedding_stage/chapter_stage's replace-on-reprocess
+        pattern: this video's existing quizzes are deleted before the
+        newly generated ones are inserted, so reprocessing a video
+        never accumulates duplicate quiz rows.
+        """
 
         self.processing_job_service.update_progress(
             job_id=job_id,
@@ -368,6 +384,9 @@ class VideoPipelineService:
             transcript=transcript.text,
         )
 
+        self.quiz_service.delete_by_video_id(
+            video_id,
+        )
 
         for quiz in quizzes:
 
@@ -460,6 +479,58 @@ class VideoPipelineService:
 
         return chapter_result.chapters
 
+    def flashcard_stage(
+        self,
+        job_id: int,
+        video_id: int,
+        transcript: Transcript,
+    ):
+        """
+        Generate and persist study flashcards from the transcript.
+
+        Mirrors quiz_stage/chapter_stage's replace-on-reprocess
+        pattern: this video's existing flashcards are deleted before
+        the newly generated ones are inserted.
+        """
+
+        self.processing_job_service.update_progress(
+            job_id=job_id,
+            progress=99,
+            current_step="Generating Flashcards",
+        )
+
+        logger.info(
+            "Start flashcard stage for video %s",
+            video_id,
+        )
+
+        flashcards = self.flashcard_worker.process(
+            transcript=transcript.text,
+        )
+
+        self.flashcard_service.delete_by_video_id(
+            video_id,
+        )
+
+        for flashcard in flashcards:
+            self.flashcard_service.create_flashcard(
+                FlashcardCreate(
+                    video_id=video_id,
+                    question=flashcard["question"],
+                    answer=flashcard["answer"],
+                    difficulty=flashcard["difficulty"],
+                )
+            )
+
+        logger.info(
+            "Flashcard generation completed for video %s. "
+            "Generated %s flashcard(s).",
+            video_id,
+            len(flashcards),
+        )
+
+        return flashcards
+
     def process(
         self,
         job_id: int,
@@ -509,6 +580,12 @@ class VideoPipelineService:
             job_id=job_id,
             video_id=video_id,
             transcript_segments=transcript_segments,
+        )
+
+        self.flashcard_stage(
+            job_id=job_id,
+            video_id=video_id,
+            transcript=transcript,
         )
 
         self.video_service.update_status(

@@ -6,7 +6,7 @@ class FlashcardBase(BaseModel):
     """Base schema for Flashcard."""
     question: str
     answer: str
-    difficulty: str
+    difficulty: str = "medium"
 
 class FlashcardCreate(FlashcardBase):
     """Schema for creating a flashcard."""

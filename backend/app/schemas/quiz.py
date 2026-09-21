@@ -7,7 +7,7 @@ class QuizBase(BaseModel):
     type: str
     question: str
     answer: str
-    options: str
+    options: str | None = None
 
 class QuizCreate(QuizBase):
     """Schema for creating a quiz."""

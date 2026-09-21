@@ -28,6 +28,9 @@ from app.services.quiz import QuizService
 from app.repositories.chapter import ChapterRepository
 from app.services.chapter import ChapterService
 
+from app.repositories.flashcard import FlashcardRepository
+from app.services.flashcard import FlashcardService
+
 from app.workers.celery_app import celery_app
 
 
@@ -75,6 +78,9 @@ def process_video(
         chapter_repository = ChapterRepository(db)
         chapter_service = ChapterService(chapter_repository)
 
+        flashcard_repository = FlashcardRepository(db)
+        flashcard_service = FlashcardService(flashcard_repository)
+
         video_pipeline = VideoPipelineService(
             video_service=video_service,
             transcript_service=transcript_service,
@@ -84,6 +90,7 @@ def process_video(
             processing_job_service=processing_service,
             quiz_service=quiz_service,
             chapter_service=chapter_service,
+            flashcard_service=flashcard_service,
         )
 
         processing_pipeline = ProcessingPipeline(

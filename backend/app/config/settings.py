@@ -273,6 +273,89 @@ class ChapterSettings(BaseConfig):
     )
 
 # =============================================================================
+# Quiz Generation
+# =============================================================================
+class QuizSettings(BaseConfig):
+    """Quiz generation configuration."""
+
+    enabled: bool = Field(
+        default=True,
+        alias="QUIZ_LLM_ENABLED",
+    )
+
+    mcq_count: int = Field(
+        default=3,
+        alias="QUIZ_MCQ_COUNT",
+    )
+
+    true_false_count: int = Field(
+        default=2,
+        alias="QUIZ_TRUE_FALSE_COUNT",
+    )
+
+    short_answer_count: int = Field(
+        default=2,
+        alias="QUIZ_SHORT_ANSWER_COUNT",
+    )
+
+    max_context_chars: int = Field(
+        default=6000,
+        alias="QUIZ_MAX_CONTEXT_CHARS",
+    )
+
+# =============================================================================
+# Flashcard Generation
+# =============================================================================
+class FlashcardSettings(BaseConfig):
+    """Flashcard generation configuration."""
+
+    enabled: bool = Field(
+        default=True,
+        alias="FLASHCARD_LLM_ENABLED",
+    )
+
+    card_count: int = Field(
+        default=8,
+        alias="FLASHCARD_COUNT",
+    )
+
+    max_context_chars: int = Field(
+        default=6000,
+        alias="FLASHCARD_MAX_CONTEXT_CHARS",
+    )
+
+# =============================================================================
+# Knowledge Graph Extraction
+# =============================================================================
+class KnowledgeGraphSettings(BaseConfig):
+    """Entity/relation extraction configuration."""
+
+    enabled: bool = Field(
+        default=True,
+        alias="KG_LLM_ENABLED",
+    )
+
+    max_entities_per_chunk: int = Field(
+        default=15,
+        alias="KG_MAX_ENTITIES_PER_CHUNK",
+    )
+
+    max_relations_per_chunk: int = Field(
+        default=20,
+        alias="KG_MAX_RELATIONS_PER_CHUNK",
+    )
+
+    max_context_chars: int = Field(
+        default=4000,
+        alias="KG_MAX_CONTEXT_CHARS",
+    )
+
+    min_confidence: float = Field(
+        default=0.0,
+        alias="KG_MIN_CONFIDENCE",
+    )
+
+# =============================================================================
 # Retrieval & Reranking
 # =============================================================================
 class RetrievalSettings(BaseConfig):
@@ -310,6 +393,9 @@ class Settings(BaseModel):
     retrieval: RetrievalSettings = Field(default_factory=RetrievalSettings)
     speech: SpeechSettings = Field(default_factory=SpeechSettings)
     chapter: ChapterSettings = Field(default_factory=ChapterSettings)
+    quiz: QuizSettings = Field(default_factory=QuizSettings)
+    flashcard: FlashcardSettings = Field(default_factory=FlashcardSettings)
+    knowledge_graph: KnowledgeGraphSettings = Field(default_factory=KnowledgeGraphSettings)
 
 @lru_cache
 def get_settings() -> Settings:

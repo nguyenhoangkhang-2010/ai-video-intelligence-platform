@@ -19,6 +19,7 @@ def _make_pipeline():
     processing_job_service = MagicMock(name="processing_job_service")
     quiz_service = MagicMock(name="quiz_service")
     chapter_service = MagicMock(name="chapter_service")
+    flashcard_service = MagicMock(name="flashcard_service")
 
     with (
         patch("app.pipelines.video_pipeline.TranscriptionWorker"),
@@ -27,6 +28,7 @@ def _make_pipeline():
         patch("app.pipelines.video_pipeline.TranslationWorker"),
         patch("app.pipelines.video_pipeline.QuizWorker"),
         patch("app.pipelines.video_pipeline.ChapterTopicPipeline"),
+        patch("app.pipelines.video_pipeline.FlashcardWorker"),
     ):
         pipeline = VideoPipelineService(
             video_service=video_service,
@@ -37,6 +39,7 @@ def _make_pipeline():
             processing_job_service=processing_job_service,
             quiz_service=quiz_service,
             chapter_service=chapter_service,
+            flashcard_service=flashcard_service,
         )
 
     return (
@@ -70,6 +73,7 @@ def test_process_runs_stages_in_order_with_expected_arguments():
     pipeline.translation_stage = MagicMock(name="translation_stage")
     pipeline.quiz_stage = MagicMock(name="quiz_stage")
     pipeline.chapter_stage = MagicMock(name="chapter_stage")
+    pipeline.flashcard_stage = MagicMock(name="flashcard_stage")
 
     manager = MagicMock()
     manager.attach_mock(pipeline.metadata_stage, "metadata_stage")
@@ -79,6 +83,7 @@ def test_process_runs_stages_in_order_with_expected_arguments():
     manager.attach_mock(pipeline.translation_stage, "translation_stage")
     manager.attach_mock(pipeline.quiz_stage, "quiz_stage")
     manager.attach_mock(pipeline.chapter_stage, "chapter_stage")
+    manager.attach_mock(pipeline.flashcard_stage, "flashcard_stage")
     manager.attach_mock(video_service.update_status, "update_status")
     manager.attach_mock(
         processing_job_service.update_progress, "update_progress",
@@ -114,6 +119,9 @@ def test_process_runs_stages_in_order_with_expected_arguments():
         job_id=job_id, video_id=video_id,
         transcript_segments=transcript_segments,
     )
+    pipeline.flashcard_stage.assert_called_once_with(
+        job_id=job_id, video_id=video_id, transcript=transcript,
+    )
 
     video_service.update_status.assert_called_once_with(
         video_id=video_id, status="processed",
@@ -145,6 +153,9 @@ def test_process_runs_stages_in_order_with_expected_arguments():
         call.chapter_stage(
             job_id=job_id, video_id=video_id,
             transcript_segments=transcript_segments,
+        ),
+        call.flashcard_stage(
+            job_id=job_id, video_id=video_id, transcript=transcript,
         ),
         call.update_status(video_id=video_id, status="processed"),
         call.update_progress(
