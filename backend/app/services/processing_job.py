@@ -43,18 +43,65 @@ class ProcessingJobService:
         self,
     ) -> list[ProcessingJob]:
         """
-        Get all processing jobs.
+        Get all processing jobs, across every user's videos.
+
+        Not ownership-scoped - kept for internal/administrative use
+        only. Do not expose this to a regular authenticated user; see
+        get_jobs_for_user for the ownership-scoped equivalent used by
+        the public API.
         """
         return self.repository.get_all()
-    
+
+    def get_jobs_for_user(
+        self,
+        user_id: int,
+    ) -> list[ProcessingJob]:
+        """
+        Get all processing jobs belonging to `user_id`'s own videos.
+        """
+        return self.repository.get_by_owner(
+            owner_id=user_id,
+        )
+
     def get_job(
         self,
         job_id: int,
     ) -> ProcessingJob:
         """
         Get processing job by ID.
+
+        Not ownership-scoped - kept for internal/administrative use
+        only (e.g. from another service call already scoped by video
+        ownership, as in videos.get_processing_jobs). Do not expose
+        this to a regular authenticated user directly; see
+        get_job_for_user for the ownership-scoped equivalent used by
+        the public API.
         """
         job = self.repository.get_by_id(job_id)
+
+        if job is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Processing job not found",
+            )
+
+        return job
+
+    def get_job_for_user(
+        self,
+        job_id: int,
+        user_id: int,
+    ) -> ProcessingJob:
+        """
+        Get a single processing job by ID, only if it belongs to one
+        of `user_id`'s own videos. Raises 404 (not 403) on a mismatch,
+        matching VideoService.get_video's convention of not revealing
+        whether a job with that ID exists for someone else.
+        """
+        job = self.repository.get_by_id_and_owner(
+            job_id=job_id,
+            owner_id=user_id,
+        )
 
         if job is None:
             raise HTTPException(

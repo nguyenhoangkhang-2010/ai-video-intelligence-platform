@@ -50,3 +50,26 @@ def test_save_rejects_keys_that_escape_the_root(tmp_path):
 
     with pytest.raises(ValueError):
         storage.save("../escape.txt", b"x")
+
+
+def test_get_local_path_returns_real_path_after_save(tmp_path):
+    storage = LocalFilesystemStorage(root=tmp_path)
+    storage.save("videos/clip.mp4", b"data")
+
+    path = storage.get_local_path("videos/clip.mp4")
+
+    assert path is not None
+    assert path.read_bytes() == b"data"
+
+
+def test_get_local_path_returns_none_when_key_missing(tmp_path):
+    storage = LocalFilesystemStorage(root=tmp_path)
+
+    assert storage.get_local_path("missing.mp4") is None
+
+
+def test_get_url_always_returns_none_for_local_backend(tmp_path):
+    storage = LocalFilesystemStorage(root=tmp_path)
+    storage.save("videos/clip.mp4", b"data")
+
+    assert storage.get_url("videos/clip.mp4") is None

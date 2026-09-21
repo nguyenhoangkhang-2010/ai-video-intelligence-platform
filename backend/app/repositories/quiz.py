@@ -24,6 +24,7 @@ class QuizRepository(BaseRepository[Quiz]):
         return (
             self.db.query(Quiz)
             .filter(Quiz.video_id == video_id)
+            .order_by(Quiz.id)
             .all()
         )
 

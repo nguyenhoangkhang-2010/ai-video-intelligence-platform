@@ -3,6 +3,7 @@ from datetime import datetime, UTC
 from sqlalchemy.orm import Session
 
 from app.models.processing_job import ProcessingJob
+from app.models.video import Video
 from app.repositories.base import BaseRepository
 
 
@@ -27,6 +28,44 @@ class ProcessingJobRepository(BaseRepository[ProcessingJob]):
             self.db.query(ProcessingJob)
             .filter(ProcessingJob.video_id == video_id)
             .all()
+        )
+
+    def get_by_owner(
+        self,
+        owner_id: int,
+    ) -> list[ProcessingJob]:
+        """
+        All processing jobs belonging to videos owned by `owner_id`.
+
+        ProcessingJob has no direct user/owner column - ownership is
+        scoped through its video, joining Video.owner_id, the same
+        way every other resource in this codebase (transcripts,
+        summaries, quizzes, ...) is scoped via VideoService.get_video's
+        ownership check.
+        """
+
+        return (
+            self.db.query(ProcessingJob)
+            .join(Video, ProcessingJob.video_id == Video.id)
+            .filter(Video.owner_id == owner_id)
+            .all()
+        )
+
+    def get_by_id_and_owner(
+        self,
+        job_id: int,
+        owner_id: int,
+    ) -> ProcessingJob | None:
+        """Single job, only if it belongs to a video owned by `owner_id`."""
+
+        return (
+            self.db.query(ProcessingJob)
+            .join(Video, ProcessingJob.video_id == Video.id)
+            .filter(
+                ProcessingJob.id == job_id,
+                Video.owner_id == owner_id,
+            )
+            .first()
         )
 
     def get_by_status(

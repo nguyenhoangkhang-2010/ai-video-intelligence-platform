@@ -13,6 +13,7 @@ from app.config.settings import settings
 from app.core.metrics import render_metrics, setup_metrics_middleware, update_processing_jobs_gauge
 from app.core.startup import lifespan
 from app.database.session import get_db
+from app.exceptions.handlers import setup_exception_handlers
 from app.middleware.cors import setup_cors
 from app.middleware.logging import setup_logging_middleware
 from app.middleware.request_id import setup_request_id_middleware
@@ -48,6 +49,7 @@ def create_application() -> FastAPI:
     setup_logging_middleware(application)
     setup_request_id_middleware(application)
     setup_metrics_middleware(application)
+    setup_exception_handlers(application)
     # API routes
     application.include_router(
         api_router,

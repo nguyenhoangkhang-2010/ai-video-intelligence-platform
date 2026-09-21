@@ -24,6 +24,7 @@ class FlashcardRepository(BaseRepository[Flashcard]):
         return (
             self.db.query(Flashcard)
             .filter(Flashcard.video_id == video_id)
+            .order_by(Flashcard.id)
             .all()
         )
 

@@ -14,10 +14,12 @@ class MeetingPipeline:
     no Meeting model/table exists, and the AI components that would
     make meeting processing differ from generic video processing
     (speaker diarization, structured knowledge/action-item
-    extraction) are unimplemented stubs - ai/diarization/ and
-    ai/knowledge_graph/ are empty files with no logic. A meeting
-    recording is therefore processed identically to any other video
-    today, through the existing ProcessingPipeline -> VideoPipelineService
+    extraction) are not part of this pipeline. ai/knowledge_graph/
+    (EntityExtractor/RelationExtractor/GraphBuilder) is implemented
+    but deliberately not wired into any pipeline stage or API - see
+    ai/knowledge_graph/__init__.py for why. A meeting recording is
+    therefore processed identically to any other video today, through
+    the existing ProcessingPipeline -> VideoPipelineService
     orchestration. Nothing from that flow is duplicated or
     reimplemented here.
 

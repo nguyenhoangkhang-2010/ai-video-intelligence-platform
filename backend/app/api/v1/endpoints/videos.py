@@ -1,9 +1,16 @@
+import mimetypes
+
 from fastapi import APIRouter
 from fastapi import Depends
+from fastapi import HTTPException
 from fastapi import UploadFile
 from fastapi import File
+from fastapi import status
+from fastapi.responses import FileResponse
+from fastapi.responses import RedirectResponse
 
 from app.auth.dependencies import get_current_user
+from app.auth.dependencies import get_current_user_for_media
 from app.models.user import User
 
 from app.utils.ffprobe import extract_metadata
@@ -11,6 +18,7 @@ from app.utils.ffprobe import extract_metadata
 from app.api.deps import get_video_service
 from app.api.deps import get_processing_job_service
 from app.api.deps import get_upload_pipeline
+from app.api.deps import get_storage_backend
 
 from app.pipelines.upload_pipeline import UploadPipeline
 from app.services.processing_job import ProcessingJobService
@@ -21,6 +29,8 @@ from app.schemas.video import VideoStatusResponse
 
 from app.schemas.processing_job import ProcessingJobRead
 
+from app.storage.base import StorageBackend
+
 import uuid
 import shutil
 
@@ -30,6 +40,15 @@ router = APIRouter(
     prefix="/videos",
     tags=["Videos"],
 )
+
+# Videos are saved to VIDEO_UPLOAD_DIR/{filename} today (see
+# upload_video below) - VIDEO_UPLOAD_DIR is STORAGE_DIR / "videos",
+# so this key is exactly what a StorageBackend rooted at STORAGE_DIR
+# (the default for every backend - see app/storage/) resolves to the
+# same physical location, with no change to how upload_video writes
+# the file.
+def _video_storage_key(filename: str) -> str:
+    return f"videos/{filename}"
 
 @router.get(
     "",
@@ -81,7 +100,61 @@ def get_video_status(
     )
 
     return video
-    
+
+@router.get(
+    "/{video_id}/stream",
+)
+def stream_video(
+    video_id: int,
+    current_user: User = Depends(get_current_user_for_media),
+    service: VideoService = Depends(get_video_service),
+    storage: StorageBackend = Depends(get_storage_backend),
+):
+    """
+    Deliver the uploaded video file for playback.
+
+    Authenticated (accepts a `token` query parameter as a fallback to
+    the Authorization header, since a browser <video> element cannot
+    attach custom headers - see get_current_user_for_media) and
+    ownership-checked exactly like every other /videos/{video_id}/...
+    endpoint.
+
+    Goes entirely through the StorageBackend abstraction (see
+    app/storage/) rather than hardcoding a filesystem path here: if
+    the configured backend can hand back a direct URL (e.g. an S3/
+    MinIO presigned URL), the client is redirected there so the bytes
+    never pass through this process; otherwise the local file is
+    served directly via FileResponse, which natively supports HTTP
+    Range requests (seeking) without loading the file into memory.
+    """
+    video = service.get_video(
+        video_id=video_id,
+        user_id=current_user.id,
+    )
+
+    key = _video_storage_key(video.filename)
+
+    url = storage.get_url(key)
+    if url is not None:
+        return RedirectResponse(
+            url,
+            status_code=status.HTTP_307_TEMPORARY_REDIRECT,
+        )
+
+    path = storage.get_local_path(key)
+    if path is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Video file not found",
+        )
+
+    media_type, _ = mimetypes.guess_type(path.name)
+
+    return FileResponse(
+        path,
+        media_type=media_type or "application/octet-stream",
+    )
+
 @router.get(
     "/{video_id}/processing-jobs",
     response_model=list[ProcessingJobRead],

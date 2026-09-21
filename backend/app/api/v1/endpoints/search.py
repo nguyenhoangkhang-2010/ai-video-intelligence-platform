@@ -39,11 +39,23 @@ router = APIRouter(
 def search_video(
     video_id: int,
     request: SearchRequest,
+    current_user: User = Depends(get_current_user),
+    video_service: VideoService = Depends(get_video_service),
     db: Session = Depends(get_db),
 ):
     """
     Semantic search inside video content.
+
+    Ownership-checked exactly like the RAG endpoint below - this
+    previously had no authentication/ownership check at all, letting
+    any caller search any video's content by guessing an id.
     """
+
+    # check ownership
+    video_service.get_video(
+        video_id=video_id,
+        user_id=current_user.id,
+    )
 
     logger.info(
         "Searching video %s with query: %s",

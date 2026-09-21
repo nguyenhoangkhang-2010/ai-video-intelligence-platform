@@ -616,7 +616,6 @@ backend/
     ├── flashcards/
     ├── knowledge_graph/
     ├── llm/
-    ├── question_answering/
     ├── quiz_generation/
     ├── reranking/
     ├── retrieval/
@@ -850,7 +849,6 @@ AI-Video-Intelligence-Platform/
 │   │   ├── flashcards/
 │   │   ├── knowledge_graph/
 │   │   ├── llm/
-│   │   ├── question_answering/
 │   │   ├── quiz_generation/
 │   │   ├── reranking/
 │   │   ├── retrieval/
@@ -865,7 +863,6 @@ AI-Video-Intelligence-Platform/
 │   │   ├── config/
 │   │   ├── core/
 │   │   ├── database/
-│   │   ├── dependencies/
 │   │   ├── exceptions/
 │   │   ├── middleware/
 │   │   ├── pipelines/
@@ -1245,30 +1242,22 @@ These are maintained as part of the project's broader AI / MLOps / data-engineer
 
 # API
 
-The backend exposes REST APIs through FastAPI.
+The backend exposes REST APIs through FastAPI. Full reference, including authentication/ownership rules, request/response shapes, and status values: **[docs/api/rest_api.md](docs/api/rest_api.md)**.
 
-Current API domains include:
+Current API domains:
 
 ```text
-/v1/auth
-/v1/users
-/v1/videos
-/v1/transcripts
-/v1/summaries
-/v1/quizzes
-/v1/search
-/v1/translations
-/v1/processing-jobs
+/v1/auth              /v1/summaries
+/v1/users              /v1/translations
+/v1/videos (+ /stream for playback)   /v1/chapters (nested under /v1/videos)
+/v1/processing-jobs    /v1/quizzes (nested under /v1/videos)
+/v1/transcripts        /v1/flashcards (+ /export, nested under /v1/videos)
+/v1/search (+ /rag)    /v1/meetings
 ```
 
-Additional application endpoints include functionality related to:
+Knowledge graph extraction (`ai/knowledge_graph/`) is implemented but intentionally not exposed via API yet - see `docs/api/rest_api.md`.
 
-* Chat
-* Chapters
-* Flashcards
-* AI processing
-
-Interactive API documentation is provided by FastAPI during development.
+Interactive API documentation is provided by FastAPI at `/docs` (Swagger UI) and `/openapi.json`.
 
 ---
 
