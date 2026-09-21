@@ -125,10 +125,13 @@ class SecuritySettings(BaseConfig):
     )
     algorithm: str = "HS256"
     access_token_expire_minutes: int = 60
-    cors_origins: list[str] = [
-        "http://localhost:3000",
-        "http://127.0.0.1:3000",
-    ]
+    cors_origins: list[str] = Field(
+        default=[
+            "http://localhost:3000",
+            "http://127.0.0.1:3000",
+        ],
+        alias="CORS_ORIGINS",
+    )
 
 # =============================================================================
 # Database
@@ -139,15 +142,36 @@ class DatabaseSettings(BaseConfig):
         ...,
         alias="DATABASE_URL",
     )
-    echo: bool = False
-    pool_size: int = 10
-    max_overflow: int = 20
-    
+    echo: bool = Field(
+        default=False,
+        alias="DB_ECHO",
+    )
+    pool_size: int = Field(
+        default=10,
+        alias="DB_POOL_SIZE",
+    )
+    max_overflow: int = Field(
+        default=20,
+        alias="DB_MAX_OVERFLOW",
+    )
+    pool_timeout: int = Field(
+        default=30,
+        alias="DB_POOL_TIMEOUT",
+    )
+    pool_recycle: int = Field(
+        default=1800,
+        alias="DB_POOL_RECYCLE",
+    )
+    pool_pre_ping: bool = Field(
+        default=True,
+        alias="DB_POOL_PRE_PING",
+    )
+
     @property
     def url(self) -> str:
         """Return database URL."""
         return self.database_url
-    
+
 # =============================================================================
 # HuggingFace
 # =============================================================================
@@ -413,6 +437,124 @@ class EvaluationSettings(BaseConfig):
     )
 
 # =============================================================================
+# Logging
+# =============================================================================
+class LogSettings(BaseConfig):
+    """Application/worker logging configuration."""
+
+    level: str = Field(
+        default="INFO",
+        alias="LOG_LEVEL",
+    )
+
+    json_format: bool = Field(
+        default=False,
+        alias="LOG_JSON",
+    )
+
+# =============================================================================
+# Celery / Worker
+# =============================================================================
+class CelerySettings(BaseConfig):
+    """
+    Production Celery worker configuration.
+
+    `task_queue` is the queue a worker process consumes from by
+    default when no explicit `-Q` is passed on the command line (see
+    app/workers/celery_app.py) - "celery_cpu" and "celery_gpu" are
+    declared as separate queues so an operator can route the existing
+    process_video task to a GPU-equipped worker fleet (by starting a
+    worker with `-Q celery_gpu` and WHISPER_DEVICE=cuda) without any
+    code changes, while the default single-worker/single-queue setup
+    (both dev and prod Compose) keeps working unchanged.
+    """
+
+    task_queue: str = Field(
+        default="celery_cpu",
+        alias="CELERY_TASK_QUEUE",
+    )
+
+    worker_prefetch_multiplier: int = Field(
+        default=1,
+        alias="CELERY_WORKER_PREFETCH_MULTIPLIER",
+    )
+
+    worker_max_tasks_per_child: int = Field(
+        default=50,
+        alias="CELERY_WORKER_MAX_TASKS_PER_CHILD",
+    )
+
+    task_time_limit: int = Field(
+        default=3600,
+        alias="CELERY_TASK_TIME_LIMIT",
+    )
+
+    task_soft_time_limit: int = Field(
+        default=3300,
+        alias="CELERY_TASK_SOFT_TIME_LIMIT",
+    )
+
+    task_max_retries: int = Field(
+        default=3,
+        alias="CELERY_TASK_MAX_RETRIES",
+    )
+
+    task_retry_backoff_max: int = Field(
+        default=60,
+        alias="CELERY_TASK_RETRY_BACKOFF_MAX",
+    )
+
+# =============================================================================
+# Metrics
+# =============================================================================
+class MetricsSettings(BaseConfig):
+    """Prometheus metrics configuration."""
+
+    enabled: bool = Field(
+        default=True,
+        alias="METRICS_ENABLED",
+    )
+
+    worker_metrics_port: int = Field(
+        default=9100,
+        alias="METRICS_WORKER_PORT",
+    )
+
+# =============================================================================
+# Storage
+# =============================================================================
+class StorageSettings(BaseConfig):
+    """
+    Storage backend selection for generated/uploaded artifacts.
+
+    "local" (default) uses the existing STORAGE_DIR filesystem layout
+    unchanged. "s3" is opt-in and targets any S3-compatible endpoint
+    (AWS S3 or MinIO) via boto3, which already resolves credentials
+    from the standard AWS_ACCESS_KEY_ID/AWS_SECRET_ACCESS_KEY/IAM role
+    chain - no custom credential settings are introduced here.
+    """
+
+    backend: Literal["local", "s3"] = Field(
+        default="local",
+        alias="STORAGE_BACKEND",
+    )
+
+    s3_bucket: str | None = Field(
+        default=None,
+        alias="STORAGE_S3_BUCKET",
+    )
+
+    s3_endpoint_url: str | None = Field(
+        default=None,
+        alias="STORAGE_S3_ENDPOINT_URL",
+    )
+
+    s3_region: str | None = Field(
+        default=None,
+        alias="STORAGE_S3_REGION",
+    )
+
+# =============================================================================
 # Global Settings Instance
 # =============================================================================
 class Settings(BaseModel):
@@ -433,6 +575,10 @@ class Settings(BaseModel):
     flashcard: FlashcardSettings = Field(default_factory=FlashcardSettings)
     knowledge_graph: KnowledgeGraphSettings = Field(default_factory=KnowledgeGraphSettings)
     evaluation: EvaluationSettings = Field(default_factory=EvaluationSettings)
+    logging: LogSettings = Field(default_factory=LogSettings)
+    celery: CelerySettings = Field(default_factory=CelerySettings)
+    metrics: MetricsSettings = Field(default_factory=MetricsSettings)
+    storage: StorageSettings = Field(default_factory=StorageSettings)
 
 @lru_cache
 def get_settings() -> Settings:

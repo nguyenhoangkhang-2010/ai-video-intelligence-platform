@@ -1,11 +1,33 @@
 import logging
 
 import requests
+from tenacity import (
+    retry,
+    retry_if_exception_type,
+    stop_after_attempt,
+    wait_exponential,
+)
 
 from app.config.settings import settings
 
 
 logger = logging.getLogger(__name__)
+
+# Bounded retry for genuinely transient network failures only (Ollama
+# unreachable/slow to accept a connection) - NOT for a well-formed
+# response the server chose to send back empty, which is an
+# application-level condition retrying the exact same request is
+# unlikely to fix differently, and NOT for HTTP error status codes
+# (response.raise_for_status()), which usually indicate a request/
+# model problem rather than a transient blip.
+_retry_ollama_call = retry(
+    reraise=True,
+    stop=stop_after_attempt(3),
+    wait=wait_exponential(multiplier=1, min=1, max=8),
+    retry=retry_if_exception_type(
+        (requests.exceptions.ConnectionError, requests.exceptions.Timeout),
+    ),
+)
 
 
 class OllamaClient:
@@ -25,6 +47,7 @@ class OllamaClient:
             or settings.llm.default_llm
         )
 
+    @_retry_ollama_call
     def generate(
         self,
         prompt: str,

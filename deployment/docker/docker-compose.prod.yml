@@ -16,10 +16,15 @@
 # .env.production is never committed - see .env.example for the
 # variables it must define (this compose file reads the same names).
 #
-# This is a deployment FOUNDATION (Phase 12 scope): it does not
-# include TLS termination, secrets-manager integration, autoscaling,
+# This is a deployment FOUNDATION: it does not include TLS
+# termination, secrets-manager integration, autoscaling, Kubernetes,
 # or an actual target host/provider - see deployment/docker/README.md
-# and Phase 13 for that.
+# and docs/deployment.md for what is and is not covered.
+#
+# Resource limits below are conservative starting points, not
+# universally-correct values for every deployment - tune via the
+# *_CPU_LIMIT/*_MEMORY_LIMIT environment variables (see .env.example)
+# once you know this workload's actual behavior on your hardware.
 services:
   db:
     image: postgres:16-alpine
@@ -40,6 +45,12 @@ services:
       retries: 5
       start_period: 10s
 
+    deploy:
+      resources:
+        limits:
+          cpus: "${DB_CPU_LIMIT:-2}"
+          memory: ${DB_MEMORY_LIMIT:-2g}
+
   redis:
     image: redis:7-alpine
     restart: unless-stopped
@@ -53,6 +64,12 @@ services:
       timeout: 5s
       retries: 5
       start_period: 5s
+
+    deploy:
+      resources:
+        limits:
+          cpus: "${REDIS_CPU_LIMIT:-1}"
+          memory: ${REDIS_MEMORY_LIMIT:-512m}
 
   api:
     build:
@@ -88,6 +105,12 @@ services:
       retries: 5
       start_period: 20s
 
+    deploy:
+      resources:
+        limits:
+          cpus: "${API_CPU_LIMIT:-2}"
+          memory: ${API_MEMORY_LIMIT:-2g}
+
   worker:
     build:
       context: ../..
@@ -95,12 +118,18 @@ services:
 
     restart: unless-stopped
 
+    # See docker-compose.yml (development) for why both queues are
+    # consumed by default and how the optional "worker-gpu" service
+    # below complements this one.
     command:
       - celery
       - -A
       - app.workers.celery_app.celery_app
       - worker
       - --loglevel=info
+      - -Q
+      - celery_cpu,celery_gpu
+      - --concurrency=${CELERY_WORKER_CONCURRENCY:-2}
 
     env_file:
       - ../../.env.production
@@ -121,6 +150,65 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+
+    deploy:
+      resources:
+        limits:
+          cpus: "${WORKER_CPU_LIMIT:-2}"
+          memory: ${WORKER_MEMORY_LIMIT:-4g}
+
+  # Not started unless the "gpu" profile is enabled - requires the
+  # NVIDIA Container Toolkit on the host:
+  #   docker compose -f deployment/docker/docker-compose.prod.yml \
+  #     --profile gpu --env-file .env.production up -d --build
+  worker-gpu:
+    profiles: ["gpu"]
+
+    build:
+      context: ../..
+      dockerfile: deployment/docker/backend.Dockerfile
+
+    restart: unless-stopped
+
+    command:
+      - celery
+      - -A
+      - app.workers.celery_app.celery_app
+      - worker
+      - --loglevel=info
+      - -Q
+      - celery_cpu,celery_gpu
+      - --concurrency=${CELERY_GPU_WORKER_CONCURRENCY:-1}
+
+    env_file:
+      - ../../.env.production
+
+    environment:
+      DATABASE_URL: postgresql+psycopg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}
+      REDIS_URL: redis://redis:6379/0
+      CELERY_BROKER_URL: redis://redis:6379/0
+      CELERY_RESULT_BACKEND: redis://redis:6379/0
+      ENVIRONMENT: production
+      DEBUG: "False"
+      WHISPER_DEVICE: cuda
+      METRICS_WORKER_PORT: 9101
+
+    volumes:
+      - storage_data:/app/storage
+
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: ["gpu"]
 
   frontend:
     profiles: ["frontend"]

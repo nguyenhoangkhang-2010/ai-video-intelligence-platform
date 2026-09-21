@@ -703,23 +703,23 @@ The backend contains an authentication layer supporting:
 
 # Monitoring & Observability
 
-The project includes monitoring infrastructure based on:
+Implemented:
 
-* Prometheus
-* Grafana
-* Application metrics
-* Structured logging
-* System metrics
-
-Monitoring configuration is maintained under:
+* Structured/consistent logging (`GET`/task-scoped `request_id`/`task_id` correlation, configurable level and JSON/plain format) - see `backend/app/config/logging.py`.
+* Prometheus metrics: `GET /metrics` on the API (`backend/app/core/metrics.py`) and a dedicated exporter in the Celery worker (`backend/app/workers/metrics.py`).
+* A minimal local Prometheus + Grafana stack, gated behind the `monitoring` Compose profile (not required for normal local development):
 
 ```text
 monitoring/
-├── grafana/
-└── prometheus/
+├── grafana/       # datasource + dashboard provisioning, one overview dashboard
+└── prometheus/    # scrape config + a few alert rules
 ```
 
-The project also contains integrations for additional observability tooling such as OpenTelemetry and Sentry.
+* `GET /api/v1/health`, `/health/live`, `/health/ready` (liveness/readiness split - see `docs/deployment.md`).
+
+Not implemented (documented as future enhancements, not built merely to fill a checklist): OpenTelemetry distributed tracing, Sentry error tracking.
+
+See `docs/deployment.md` for the full production infrastructure write-up (CPU/GPU workers, retries, storage/vector strategy, backup/recovery, deployment procedure).
 
 ---
 
@@ -982,6 +982,8 @@ See the [Makefile](Makefile) for common commands (`make up`, `make down`, `make 
 
 # Deployment
 
+Full write-up: **[docs/deployment.md](docs/deployment.md)** (architecture, environment configuration, service roles, CPU/GPU workers, retries, health/readiness, metrics/monitoring, persistent volumes, backup/recovery, migration procedure, deployment/rollback commands, known limitations).
+
 The repository contains deployment configurations for:
 
 ### Docker
@@ -990,10 +992,10 @@ The repository contains deployment configurations for:
 deployment/docker/
 ├── backend.Dockerfile        # multi-stage production backend/worker image
 ├── frontend.Dockerfile       # multi-stage production frontend image
-└── docker-compose.prod.yml   # db + redis + api + worker + nginx (+ frontend profile)
+└── docker-compose.prod.yml   # db + redis + api + worker(+ worker-gpu profile) + nginx (+ frontend profile)
 ```
 
-Production Compose differs from development: built (not bind-mounted) images, no debug mode, no publicly exposed database/Redis ports, and `nginx` as the single public entry point (port 80) proxying to the API and, once it exists, the frontend. See `deployment/docker/README.md`.
+Production Compose differs from development: built (not bind-mounted) images, no debug mode, no publicly exposed database/Redis ports, `nginx` as the single public entry point (port 80) proxying to the API and, once it exists, the frontend, per-service CPU/memory limits (env-configurable), and an optional GPU worker (`--profile gpu`, requires the NVIDIA Container Toolkit). See `deployment/docker/README.md` and `docs/deployment.md`.
 
 ### CI/CD
 
@@ -1198,8 +1200,14 @@ The project is being developed incrementally.
 * Docker development environment (backend, worker, Redis, PostgreSQL)
 * Production Docker architecture (multi-stage backend/frontend images, production Compose, nginx reverse proxy)
 * GitHub Actions CI/CD (backend tests, lint, frontend build, Docker image build validation, GHCR image publishing on release)
-* Backend health endpoint (`GET /api/v1/health`)
-* Prometheus / Grafana monitoring structure
+* Backend health/readiness/liveness endpoints (`GET /api/v1/health`, `/health/live`, `/health/ready`)
+* Prometheus metrics (API `/metrics` + dedicated Celery worker exporter) and a local Prometheus/Grafana Compose profile
+* Structured/correlated logging (request/task context, configurable level and JSON output)
+* Celery production hardening (late ack, bounded/backed-off retry for transient failures, time limits, worker recycling, CPU/GPU queue routing foundation)
+* Database connection pool tuning (env-configurable)
+* Extensible storage backend interface (local filesystem default, optional S3-compatible backend)
+* FAISS index rebuild tooling (`backend/scripts/rebuild_faiss_index.py`)
+* Environment-driven CORS configuration
 * Automated testing structure
 
 ### In Progress
