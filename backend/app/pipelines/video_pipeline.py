@@ -33,6 +33,12 @@ from app.workers.quiz_worker import QuizWorker
 
 from app.schemas.quiz import QuizCreate
 
+from app.services.chapter import ChapterService
+from app.schemas.chapter import ChapterCreate
+
+from ai.chapter_detection.pipeline import ChapterTopicPipeline
+from ai.speech.speech_result import SpeechSegment
+
 logger = logging.getLogger(__name__)
 
 
@@ -49,6 +55,7 @@ class VideoPipelineService:
         translation_service: TranslationService,
         processing_job_service: ProcessingJobService,
         quiz_service: QuizService,
+        chapter_service: ChapterService,
     ):
         self.video_service = video_service
         self.transcript_service = transcript_service
@@ -62,6 +69,8 @@ class VideoPipelineService:
         self.transcription_worker = TranscriptionWorker()
         self.quiz_service = quiz_service
         self.quiz_worker = QuizWorker()
+        self.chapter_service = chapter_service
+        self.chapter_pipeline = ChapterTopicPipeline()
         
         
     def transcription_stage(
@@ -69,9 +78,18 @@ class VideoPipelineService:
         job_id: int,
         video_id: int,
         file_path: str,
-    ) -> Transcript:
+    ) -> tuple[Transcript, list[dict]]:
         """
         Run Whisper transcription and persist transcript.
+
+        Also returns the raw per-segment ASR output (start/end/text/
+        speaker) alongside the persisted Transcript - only the
+        Transcript itself is new here, but this stage is the only
+        place that still has access to segment-level timestamps
+        before they would otherwise be discarded (the Transcript
+        model only stores flattened text). chapter_stage() consumes
+        these directly, so chapters are derived from the exact same
+        transcription output without ever retranscribing the audio.
         """
         self.processing_job_service.update_progress(
             job_id=job_id,
@@ -125,7 +143,7 @@ class VideoPipelineService:
                 text=result["text"],
             )
         )
-        return transcript
+        return transcript, result.get("segments", [])
     
     def summary_stage(
         self,
@@ -370,7 +388,78 @@ class VideoPipelineService:
 
 
         return quizzes
-    
+
+    def chapter_stage(
+        self,
+        job_id: int,
+        video_id: int,
+        transcript_segments: list[dict],
+    ):
+        """
+        Derive chapters/topics from the transcription's own segments
+        (produced by transcription_stage - not retranscribed, and no
+        embeddings are recomputed here beyond what topic/chapter
+        detection itself needs). Persists via ChapterService, mirroring
+        embedding_stage's replace-on-reprocess pattern: delete this
+        video's existing chapters, then insert the newly detected
+        ones, so reprocessing a video never accumulates duplicates.
+
+        Chapter detection is an optional enhancement, not a required
+        artifact of processing: an empty/degenerate transcript simply
+        yields zero or one chapter (a valid, non-error outcome), so
+        this stage does not raise on "nothing meaningful found".
+        """
+
+        self.processing_job_service.update_progress(
+            job_id=job_id,
+            progress=99,
+            current_step="Detecting Chapters",
+        )
+
+        logger.info(
+            "Start chapter stage for video %s",
+            video_id,
+        )
+
+        speech_segments = [
+            SpeechSegment(
+                start=segment["start"],
+                end=segment["end"],
+                text=segment.get("text", ""),
+                speaker=segment.get("speaker"),
+            )
+            for segment in transcript_segments
+        ]
+
+        chapter_result = self.chapter_pipeline.run(
+            segments=speech_segments,
+            video_id=video_id,
+        )
+
+        self.chapter_service.delete_by_video_id(
+            video_id,
+        )
+
+        for chapter in chapter_result.chapters:
+            self.chapter_service.create_chapter(
+                ChapterCreate(
+                    video_id=video_id,
+                    title=chapter.title,
+                    start_time=chapter.start,
+                    end_time=chapter.end,
+                    summary=chapter.summary,
+                )
+            )
+
+        logger.info(
+            "Chapter detection completed for video %s. "
+            "Generated %s chapter(s).",
+            video_id,
+            len(chapter_result.chapters),
+        )
+
+        return chapter_result.chapters
+
     def process(
         self,
         job_id: int,
@@ -386,7 +475,7 @@ class VideoPipelineService:
             file_path=file_path,
         )
 
-        transcript = self.transcription_stage(
+        transcript, transcript_segments = self.transcription_stage(
             job_id=job_id,
             video_id=video_id,
             file_path=file_path,
@@ -397,13 +486,13 @@ class VideoPipelineService:
             video_id=video_id,
             transcript=transcript,
         )
-        
+
         self.embedding_stage(
             job_id=job_id,
             video_id=video_id,
             transcript=transcript,
         )
-        
+
         self.translation_stage(
             job_id=job_id,
             video_id=video_id,
@@ -415,7 +504,13 @@ class VideoPipelineService:
             video_id=video_id,
             transcript=transcript,
         )
-        
+
+        self.chapter_stage(
+            job_id=job_id,
+            video_id=video_id,
+            transcript_segments=transcript_segments,
+        )
+
         self.video_service.update_status(
             video_id=video_id,
             status="processed",

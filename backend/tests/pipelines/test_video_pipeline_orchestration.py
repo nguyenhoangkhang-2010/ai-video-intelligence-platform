@@ -18,6 +18,7 @@ def _make_pipeline():
     translation_service = MagicMock(name="translation_service")
     processing_job_service = MagicMock(name="processing_job_service")
     quiz_service = MagicMock(name="quiz_service")
+    chapter_service = MagicMock(name="chapter_service")
 
     with (
         patch("app.pipelines.video_pipeline.TranscriptionWorker"),
@@ -25,6 +26,7 @@ def _make_pipeline():
         patch("app.pipelines.video_pipeline.EmbeddingWorker"),
         patch("app.pipelines.video_pipeline.TranslationWorker"),
         patch("app.pipelines.video_pipeline.QuizWorker"),
+        patch("app.pipelines.video_pipeline.ChapterTopicPipeline"),
     ):
         pipeline = VideoPipelineService(
             video_service=video_service,
@@ -34,6 +36,7 @@ def _make_pipeline():
             translation_service=translation_service,
             processing_job_service=processing_job_service,
             quiz_service=quiz_service,
+            chapter_service=chapter_service,
         )
 
     return (
@@ -51,20 +54,22 @@ def test_process_runs_stages_in_order_with_expected_arguments():
     file_path = "/tmp/video.mp4"
 
     transcript = MagicMock(name="transcript")
+    transcript_segments = [{"start": 0.0, "end": 1.0, "text": "hello"}]
 
     # Focus on orchestration only: replace each stage (already public
     # methods on the service) with a mock, so this test never runs
-    # real ffprobe/transcription/summary/embedding/translation/quiz
-    # logic - that belongs to each stage's own tests.
+    # real ffprobe/transcription/summary/embedding/translation/quiz/
+    # chapter logic - that belongs to each stage's own tests.
     pipeline.metadata_stage = MagicMock(name="metadata_stage")
     pipeline.transcription_stage = MagicMock(
         name="transcription_stage",
-        return_value=transcript,
+        return_value=(transcript, transcript_segments),
     )
     pipeline.summary_stage = MagicMock(name="summary_stage")
     pipeline.embedding_stage = MagicMock(name="embedding_stage")
     pipeline.translation_stage = MagicMock(name="translation_stage")
     pipeline.quiz_stage = MagicMock(name="quiz_stage")
+    pipeline.chapter_stage = MagicMock(name="chapter_stage")
 
     manager = MagicMock()
     manager.attach_mock(pipeline.metadata_stage, "metadata_stage")
@@ -73,6 +78,7 @@ def test_process_runs_stages_in_order_with_expected_arguments():
     manager.attach_mock(pipeline.embedding_stage, "embedding_stage")
     manager.attach_mock(pipeline.translation_stage, "translation_stage")
     manager.attach_mock(pipeline.quiz_stage, "quiz_stage")
+    manager.attach_mock(pipeline.chapter_stage, "chapter_stage")
     manager.attach_mock(video_service.update_status, "update_status")
     manager.attach_mock(
         processing_job_service.update_progress, "update_progress",
@@ -104,6 +110,10 @@ def test_process_runs_stages_in_order_with_expected_arguments():
     pipeline.quiz_stage.assert_called_once_with(
         job_id=job_id, video_id=video_id, transcript=transcript,
     )
+    pipeline.chapter_stage.assert_called_once_with(
+        job_id=job_id, video_id=video_id,
+        transcript_segments=transcript_segments,
+    )
 
     video_service.update_status.assert_called_once_with(
         video_id=video_id, status="processed",
@@ -131,6 +141,10 @@ def test_process_runs_stages_in_order_with_expected_arguments():
         ),
         call.quiz_stage(
             job_id=job_id, video_id=video_id, transcript=transcript,
+        ),
+        call.chapter_stage(
+            job_id=job_id, video_id=video_id,
+            transcript_segments=transcript_segments,
         ),
         call.update_status(video_id=video_id, status="processed"),
         call.update_progress(

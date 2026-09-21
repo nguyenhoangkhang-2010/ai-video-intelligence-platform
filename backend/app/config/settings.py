@@ -232,6 +232,47 @@ class SpeechSettings(BaseConfig):
     )
 
 # =============================================================================
+# Chapter & Topic Intelligence
+# =============================================================================
+class ChapterSettings(BaseConfig):
+    """Topic segmentation and chapter detection configuration."""
+
+    use_embedding_segmentation: bool = Field(
+        default=True,
+        alias="CHAPTER_USE_EMBEDDING_SEGMENTATION",
+    )
+
+    topic_similarity_threshold: float = Field(
+        default=0.6,
+        alias="CHAPTER_TOPIC_SIMILARITY_THRESHOLD",
+    )
+
+    min_topic_segments: int = Field(
+        default=3,
+        alias="CHAPTER_MIN_TOPIC_SEGMENTS",
+    )
+
+    chapter_similarity_threshold: float = Field(
+        default=0.5,
+        alias="CHAPTER_SIMILARITY_THRESHOLD",
+    )
+
+    max_topics_per_chapter: int = Field(
+        default=4,
+        alias="CHAPTER_MAX_TOPICS_PER_CHAPTER",
+    )
+
+    min_chapter_duration_seconds: float = Field(
+        default=15.0,
+        alias="CHAPTER_MIN_DURATION_SECONDS",
+    )
+
+    use_llm_labeling: bool = Field(
+        default=True,
+        alias="CHAPTER_USE_LLM_LABELING",
+    )
+
+# =============================================================================
 # Retrieval & Reranking
 # =============================================================================
 class RetrievalSettings(BaseConfig):
@@ -268,6 +309,7 @@ class Settings(BaseModel):
     llm: LLMSettings =Field(default_factory=LLMSettings)
     retrieval: RetrievalSettings = Field(default_factory=RetrievalSettings)
     speech: SpeechSettings = Field(default_factory=SpeechSettings)
+    chapter: ChapterSettings = Field(default_factory=ChapterSettings)
 
 @lru_cache
 def get_settings() -> Settings:
