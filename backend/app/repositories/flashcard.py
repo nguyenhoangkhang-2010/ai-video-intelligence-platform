@@ -41,3 +41,21 @@ class FlashcardRepository(BaseRepository[Flashcard]):
             )
             .all()
         )
+
+    def delete_by_video_id(
+        self,
+        video_id: int,
+    ) -> None:
+        """
+        Bulk-delete all flashcards belonging to a video in a single
+        statement/commit (used when replacing a video's flashcards on
+        reprocess) - mirrors ChapterRepository.delete_by_video_id.
+        """
+
+        (
+            self.db.query(Flashcard)
+            .filter(Flashcard.video_id == video_id)
+            .delete(synchronize_session=False)
+        )
+
+        self.db.commit()
