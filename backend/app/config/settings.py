@@ -377,6 +377,42 @@ class RetrievalSettings(BaseConfig):
     )
 
 # =============================================================================
+# AI Quality Evaluation
+# =============================================================================
+class EvaluationSettings(BaseConfig):
+    """AI quality evaluation (retrieval/RAG/generation/performance) configuration."""
+
+    enabled: bool = Field(
+        default=True,
+        alias="EVALUATION_ENABLED",
+    )
+
+    default_top_k: int = Field(
+        default=5,
+        alias="EVALUATION_DEFAULT_TOP_K",
+    )
+
+    bertscore_model: str | None = Field(
+        default=None,
+        alias="EVALUATION_BERTSCORE_MODEL",
+    )
+
+    bertscore_lang: str = Field(
+        default="en",
+        alias="EVALUATION_BERTSCORE_LANG",
+    )
+
+    llm_judge_enabled: bool = Field(
+        default=False,
+        alias="EVALUATION_LLM_JUDGE_ENABLED",
+    )
+
+    latency_iterations: int = Field(
+        default=10,
+        alias="EVALUATION_LATENCY_ITERATIONS",
+    )
+
+# =============================================================================
 # Global Settings Instance
 # =============================================================================
 class Settings(BaseModel):
@@ -396,6 +432,7 @@ class Settings(BaseModel):
     quiz: QuizSettings = Field(default_factory=QuizSettings)
     flashcard: FlashcardSettings = Field(default_factory=FlashcardSettings)
     knowledge_graph: KnowledgeGraphSettings = Field(default_factory=KnowledgeGraphSettings)
+    evaluation: EvaluationSettings = Field(default_factory=EvaluationSettings)
 
 @lru_cache
 def get_settings() -> Settings:
