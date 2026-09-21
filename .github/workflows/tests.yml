@@ -1,0 +1,43 @@
+name: Tests
+
+"on":
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+# Cancel superseded runs on the same branch/PR.
+concurrency:
+  group: tests-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  backend-tests:
+    name: Backend (pytest)
+    runs-on: ubuntu-latest
+
+    # Every AI/LLM dependency (Ollama, Hugging Face inference, etc.)
+    # is mocked in the test suite - this job never calls an external
+    # AI service and needs no API keys/secrets.
+    env:
+      SECRET_KEY: ci-test-secret-key-not-for-production-use-only
+      DATABASE_URL: sqlite:///./ci-test.db
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: "pip"
+          cache-dependency-path: requirements/requirements.txt
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements/requirements.txt
+
+      - name: Run backend test suite
+        run: pytest backend/tests -q

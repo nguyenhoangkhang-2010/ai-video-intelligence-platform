@@ -955,13 +955,28 @@ Current services include:
               AI Pipeline
 ```
 
-The current development Compose configuration includes:
+The current development Compose configuration (`docker-compose.yml`) includes:
 
+* PostgreSQL (`db`)
 * Redis
 * FastAPI API service
 * Celery worker
+* Frontend (optional - `docker compose --profile frontend up`)
 
-The Celery worker executes long-running background processing tasks without blocking the API server.
+The Celery worker executes long-running background processing tasks without blocking the API server. `api`/`db`/`redis` have Docker healthchecks, and `api`/`celery` wait for `db`/`redis` to report healthy before starting.
+
+The backend exposes `GET /api/v1/health` (checks database connectivity) for Compose/CI readiness probes.
+
+**Local development quickstart:**
+
+```bash
+cp .env.example .env   # or: scripts/setup.sh
+docker compose up --build
+```
+
+See the [Makefile](Makefile) for common commands (`make up`, `make down`, `make logs`, `make logs-worker`, `make shell`, `make migrate`, `make down-v`).
+
+> The `frontend/` app is currently an empty scaffold (no application code, no lockfile yet), so its Compose service/Dockerfiles cannot actually build until real Next.js code lands - see `deployment/docker/README.md`.
 
 ---
 
@@ -973,10 +988,25 @@ The repository contains deployment configurations for:
 
 ```text
 deployment/docker/
-├── backend.Dockerfile
-├── frontend.Dockerfile
-└── docker-compose.prod.yml
+├── backend.Dockerfile        # multi-stage production backend/worker image
+├── frontend.Dockerfile       # multi-stage production frontend image
+└── docker-compose.prod.yml   # db + redis + api + worker + nginx (+ frontend profile)
 ```
+
+Production Compose differs from development: built (not bind-mounted) images, no debug mode, no publicly exposed database/Redis ports, and `nginx` as the single public entry point (port 80) proxying to the API and, once it exists, the frontend. See `deployment/docker/README.md`.
+
+### CI/CD
+
+```text
+.github/workflows/
+├── tests.yml     # backend pytest suite
+├── lint.yml      # backend ruff check (informational - no lint config adopted yet)
+├── ci.yml        # frontend install/lint/build (skips gracefully while frontend/ is empty)
+├── docker.yml    # validates backend (dev + prod) and frontend Docker images build
+└── release.yml   # on a "v*" tag: publishes backend/frontend images to GHCR
+```
+
+None of these call Ollama, Hugging Face inference, or any other external AI service - the backend test suite mocks all of that. `release.yml` only publishes images (using the built-in `GITHUB_TOKEN` - no registry credentials to configure); it does not deploy anywhere, since no staging/production host is established yet.
 
 ### Kubernetes
 
@@ -987,12 +1017,16 @@ deployment/kubernetes/
 └── service.yaml
 ```
 
+Not implemented yet - planned for a later phase (container orchestration/scaling).
+
 ### Nginx
 
 ```text
 deployment/nginx/
 └── nginx.conf
 ```
+
+Reverse proxy used by the production Compose stack - see `deployment/nginx/README.md`.
 
 The deployment architecture is designed to support a transition from local Docker Compose development to container orchestration.
 
@@ -1161,14 +1195,15 @@ The project is being developed incrementally.
 * Authentication layer
 * Repository / service architecture
 * Processing job tracking
-* Docker development environment
+* Docker development environment (backend, worker, Redis, PostgreSQL)
+* Production Docker architecture (multi-stage backend/frontend images, production Compose, nginx reverse proxy)
+* GitHub Actions CI/CD (backend tests, lint, frontend build, Docker image build validation, GHCR image publishing on release)
+* Backend health endpoint (`GET /api/v1/health`)
 * Prometheus / Grafana monitoring structure
 * Automated testing structure
-* CI/CD workflow structure
 
 ### In Progress
 
-* Production Docker architecture
 * Complete distributed processing
 * Advanced model optimization
 * MLOps workflows

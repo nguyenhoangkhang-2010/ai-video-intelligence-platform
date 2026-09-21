@@ -1,0 +1,79 @@
+# ==========================================================
+# Docker build context exclusions
+#
+# Keeps the build context small/fast and prevents anything
+# secret or environment-specific from ever being copied into
+# an image (Dockerfiles also COPY only the specific backend/
+# frontend subpaths they need, so this is defense in depth,
+# not the only safeguard).
+# ==========================================================
+
+# Git
+.git
+.gitignore
+.github
+
+# Environment / secrets - never send real env files to the
+# Docker daemon as build context.
+.env
+.env.*
+!.env.example
+
+# Python
+**/__pycache__/
+**/*.py[cod]
+**/*.pyo
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.venv/
+venv/
+env/
+ENV/
+*.egg-info/
+.eggs/
+
+# Backend test/dev-only content (never needed inside an image)
+backend/tests/
+backend/.env
+backend/uploads/
+backend/storage/
+
+# Node / frontend build artifacts (rebuilt inside the image)
+frontend/node_modules/
+frontend/.next/
+frontend/out/
+frontend/.turbo/
+frontend/.vercel/
+node_modules/
+
+# Project runtime/generated artifacts
+storage/
+uploads/
+logs/
+*.log
+data/
+notebooks/
+assets/
+
+# Docs / non-runtime project scaffolding
+docs/
+monitoring/
+deployment/kubernetes/
+mkdocs.yml
+README.md
+CHANGELOG.md
+CONTRIBUTING.md
+CODE_OF_CONDUCT.md
+
+# IDE / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# Misc
+*.sqlite3
+*.db
+*.bak
+*.tmp

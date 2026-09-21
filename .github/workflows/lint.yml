@@ -1,0 +1,40 @@
+name: Lint
+
+"on":
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: lint-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  backend-lint:
+    name: Backend (ruff)
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install ruff
+        run: python -m pip install ruff
+
+      # No ruff/flake8/mypy config exists in this repository yet (no
+      # pyproject.toml [tool.ruff] section, no .flake8/mypy.ini), so
+      # this project has not actually adopted a lint gate so far.
+      # Running ruff's default rule set here is informational only
+      # (continue-on-error) rather than blocking, to avoid failing
+      # every PR on pre-existing findings unrelated to whatever that
+      # PR changes. Once the codebase is lint-clean and a real ruff
+      # configuration is added, this should be made blocking.
+      - name: Run ruff check (informational)
+        continue-on-error: true
+        run: ruff check backend
