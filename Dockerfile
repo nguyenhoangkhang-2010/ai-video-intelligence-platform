@@ -29,6 +29,8 @@ COPY backend/app ./backend/app
 COPY backend/ai ./backend/ai
 COPY backend/alembic ./backend/alembic
 COPY backend/alembic.ini ./backend/alembic.ini
+COPY backend/scripts/docker-entrypoint.sh ./backend/scripts/docker-entrypoint.sh
+RUN chmod +x ./backend/scripts/docker-entrypoint.sh
 
 ENV PYTHONPATH=/app/backend
 
@@ -50,4 +52,5 @@ EXPOSE 8000
 HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
     CMD curl -f http://localhost:8000/api/v1/health || exit 1
 
+ENTRYPOINT ["/app/backend/scripts/docker-entrypoint.sh"]
 CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]

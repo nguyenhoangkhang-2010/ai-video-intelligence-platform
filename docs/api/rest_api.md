@@ -16,6 +16,8 @@ This document reflects the actual, current API surface after the backend-complet
 
 No refresh token, logout, or password-reset endpoint exists - the client discards the token to "log out."
 
+A deactivated account (`User.is_active = false`) gets `403` on both `POST /auth/login` (checked only after the password is confirmed correct, so a deactivated account is never distinguishable from a wrong password/unknown email by response alone) and on every protected endpoint for any still-valid token it already holds (checked in `get_current_user`/`get_current_user_for_media`, so deactivation takes effect immediately, not just at next login). There is no API to set `is_active` - it is a database-level control today.
+
 ## Videos
 
 | Method | Path | Auth | Description |
@@ -25,11 +27,19 @@ No refresh token, logout, or password-reset endpoint exists - the client discard
 | GET | `/videos/{video_id}/status` | Yes | Lightweight `{id, status}` for polling. |
 | POST | `/videos/upload` | Yes | Multipart upload (`file`). Creates the `Video` (status `uploaded`) and a `ProcessingJob` (status `PENDING`), dispatches async processing, and returns immediately. |
 | PUT | `/videos/{video_id}` | Yes | Update `title`/`language`/`status`. |
-| DELETE | `/videos/{video_id}` | Yes | Deletes the video and everything derived from it (transcript, summaries, chapters, quizzes, flashcards, translations, embeddings, processing jobs - `ON DELETE CASCADE`). |
+| DELETE | `/videos/{video_id}` | Yes | Deletes the video and everything derived from it. See "Deletion cleanup" below. |
 | GET | `/videos/{video_id}/stream` | Yes\* | **Video delivery/playback.** See below. |
 | GET | `/videos/{video_id}/processing-jobs` | Yes | All processing jobs for this video. |
 
-`Video.status`: `uploaded` -> `processing` -> `processed` \| `failed`.
+`Video.status`: `uploaded` -> `processing` -> `processed` \| `failed`. `PUT`'s `status` field is validated against exactly these four values (`422` otherwise) - a client can no longer self-assign an arbitrary status string.
+
+### Upload validation (`POST /videos/upload`)
+
+Before a byte is written to disk: the filename is reduced to a safe basename (`app/utils/uploads.py::sanitize_filename` - any directory component or path-traversal segment is stripped, unsafe characters are replaced), and the extension is checked against `settings.storage.allowed_upload_extensions` (default `.mp4`/`.mov`/`.mkv`/`.avi`/`.webm`/`.m4v`, configurable via `STORAGE_ALLOWED_UPLOAD_EXTENSIONS`) - `415` if not allowed. The upload is then streamed to disk in fixed-size chunks, enforcing `settings.storage.max_upload_size_mb` (default 5000 MB, `STORAGE_MAX_UPLOAD_SIZE_MB`) without ever buffering the whole file in memory - `413` and the partial file is removed if the limit is exceeded.
+
+### Deletion cleanup (`DELETE /videos/{video_id}`)
+
+Database rows (transcript, summaries, translations, chapters, quizzes, flashcards, embeddings, processing jobs) are removed via `ON DELETE CASCADE`, as before. This also now removes the two things that live outside the database: the uploaded source file (via the same `StorageBackend` the stream endpoint reads through) and this video's vectors in the shared FAISS index (via the same `VectorStore.replace()` mechanism used to swap embeddings on reprocessing - never a full rebuild, never touching another video's vectors). This cleanup is best-effort: it runs after the database deletion has already succeeded, so a storage/FAISS failure is logged, not turned into an error response - the video is still gone from the product's perspective either way.
 
 ### Video delivery (`GET /videos/{video_id}/stream`)
 
@@ -57,6 +67,8 @@ Status values: `PENDING` -> `RUNNING` -> `COMPLETED` \| `FAILED`, with `progress
 
 Note: `PATCH` lets an authenticated owner set their own job's status directly. This is a pre-existing capability, now correctly ownership-scoped rather than open to anyone; whether a regular user should be able to mutate job status at all (versus this being admin/internal-only) is a product decision left to a future phase - see the backend-completion report's "Known limitations."
 
+`status` is validated against exactly the four values above (`422` for anything else), and the requested transition is checked against the job's current status (`409` on an illegal one, e.g. `PENDING` -> `COMPLETED` directly, or any transition out of a terminal `COMPLETED`/`FAILED` state) - see `ProcessingJobService._VALID_JOB_STATUS_TRANSITIONS`. This only constrains this client-writable path; the Celery-driven pipeline's own status updates (`start_job`/`complete_job`/`fail_job`) are separate methods, unaffected.
+
 ## Transcript
 
 | Method | Path | Auth | Description |
@@ -76,6 +88,8 @@ Note: `PATCH` lets an authenticated owner set their own job's status directly. T
 | Method | Path | Auth | Description |
 |---|---|---|---|
 | GET | `/translations/video/{video_id}` | Yes | List of translations (currently always 0 or 1 item; target language is fixed to `en` in the processing pipeline - not request-configurable). |
+
+Generated by `ai/translation/translator.py::Translator`, using the same Ollama LLM as summaries/quizzes/flashcards/chapters - a real translation, not the original transcript copied through. If the transcript's detected source language already equals the target (`en`), the text is returned unchanged rather than sent through the LLM, since there is genuinely nothing to translate; any other source language is actually translated.
 
 ## Chapters
 
@@ -122,7 +136,7 @@ Fields: `id`, `video_id`, `type` (`multiple_choice` \| `true_false` \| `short_an
 
 Stateless by design: no conversation history is persisted or fed back into later calls. A `ChatHistory` model/repository already exist but are intentionally unwired (no service, no write path) - this phase confirmed RAG should stay stateless rather than build conversational memory, since nothing currently needs it (see the backend-completion report).
 
-Retrieval today is plain dense (FAISS) retrieval - hybrid/sparse retrieval and cross-encoder reranking exist in `ai/retrieval`/`ai/reranking` but are not wired into the live RAG dependency (`app/api/deps.py::get_rag_pipeline`); enabling them is a deliberate, separate decision, not made in this phase.
+Retrieval: dense (FAISS) + sparse (BM25) fused via Reciprocal Rank Fusion (`ai/retrieval/hybrid_search.py`), then optionally reranked with a cross-encoder (`ai/reranking/cross_encoder.py`) - both wired into the live RAG dependency (`app/api/deps.py::get_rag_pipeline`) as of this phase, gated by `settings.retrieval.hybrid_enabled`/`reranking_enabled` (both default `true`, `RETRIEVAL_HYBRID_ENABLED`/`RETRIEVAL_RERANKING_ENABLED`). The reranker's cross-encoder model is loaded once per process and reused, not reloaded per request; if it fails to load (no network/model cache), that failure is logged once and RAG falls back to dense+hybrid retrieval with no reranking - it never breaks a request. The `RAGResult`/`SearchResult` API contract is unchanged; only retrieval quality changed. Plain semantic search (`POST /search/videos/{video_id}`, no `/rag`) is unaffected and stays dense-only, as documented above.
 
 ## Meetings (aggregated view)
 

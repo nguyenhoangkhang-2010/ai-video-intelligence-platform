@@ -8,6 +8,8 @@ from fastapi import APIRouter
 from app.auth.dependencies import get_current_user
 from app.models.user import User
 
+from app.config.settings import settings
+from app.core.rate_limit import rate_limit
 from app.database.session import get_db
 from app.repositories.embedding import EmbeddingRepository
 
@@ -35,6 +37,7 @@ router = APIRouter(
 @router.post(
     "/videos/{video_id}",
     response_model=SemanticSearchResponse,
+    dependencies=[Depends(rate_limit("search", settings.rate_limit.search_limit, 60))],
 )
 def search_video(
     video_id: int,
@@ -87,6 +90,7 @@ def search_video(
 @router.post(
     "/videos/{video_id}/rag",
     response_model=RAGResult,
+    dependencies=[Depends(rate_limit("rag", settings.rate_limit.search_limit, 60))],
 )
 def ask_video(
     video_id: int,

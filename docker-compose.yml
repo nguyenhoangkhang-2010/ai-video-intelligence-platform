@@ -68,6 +68,19 @@ services:
       REDIS_URL: redis://redis:6379/0
       CELERY_BROKER_URL: redis://redis:6379/0
       CELERY_RESULT_BACKEND: redis://redis:6379/0
+      # RateLimitSettings.redis_url defaults to localhost, which inside
+      # a container means the container itself, not the redis service -
+      # without this override the rate limiter's Redis client silently
+      # fails to connect and fails open (see app/core/rate_limit.py).
+      RATE_LIMIT_REDIS_URL: redis://redis:6379/0
+      # Deliberately under ./storage, NOT a separate named Docker
+      # volume - a fresh named volume mounts with root ownership by
+      # default, which the non-root `app` user (Dockerfile's `USER
+      # app`, applied before the entrypoint even runs, so nothing here
+      # can chown it) cannot write into - confirmed live: this broke
+      # every processing job with a PermissionError until switched to
+      # this already-correctly-permissioned bind mount.
+      HF_HOME: /app/storage/.cache/huggingface
 
     volumes:
       - ./storage:/app/storage
@@ -116,6 +129,12 @@ services:
       REDIS_URL: redis://redis:6379/0
       CELERY_BROKER_URL: redis://redis:6379/0
       CELERY_RESULT_BACKEND: redis://redis:6379/0
+      # "api" is the single designated migrator (see
+      # backend/scripts/docker-entrypoint.sh) - this avoids two
+      # containers racing to create the same tables on a fresh DB.
+      RUN_MIGRATIONS_ON_START: "false"
+      # See the "api" service's HF_HOME comment above - same reasoning.
+      HF_HOME: /app/storage/.cache/huggingface
 
     ports:
       - "9100:9100"
@@ -128,6 +147,21 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+
+    # Overrides the image's baked-in Dockerfile HEALTHCHECK (which
+    # curls the API's uvicorn port 8000 - not listening in this
+    # container, since it runs `celery worker`, not `uvicorn`). This
+    # worker has no HTTP API of its own; instead it reuses the
+    # existing worker-side Prometheus metrics server
+    # (app/workers/metrics.py, started on worker_process_init) as the
+    # liveness signal - the same port this service already publishes
+    # below, just now also polled locally by Docker.
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:9100/ || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
 
   # Not started by a plain `docker compose up` - opt-in GPU worker for
   # transcription/embedding/LLM workloads. Requires the NVIDIA
@@ -162,6 +196,7 @@ services:
       REDIS_URL: redis://redis:6379/0
       CELERY_BROKER_URL: redis://redis:6379/0
       CELERY_RESULT_BACKEND: redis://redis:6379/0
+      RUN_MIGRATIONS_ON_START: "false"
       WHISPER_DEVICE: cuda
       METRICS_WORKER_PORT: 9101
 

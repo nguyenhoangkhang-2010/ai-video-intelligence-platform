@@ -1,0 +1,7 @@
+[
+  {
+    "_comment": "SCHEMA EXAMPLE ONLY - not a real evaluation dataset. Copy this file and replace with real questions about a video you have actually processed. No ground truth is required for the deterministic metrics; reference_answer is optional and only used by metrics that need one.",
+    "question": "example question - replace with a real question about your video",
+    "reference_answer": null
+  }
+]

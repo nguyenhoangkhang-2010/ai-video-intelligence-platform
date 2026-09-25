@@ -1,5 +1,6 @@
 from app.auth.jwt import create_access_token
 from app.repositories.user import UserRepository
+from app.core.exceptions import InactiveUserError
 from app.core.exceptions import InvalidCredentialsError
 from app.core.exceptions import UserAlreadyExistsError
 from app.core.security import hash_password
@@ -67,6 +68,14 @@ class AuthService:
         ):
             raise InvalidCredentialsError(
                 "Invalid email or password.",
+            )
+
+        # Checked only after credentials are confirmed correct, so a
+        # deactivated account is never distinguishable from a wrong
+        # password/unknown email by response alone.
+        if not user.is_active:
+            raise InactiveUserError(
+                "This account has been deactivated.",
             )
 
         access_token = create_access_token(

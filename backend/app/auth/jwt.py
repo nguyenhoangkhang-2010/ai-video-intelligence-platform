@@ -7,9 +7,6 @@ from jose import jwt
 from app.config.settings import settings
 
 
-ALGORITHM = "HS256"
-
-
 def create_access_token(
     subject: str,
     expires_delta: timedelta | None = None,
@@ -33,9 +30,9 @@ def create_access_token(
     return jwt.encode(
         payload,
         settings.security.secret_key,
-        algorithm=ALGORITHM,
+        algorithm=settings.security.algorithm,
     )
-    
+
 def decode_token(
     token: str,
 ):
@@ -44,5 +41,5 @@ def decode_token(
     return jwt.decode(
         token,
         settings.security.secret_key,
-        algorithms=[ALGORITHM],
+        algorithms=[settings.security.algorithm],
     )

@@ -93,7 +93,14 @@ docker-data/
 ############################
 # AI Models
 ############################
-models/
+# NOTE: a bare "models/" was removed here - it matched ANY directory
+# named "models" anywhere in the repo, including the real source code
+# package backend/app/models/ (SQLAlchemy ORM models), silently
+# excluding it from git entirely (confirmed via `git ls-files` - none
+# of its .py files were tracked). checkpoints/, weights/, and the
+# extension patterns below already cover downloaded model artifacts;
+# scope a replacement to the actual weights directory if one is
+# introduced (e.g. "data/models/"), not a bare "models/".
 checkpoints/
 weights/
 *.ckpt

@@ -5,6 +5,8 @@ from app.repositories.user import UserRepository
 
 from sqlalchemy.orm import Session
 
+from app.config.settings import settings
+from app.core.rate_limit import rate_limit
 from app.database.session import get_db
 
 from app.schemas.user import UserCreate
@@ -22,6 +24,7 @@ router = APIRouter(
     "/register",
     response_model=UserRead,
     status_code=201,
+    dependencies=[Depends(rate_limit("register", settings.rate_limit.register_limit, 60))],
 )
 
 def register(
@@ -40,6 +43,7 @@ def register(
 
 @router.post(
     "/login",
+    dependencies=[Depends(rate_limit("login", settings.rate_limit.login_limit, 60))],
 )
 
 def login(

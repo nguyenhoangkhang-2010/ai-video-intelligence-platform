@@ -44,6 +44,13 @@ celery_app.conf.update(
     task_acks_late=True,
     task_reject_on_worker_lost=True,
 
+    # See CelerySettings.broker_visibility_timeout's docstring - without
+    # this, the Redis transport's default (3600s) is what actually
+    # governs redelivery, regardless of task_acks_late's intent.
+    broker_transport_options={
+        "visibility_timeout": settings.celery.broker_visibility_timeout,
+    },
+
     # One task fetched at a time per worker process by default - these
     # tasks run long (transcription/embedding/LLM calls can take
     # minutes), so a worker should not prefetch/hoard several before

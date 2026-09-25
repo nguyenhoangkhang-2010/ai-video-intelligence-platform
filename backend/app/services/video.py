@@ -4,7 +4,7 @@ from app.repositories.video import VideoRepository
 from app.types.video_metadata import VideoMetadata
 
 from fastapi import HTTPException
-from fastapi import status
+from fastapi import status as http_status
 
 from app.models.video import Video
 
@@ -43,7 +43,7 @@ class VideoService:
 
         if video is None:
             raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
+                status_code=http_status.HTTP_404_NOT_FOUND,
                 detail="Video not found",
             )
 
@@ -84,7 +84,7 @@ class VideoService:
 
         if not success:
             raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
+                status_code=http_status.HTTP_404_NOT_FOUND,
                 detail="Video not found",
             )
 
@@ -107,7 +107,7 @@ class VideoService:
 
         if video is None:
             raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
+                status_code=http_status.HTTP_404_NOT_FOUND,
                 detail="Video not found",
             )
 
@@ -134,7 +134,7 @@ class VideoService:
 
         if video is None:
             raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
+                status_code=http_status.HTTP_404_NOT_FOUND,
                 detail="Video not found",
             )
 
@@ -153,7 +153,7 @@ class VideoService:
         video = self.repository.get_by_id(video_id)
         if video is None:
             raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
+                status_code=http_status.HTTP_404_NOT_FOUND,
                 detail="Video not found",
             )
         video.duration = metadata.duration
@@ -168,7 +168,7 @@ class VideoService:
 
         if video is None:
             raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
+                status_code=http_status.HTTP_404_NOT_FOUND,
                 detail="Video not found",
             )
 
@@ -185,7 +185,7 @@ class VideoService:
 
         if video is None:
             raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
+                status_code=http_status.HTTP_404_NOT_FOUND,
                 detail="Video not found",
             )
 

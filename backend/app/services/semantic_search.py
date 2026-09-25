@@ -51,8 +51,8 @@ class SemanticSearchService:
             )
             return []
 
-        valid_vector_ids = {
-            embedding.vector_id
+        embeddings_by_vector_id = {
+            embedding.vector_id: embedding
             for embedding in video_embeddings
         }
 
@@ -106,19 +106,17 @@ class SemanticSearchService:
                 )
             )
 
-            if vector_id is None or vector_id not in valid_vector_ids:
+            if vector_id is None:
                 continue
 
-            embedding_record = (
-                self.embedding_repository
-                .get_by_vector_id(vector_id)
-            )
+            # Looked up from the single get_by_video_id() batch
+            # fetched above, rather than a fresh query per FAISS hit
+            # (this loop can run once per candidate in the global
+            # index) - also doubles as the "belongs to this video"
+            # filter that valid_vector_ids used to provide separately.
+            embedding_record = embeddings_by_vector_id.get(vector_id)
 
             if embedding_record is None:
-                logger.warning(
-                    "Embedding not found for vector_id %s",
-                    vector_id,
-                )
                 continue
 
             results.append(

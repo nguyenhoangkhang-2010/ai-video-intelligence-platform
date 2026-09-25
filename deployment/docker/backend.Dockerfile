@@ -52,6 +52,8 @@ COPY backend/app ./backend/app
 COPY backend/ai ./backend/ai
 COPY backend/alembic ./backend/alembic
 COPY backend/alembic.ini ./backend/alembic.ini
+COPY backend/scripts/docker-entrypoint.sh ./backend/scripts/docker-entrypoint.sh
+RUN chmod +x ./backend/scripts/docker-entrypoint.sh
 
 ENV PYTHONPATH=/app/backend
 ENV PYTHONDONTWRITEBYTECODE=1
@@ -77,4 +79,5 @@ HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
 # Same image/command split as development: run with an explicit
 # `command:` override (see docker-compose.prod.yml) to get the Celery
 # worker instead of the API process.
+ENTRYPOINT ["/app/backend/scripts/docker-entrypoint.sh"]
 CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]

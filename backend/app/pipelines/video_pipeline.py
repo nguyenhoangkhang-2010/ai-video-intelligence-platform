@@ -337,6 +337,7 @@ class VideoPipelineService:
         result = self.translation_worker.process(
             transcript=transcript.text,
             target_language="en",
+            source_language=transcript.language,
         )
 
         translation = self.translation_service.create_translation(

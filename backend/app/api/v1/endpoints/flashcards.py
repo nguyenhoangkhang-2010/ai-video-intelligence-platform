@@ -5,6 +5,8 @@ from fastapi.responses import Response
 from app.auth.dependencies import get_current_user
 from app.models.user import User
 
+from app.config.settings import settings
+from app.core.rate_limit import rate_limit
 from app.api.deps import get_flashcard_service
 from app.api.deps import get_video_service
 
@@ -54,6 +56,7 @@ def get_video_flashcards(
 
 @router.get(
     "/{video_id}/flashcards/export",
+    dependencies=[Depends(rate_limit("export", settings.rate_limit.export_limit, 60))],
 )
 def export_video_flashcards(
     video_id: int,

@@ -31,8 +31,9 @@ def _make_service():
     )
 
 
-def _make_embedding_record(video_id, chunk_index, chunk_text):
+def _make_embedding_record(vector_id, video_id, chunk_index, chunk_text):
     record = MagicMock(name=f"embedding_record_{chunk_index}")
+    record.vector_id = vector_id
     record.video_id = video_id
     record.chunk_index = chunk_index
     record.chunk_text = chunk_text
@@ -47,8 +48,8 @@ def test_search_scopes_results_to_requested_video_and_excludes_other_videos():
     # "other-v2") at interleaved positions - exactly the scenario the
     # post-filter in SemanticSearchService.search() must handle.
     own_embeddings = [
-        MagicMock(vector_id="v1"),
-        MagicMock(vector_id="v2"),
+        _make_embedding_record("v1", 10, 0, "chunk one text"),
+        _make_embedding_record("v2", 10, 1, "chunk two text"),
     ]
     embedding_repository.get_by_video_id.return_value = own_embeddings
 
@@ -70,30 +71,17 @@ def test_search_scopes_results_to_requested_video_and_excludes_other_videos():
 
     embedder.embed_query.return_value = [0.1, 0.2, 0.3, 0.4]
 
-    embedding_records = {
-        "v1": _make_embedding_record(10, 0, "chunk one text"),
-        "v2": _make_embedding_record(10, 1, "chunk two text"),
-    }
-    embedding_repository.get_by_vector_id.side_effect = (
-        lambda vector_id: embedding_records.get(vector_id)
-    )
-
     results = service.search(video_id=10, query="what happened?", top_k=5)
 
     # Correct video_id passed into the repository layer that owns
-    # video scoping.
+    # video scoping - and that single batch fetch is the ONLY
+    # repository call search() makes (no per-FAISS-hit query, fixing
+    # the N+1 the old implementation had via get_by_vector_id).
     embedding_repository.get_by_video_id.assert_called_once_with(10)
+    embedding_repository.get_by_vector_id.assert_not_called()
 
-    # Only this video's vector_ids are ever resolved against the DB -
-    # the other video's vector_ids returned by FAISS are skipped
-    # before get_by_vector_id is ever called on them.
-    resolved_vector_ids = {
-        call.args[0]
-        for call in embedding_repository.get_by_vector_id.call_args_list
-    }
-    assert resolved_vector_ids == {"v1", "v2"}
-
-    # Results are scoped to the requested video only.
+    # Results are scoped to the requested video only - the other
+    # video's vector_ids returned by FAISS never appear.
     assert len(results) == 2
     assert all(result["video_id"] == 10 for result in results)
     assert {result["vector_id"] for result in results} == {"v1", "v2"}

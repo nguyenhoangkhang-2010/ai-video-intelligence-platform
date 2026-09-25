@@ -400,6 +400,16 @@ class RetrievalSettings(BaseConfig):
         alias="RETRIEVAL_CANDIDATE_MULTIPLIER",
     )
 
+    hybrid_enabled: bool = Field(
+        default=True,
+        alias="RETRIEVAL_HYBRID_ENABLED",
+    )
+
+    reranking_enabled: bool = Field(
+        default=True,
+        alias="RETRIEVAL_RERANKING_ENABLED",
+    )
+
 # =============================================================================
 # AI Quality Evaluation
 # =============================================================================
@@ -504,6 +514,24 @@ class CelerySettings(BaseConfig):
         alias="CELERY_TASK_RETRY_BACKOFF_MAX",
     )
 
+    # How long the Redis broker holds an unacked message invisible to
+    # other workers before redelivering it (Celery's Redis transport
+    # `visibility_timeout`, default 3600s/1h if unset - confirmed live:
+    # a task in flight when its worker container was recreated stayed
+    # stuck PENDING for the full default before this was set, directly
+    # contradicting task_acks_late's documented intent of "redelivered
+    # rather than silently lost"). Safe to keep well below
+    # task_time_limit here specifically because a redelivered task for
+    # an already-claimed/finished job is a guaranteed no-op (see the
+    # atomic PENDING->RUNNING claim in ProcessingPipeline.run) - an
+    # occasional premature redelivery costs nothing, while a crashed
+    # worker's job sitting invisible for up to an hour is a real
+    # "stuck job" incident.
+    broker_visibility_timeout: int = Field(
+        default=1800,
+        alias="CELERY_BROKER_VISIBILITY_TIMEOUT",
+    )
+
 # =============================================================================
 # Metrics
 # =============================================================================
@@ -554,6 +582,45 @@ class StorageSettings(BaseConfig):
         alias="STORAGE_S3_REGION",
     )
 
+    max_upload_size_mb: int = Field(
+        default=5000,
+        alias="STORAGE_MAX_UPLOAD_SIZE_MB",
+    )
+
+    allowed_upload_extensions: list[str] = Field(
+        default=[".mp4", ".mov", ".mkv", ".avi", ".webm", ".m4v"],
+        alias="STORAGE_ALLOWED_UPLOAD_EXTENSIONS",
+    )
+
+# =============================================================================
+# Rate Limiting
+# =============================================================================
+class RateLimitSettings(BaseConfig):
+    """
+    Redis-backed rate limiting for abuse-prone endpoints (login,
+    register, upload, search, RAG chat, flashcard export). Reuses the
+    same Redis instance Celery already requires - no new
+    infrastructure dependency. Every limit is env-driven so an
+    operator can tune or disable it per deployment without a code
+    change; defaults are generous enough that normal local development
+    (a handful of requests while testing a feature) never trips them,
+    while still providing real protection in production.
+    """
+
+    enabled: bool = Field(default=True, alias="RATE_LIMIT_ENABLED")
+
+    redis_url: str = Field(
+        default="redis://localhost:6379/0",
+        alias="RATE_LIMIT_REDIS_URL",
+    )
+
+    # (limit, window_seconds) per category, keyed by client IP.
+    login_limit: int = Field(default=10, alias="RATE_LIMIT_LOGIN_PER_MINUTE")
+    register_limit: int = Field(default=5, alias="RATE_LIMIT_REGISTER_PER_MINUTE")
+    upload_limit: int = Field(default=20, alias="RATE_LIMIT_UPLOAD_PER_HOUR")
+    search_limit: int = Field(default=30, alias="RATE_LIMIT_SEARCH_PER_MINUTE")
+    export_limit: int = Field(default=20, alias="RATE_LIMIT_EXPORT_PER_MINUTE")
+
 # =============================================================================
 # Global Settings Instance
 # =============================================================================
@@ -579,6 +646,7 @@ class Settings(BaseModel):
     celery: CelerySettings = Field(default_factory=CelerySettings)
     metrics: MetricsSettings = Field(default_factory=MetricsSettings)
     storage: StorageSettings = Field(default_factory=StorageSettings)
+    rate_limit: RateLimitSettings = Field(default_factory=RateLimitSettings)
 
 @lru_cache
 def get_settings() -> Settings:

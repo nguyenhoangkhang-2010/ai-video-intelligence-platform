@@ -141,6 +141,9 @@ services:
       CELERY_RESULT_BACKEND: redis://redis:6379/0
       ENVIRONMENT: production
       DEBUG: "False"
+      # "api" is the single designated migrator (see
+      # backend/scripts/docker-entrypoint.sh).
+      RUN_MIGRATIONS_ON_START: "false"
 
     volumes:
       - storage_data:/app/storage
@@ -150,6 +153,18 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+
+    # Same reasoning as the dev docker-compose.yml: the image's baked-in
+    # Dockerfile HEALTHCHECK targets uvicorn's port 8000, which this
+    # container never listens on - reuse the worker's own Prometheus
+    # metrics server (app/workers/metrics.py) as the liveness signal
+    # instead.
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9100/"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
 
     deploy:
       resources:
@@ -190,6 +205,7 @@ services:
       CELERY_RESULT_BACKEND: redis://redis:6379/0
       ENVIRONMENT: production
       DEBUG: "False"
+      RUN_MIGRATIONS_ON_START: "false"
       WHISPER_DEVICE: cuda
       METRICS_WORKER_PORT: 9101
 
@@ -201,6 +217,13 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9101/"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
 
     deploy:
       resources:

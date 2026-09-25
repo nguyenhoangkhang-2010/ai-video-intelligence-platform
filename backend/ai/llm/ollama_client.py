@@ -14,18 +14,30 @@ from app.config.settings import settings
 logger = logging.getLogger(__name__)
 
 # Bounded retry for genuinely transient network failures only (Ollama
-# unreachable/slow to accept a connection) - NOT for a well-formed
+# unreachable/refusing the connection) - NOT for a well-formed
 # response the server chose to send back empty, which is an
 # application-level condition retrying the exact same request is
 # unlikely to fix differently, and NOT for HTTP error status codes
 # (response.raise_for_status()), which usually indicate a request/
 # model problem rather than a transient blip.
+#
+# Deliberately NOT retried: requests.exceptions.Timeout. A read
+# timeout means Ollama accepted the request and was still generating
+# when the timeout fired - the request was genuinely slow, not
+# broken, so retrying the identical prompt is expected to be just as
+# slow again. Retrying it anyway turns one already-slow generation
+# (up to `timeout` seconds) into a worst case of stop_after_attempt
+# separate full-length waits stacked back to back - confirmed live
+# against this project's own CPU-only Ollama deployment, where a
+# single slow-but-successful generation compounded into a multi-
+# minute hang this way. ConnectionError (Ollama not accepting
+# connections at all) is unaffected and still retried.
 _retry_ollama_call = retry(
     reraise=True,
     stop=stop_after_attempt(3),
     wait=wait_exponential(multiplier=1, min=1, max=8),
     retry=retry_if_exception_type(
-        (requests.exceptions.ConnectionError, requests.exceptions.Timeout),
+        requests.exceptions.ConnectionError,
     ),
 )
 

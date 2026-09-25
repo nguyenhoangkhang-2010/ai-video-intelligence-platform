@@ -17,6 +17,7 @@ from app.exceptions.handlers import setup_exception_handlers
 from app.middleware.cors import setup_cors
 from app.middleware.logging import setup_logging_middleware
 from app.middleware.request_id import setup_request_id_middleware
+from app.middleware.security_headers import setup_security_headers_middleware
 
 # Configured before anything else so every module-level logger call
 # made during application construction below is already covered.
@@ -49,6 +50,7 @@ def create_application() -> FastAPI:
     setup_logging_middleware(application)
     setup_request_id_middleware(application)
     setup_metrics_middleware(application)
+    setup_security_headers_middleware(application)
     setup_exception_handlers(application)
     # API routes
     application.include_router(

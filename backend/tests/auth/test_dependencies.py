@@ -6,15 +6,17 @@ from fastapi.security import HTTPAuthorizationCredentials
 from jose import JWTError
 
 from app.auth.dependencies import get_current_user, get_current_user_for_media
+from app.core.exceptions import InactiveUserError
 
 
 def _credentials(token: str) -> HTTPAuthorizationCredentials:
     return HTTPAuthorizationCredentials(scheme="Bearer", credentials=token)
 
 
-def _make_user(user_id: int):
+def _make_user(user_id: int, is_active: bool = True):
     user = MagicMock(name="user")
     user.id = user_id
+    user.is_active = is_active
     return user
 
 
@@ -61,6 +63,23 @@ def test_get_current_user_raises_401_when_user_no_longer_exists():
             get_current_user(credentials=_credentials("valid-token"), db=MagicMock())
 
     assert exc_info.value.status_code == 401
+
+
+def test_get_current_user_rejects_deactivated_account():
+    """
+    A still-valid token for a since-deactivated account must stop
+    granting access immediately, not just at next login.
+    """
+    with (
+        patch("app.auth.dependencies.decode_token", return_value={"sub": "42"}),
+        patch("app.auth.dependencies.UserRepository") as mock_repo_cls,
+    ):
+        mock_repo_cls.return_value.get_by_id.return_value = _make_user(
+            42, is_active=False,
+        )
+
+        with pytest.raises(InactiveUserError):
+            get_current_user(credentials=_credentials("valid-token"), db=MagicMock())
 
 
 # ---- get_current_user_for_media ----

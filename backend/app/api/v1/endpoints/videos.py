@@ -1,3 +1,4 @@
+import logging
 import mimetypes
 
 from fastapi import APIRouter
@@ -19,10 +20,12 @@ from app.api.deps import get_video_service
 from app.api.deps import get_processing_job_service
 from app.api.deps import get_upload_pipeline
 from app.api.deps import get_storage_backend
+from app.api.deps import get_embedding_service
 
 from app.pipelines.upload_pipeline import UploadPipeline
 from app.services.processing_job import ProcessingJobService
 from app.services.video import VideoService
+from app.services.embedding import EmbeddingService
 from app.schemas.video import VideoRead
 from app.schemas.video import VideoUpdate
 from app.schemas.video import VideoStatusResponse
@@ -31,8 +34,18 @@ from app.schemas.processing_job import ProcessingJobRead
 
 from app.storage.base import StorageBackend
 
+from app.config.settings import settings
+from app.core.rate_limit import rate_limit
+
+from ai.embedding.vector_store import VectorStore
+
+from app.utils.uploads import (
+    sanitize_filename,
+    save_upload_within_limit,
+    validate_upload_extension,
+)
+
 import uuid
-import shutil
 
 from app.config.settings import VIDEO_UPLOAD_DIR
 
@@ -40,6 +53,8 @@ router = APIRouter(
     prefix="/videos",
     tags=["Videos"],
 )
+
+logger = logging.getLogger(__name__)
 
 # Videos are saved to VIDEO_UPLOAD_DIR/{filename} today (see
 # upload_video below) - VIDEO_UPLOAD_DIR is STORAGE_DIR / "videos",
@@ -182,6 +197,7 @@ def get_processing_jobs(
 @router.post(
     "/upload",
     response_model=VideoRead,
+    dependencies=[Depends(rate_limit("upload", settings.rate_limit.upload_limit, 3600))],
 )
 async def upload_video(
     file: UploadFile = File(...),
@@ -199,18 +215,20 @@ async def upload_video(
         exist_ok=True,
     )
 
+    safe_filename = sanitize_filename(file.filename or "")
+    validate_upload_extension(safe_filename)
+
     unique_filename = (
-        f"{uuid.uuid4()}_{file.filename}"
+        f"{uuid.uuid4()}_{safe_filename}"
     )
 
     file_path = VIDEO_UPLOAD_DIR / unique_filename
 
-    with file_path.open("wb") as buffer:
-        shutil.copyfileobj(
-            file.file,
-            buffer,
-        )
-        
+    save_upload_within_limit(
+        file,
+        file_path,
+    )
+
     metadata = extract_metadata(
         str(file_path)
     )
@@ -236,14 +254,70 @@ def delete_video(
     video_id: int,
     current_user: User = Depends(get_current_user),
     service: VideoService = Depends(get_video_service),
+    embedding_service: EmbeddingService = Depends(get_embedding_service),
+    storage: StorageBackend = Depends(get_storage_backend),
 ):
     """
-    Delete a video.
+    Delete a video and every artifact derived from it.
+
+    Database rows (transcript, summaries, translations, chapters,
+    quizzes, flashcards, embeddings, processing jobs) are already
+    covered by ON DELETE CASCADE. This additionally removes the two
+    things that live outside the database and were previously left
+    behind forever: the uploaded source file (via the same
+    StorageBackend the stream endpoint reads through) and this
+    video's vectors in the shared FAISS index (via VectorStore.replace,
+    the same mechanism used to swap embeddings on reprocessing).
+
+    Ownership is checked first (get_video 404s if this video isn't
+    the caller's), exactly as every other video-scoped endpoint - the
+    cleanup below never runs against a video the caller doesn't own.
     """
-    return service.delete_video(
+    video = service.get_video(
         video_id=video_id,
         user_id=current_user.id,
     )
+
+    filename = video.filename
+    vector_ids = {
+        embedding.vector_id
+        for embedding in embedding_service.get_by_video_id(video_id)
+    }
+
+    result = service.delete_video(
+        video_id=video_id,
+        user_id=current_user.id,
+    )
+
+    # Best-effort from here: the database row is already gone (the
+    # deletion itself already succeeded), so a storage/FAISS cleanup
+    # failure is logged rather than turned into an error response -
+    # the same "cleanup is best-effort, not transactional with the
+    # DB" posture this project already takes in video_pipeline.py's
+    # embedding_stage.
+    try:
+        storage.delete(_video_storage_key(filename))
+    except Exception:
+        logger.exception(
+            "Failed to delete stored file for video %s (filename=%s).",
+            video_id,
+            filename,
+        )
+
+    if vector_ids:
+        try:
+            VectorStore(dimension=1024).replace(
+                remove_vector_ids=vector_ids,
+                vectors=[],
+                vector_ids=[],
+            )
+        except Exception:
+            logger.exception(
+                "Failed to remove FAISS vectors for video %s.",
+                video_id,
+            )
+
+    return result
     
 @router.put(
     "/{video_id}",

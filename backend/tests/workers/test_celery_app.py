@@ -6,6 +6,24 @@ def test_task_acks_late_enabled_for_crash_safe_redelivery():
     assert celery_app.conf.task_reject_on_worker_lost is True
 
 
+def test_broker_visibility_timeout_is_configured_below_the_redis_default():
+    """
+    task_acks_late's crash-redelivery guarantee is only real if the
+    Redis transport's visibility_timeout is actually set - left unset,
+    it silently falls back to Redis's own default (3600s), which is
+    what "task_acks_late enabled" alone does NOT protect against. A
+    crashed/restarted worker's in-flight task would otherwise stay
+    invisible to every other worker for up to an hour - confirmed live
+    against this project's own Celery/Redis deployment.
+    """
+    from app.config.settings import settings
+
+    timeout = celery_app.conf.broker_transport_options["visibility_timeout"]
+
+    assert timeout == settings.celery.broker_visibility_timeout
+    assert 0 < timeout < 3600
+
+
 def test_broker_connection_retry_on_startup_enabled():
     assert celery_app.conf.broker_connection_retry_on_startup is True
 

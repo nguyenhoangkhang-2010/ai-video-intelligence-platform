@@ -12,6 +12,8 @@ from app.auth.jwt import decode_token
 from app.auth.oauth2 import oauth2_scheme
 from app.database.session import get_db
 
+from app.core.exceptions import InactiveUserError
+
 from app.repositories.user import UserRepository
 
 from app.models.user import User
@@ -50,6 +52,15 @@ def _resolve_user_from_token(
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="User not found",
+        )
+
+    if not user.is_active:
+        # A still-valid token for a since-deactivated account must
+        # stop working immediately, not just at next login - checked
+        # here since every protected endpoint (get_current_user and
+        # get_current_user_for_media) funnels through this function.
+        raise InactiveUserError(
+            "This account has been deactivated.",
         )
 
     return user

@@ -1,10 +1,25 @@
+from app.core.exceptions import InvalidJobStatusTransitionError
 from app.models.processing_job import ProcessingJob
 from app.repositories.processing_job import ProcessingJobRepository
 
 from fastapi import HTTPException
-from fastapi import status
+from fastapi import status as http_status
 
 from datetime import datetime, UTC
+
+# Transitions a caller of update_job_status (the only path
+# PATCH /processing-jobs/{id} - a client-facing, owner-writable
+# endpoint - goes through) may request. Terminal states (COMPLETED,
+# FAILED) allow no further transition. Internal pipeline code
+# (start_job/complete_job/fail_job/update_progress, driven by the
+# Celery worker, not this method) is unaffected - this only
+# constrains the one client-writable status path.
+_VALID_JOB_STATUS_TRANSITIONS: dict[str, set[str]] = {
+    "PENDING": {"RUNNING", "FAILED"},
+    "RUNNING": {"COMPLETED", "FAILED"},
+    "COMPLETED": set(),
+    "FAILED": set(),
+}
 
 class ProcessingJobService:
     """Service for processing job business logic."""
@@ -81,7 +96,7 @@ class ProcessingJobService:
 
         if job is None:
             raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
+                status_code=http_status.HTTP_404_NOT_FOUND,
                 detail="Processing job not found",
             )
 
@@ -105,7 +120,7 @@ class ProcessingJobService:
 
         if job is None:
             raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
+                status_code=http_status.HTTP_404_NOT_FOUND,
                 detail="Processing job not found",
             )
 
@@ -118,18 +133,30 @@ class ProcessingJobService:
         error_message: str | None = None,
     ) -> ProcessingJob:
         """
-        Update processing job status.
+        Update processing job status (the client-facing
+        PATCH /processing-jobs/{id} path only - see
+        _VALID_JOB_STATUS_TRANSITIONS).
         """
         job = self.repository.get_by_id(job_id)
 
         if job is None:
             raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
+                status_code=http_status.HTTP_404_NOT_FOUND,
                 detail="Processing job not found",
             )
 
+        allowed_next_statuses = _VALID_JOB_STATUS_TRANSITIONS.get(
+            job.status, set(),
+        )
+
+        if status not in allowed_next_statuses:
+            raise InvalidJobStatusTransitionError(
+                f"Cannot transition processing job from "
+                f"'{job.status}' to '{status}'."
+            )
+
         job.status = status
-        
+
         if status == "RUNNING" and job.started_at is None:
             job.started_at = datetime.now(UTC)
 
@@ -175,7 +202,7 @@ class ProcessingJobService:
 
         if job is None:
             raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
+                status_code=http_status.HTTP_404_NOT_FOUND,
                 detail="Processing job not found",
             )
 
@@ -195,7 +222,7 @@ class ProcessingJobService:
 
         if job is None:
             raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
+                status_code=http_status.HTTP_404_NOT_FOUND,
                 detail="Processing job not found",
             )
 
@@ -216,7 +243,7 @@ class ProcessingJobService:
 
         if job is None:
             raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
+                status_code=http_status.HTTP_404_NOT_FOUND,
                 detail="Processing job not found",
             )
 
@@ -243,7 +270,7 @@ class ProcessingJobService:
 
         if job is None:
             raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
+                status_code=http_status.HTTP_404_NOT_FOUND,
                 detail="Processing job not found",
             )
 

@@ -140,6 +140,27 @@ def test_patch_processing_job_verifies_ownership_before_mutating(client):
     )
 
 
+def test_patch_processing_job_rejects_status_outside_the_known_enum(client):
+    """
+    ProcessingJobStatusUpdate.status is now a Literal of the 4 real
+    ProcessingJob.status values - an arbitrary string must be
+    rejected by request validation (422) before it ever reaches the
+    service/database, not silently accepted.
+    """
+    current_user = _make_user(user_id=99)
+    service = MagicMock(name="service")
+
+    app.dependency_overrides[get_current_user] = lambda: current_user
+    app.dependency_overrides[get_processing_job_service] = lambda: service
+
+    response = client.patch(
+        "/api/v1/processing-jobs/1", json={"status": "DEFINITELY_NOT_A_REAL_STATUS"},
+    )
+
+    assert response.status_code == 422
+    service.update_job_status.assert_not_called()
+
+
 def test_patch_processing_job_not_owned_returns_404_and_never_mutates(client):
     from fastapi import HTTPException
 
