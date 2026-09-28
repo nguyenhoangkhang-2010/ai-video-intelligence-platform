@@ -3,8 +3,11 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
 
 import { useNovaAttention } from "@/components/3d/NovaAttentionContext";
+import { useAccentSlotClaim } from "@/components/3d/workspace3d/AccentSlotContext";
+import { Workspace3DObject } from "@/components/3d/workspace3d/Workspace3DObject";
 import { AIMessage } from "@/components/chat/AIMessage";
 import { Icon } from "@/components/ui/Icon";
+import { Skeleton } from "@/components/ui/Spinner";
 import { useChat } from "@/hooks/useChat";
 import { cn } from "@/lib/utils";
 
@@ -15,10 +18,20 @@ const SUGGESTED_PROMPTS = [
 ];
 
 export function ChatPanel({ videoId, videoTitle }: { videoId: number; videoTitle?: string }) {
-  const { messages, send, isSending } = useChat(videoId);
+  const { messages, send, isSending, isHistoryLoading } = useChat(videoId);
   const [draft, setDraft] = useState("");
   const scrollRef = useRef<HTMLDivElement>(null);
   const lastMessage = messages[messages.length - 1];
+  // A brief rs_ai_answer.glb accent next to the answer that just
+  // arrived - `key` changes each time a real assistant message
+  // finishes (see the effect below), and the accent itself hides again
+  // a few seconds later so it reads as a one-time reaction to this
+  // specific answer, not a permanent fixture competing with Nova's own
+  // header signal glyph.
+  const [answerAccent, setAnswerAccent] = useState<{ messageId: string; key: number } | null>(null);
+  // Claims the shared Workspace accent slot only while a real answer
+  // accent is actually mounted below (see AccentSlotContext.tsx).
+  useAccentSlotClaim(answerAccent !== null);
   // Drives the single, product-wide Nova entity (see NovaAmbient) -
   // this panel doesn't own a Nova of its own, it's one of several
   // places that can tell the same living Nova what's happening.
@@ -33,8 +46,26 @@ export function ChatPanel({ videoId, videoTitle }: { videoId: number; videoTitle
   }, [isSending, notice]);
 
   useEffect(() => {
-    if (lastMessage?.role !== "assistant" || lastMessage.pending || lastMessage.status !== "answered") return;
+    // `hist-*` ids come from useChat's one-time seed of this user's
+    // past turns (see toMessages there) - a real answer, but not one
+    // that just happened this session, so it must never re-trigger
+    // Nova's "success" gesture or the answer accent as if it had.
+    if (
+      lastMessage?.role !== "assistant" ||
+      lastMessage.pending ||
+      lastMessage.status !== "answered" ||
+      lastMessage.id.startsWith("hist-")
+    )
+      return;
     notice("success", 1400);
+    // Stays next to the latest answered message indefinitely - no
+    // fixed-duration hide timer, which was fragile either way (too
+    // short and a person could miss the accent entirely, too long and
+    // it lingers after they've moved on). It naturally disappears from
+    // THIS message the moment a newer one finishes and takes its
+    // place, since `showAnswerAccent` only ever matches the single
+    // most-recently-answered message id.
+    setAnswerAccent((current) => ({ messageId: lastMessage.id, key: (current?.key ?? 0) + 1 }));
   }, [lastMessage?.id, lastMessage?.status, lastMessage?.pending, lastMessage?.role, notice]);
 
   function handleSubmit(event: FormEvent) {
@@ -59,7 +90,16 @@ export function ChatPanel({ videoId, videoTitle }: { videoId: number; videoTitle
       </div>
 
       <div ref={scrollRef} className="flex-1 overflow-y-auto px-4 py-4 sm:px-6">
-        {messages.length === 0 ? (
+        {isHistoryLoading ? (
+          // A brief real load of this user's own past turns for this
+          // video (see useChat.ts) - shown instead of the empty state
+          // so a returning conversation doesn't flash "Ask this video
+          // anything" for a moment before its real history appears.
+          <div className="mx-auto flex max-w-2xl flex-col gap-4">
+            <Skeleton className="ml-auto h-8 w-2/5" />
+            <Skeleton className="h-16 w-3/4" />
+          </div>
+        ) : messages.length === 0 ? (
           <div className="mx-auto flex h-full max-w-xl flex-col items-center justify-center gap-4 text-center">
             <span className="flex h-11 w-11 items-center justify-center rounded-full bg-ai-muted text-ai">
               <Icon name="chat" size={20} />
@@ -92,12 +132,31 @@ export function ChatPanel({ videoId, videoTitle }: { videoId: number; videoTitle
                 message.role === "assistant" &&
                 Boolean(message.error) &&
                 precedingUserMessage?.role === "user";
+              const showAnswerAccent = answerAccent?.messageId === message.id;
               return (
-                <div key={message.id} className="animate-mode-enter">
+                <div key={message.id} className="relative animate-mode-enter">
                   <AIMessage
                     message={message}
                     onRetry={canRetry ? () => void send(precedingUserMessage!.content) : undefined}
                   />
+                  {/*
+                   * rs_ai_answer.glb (ui-3d/README.md) - a small,
+                   * secondary accent (Nova, in the header above, is
+                   * still the primary AI presence) playing its real
+                   * "Answer" clip once when this specific message
+                   * finishes, then hiding again - not a permanent
+                   * fixture that would compete with Nova for
+                   * attention.
+                   */}
+                  {showAnswerAccent && (
+                    <Workspace3DObject
+                      key={answerAccent.key}
+                      model="aiAnswer"
+                      playClip="Answer"
+                      playKey={answerAccent.key}
+                      className="mt-1 h-16 w-28 animate-mode-enter opacity-90"
+                    />
+                  )}
                 </div>
               );
             })}
@@ -130,7 +189,7 @@ export function ChatPanel({ videoId, videoTitle }: { videoId: number; videoTitle
           </button>
         </div>
         <p className="mx-auto mt-1.5 max-w-2xl px-1 text-[11px] text-text-disabled">
-          Each question is answered independently — this conversation isn&apos;t saved.
+          Each question is answered independently, grounded only in this video — your past questions and answers are saved here so you can find them again.
         </p>
       </form>
     </div>

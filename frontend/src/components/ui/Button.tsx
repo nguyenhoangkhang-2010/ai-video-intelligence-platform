@@ -12,7 +12,7 @@ import { cn } from "@/lib/utils";
 // link-weight action next to prose; "ghost" stays the icon-toolbar
 // weight (a hover surface, no text color shift needed) - the two are
 // visually and semantically distinct, not duplicates.
-type Variant = "primary" | "secondary" | "quiet" | "ghost" | "danger" | "ai";
+type Variant = "primary" | "secondary" | "quiet" | "ghost" | "danger" | "ai" | "unstyled";
 type Size = "sm" | "md" | "lg";
 
 interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
@@ -41,6 +41,12 @@ const variantClasses: Record<Variant, string> = {
   // teal accent as Nova/evidence, never used for general product
   // actions (those stay "primary"/cobalt).
   ai: "bg-ai text-ai-on shadow-sm hover:bg-ai-hover hover:shadow-md active:translate-y-px active:shadow-sm disabled:bg-ai/40 disabled:shadow-none",
+  // No background/border/shadow of its own — for a caller supplying
+  // its own visual underneath (a ui-3d GLB layer via Button3D.tsx) and
+  // needing only the real interactive/structural button shell: shape,
+  // sizing, focus ring, disabled cursor. Never used directly in JSX;
+  // Button3D is the one caller.
+  unstyled: "",
 };
 
 const sizeClasses: Record<Size, string> = {

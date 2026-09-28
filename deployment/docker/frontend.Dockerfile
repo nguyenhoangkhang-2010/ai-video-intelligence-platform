@@ -4,15 +4,6 @@
 # Build context is expected to be frontend/, e.g.:
 #   docker build -f deployment/docker/frontend.Dockerfile -t <name> frontend
 # (docker-compose.yml's "frontend" profile service is wired this way.)
-#
-# NOTE (repository audit finding, Phase 12): as of this Dockerfile's
-# authoring, frontend/ is an empty scaffold - package.json has no
-# name/dependencies/scripts and there is no lockfile yet, so this
-# image cannot actually be built until real Next.js application code
-# and a lockfile (package-lock.json) are added. The stages below are
-# written to be correct for a standard Next.js app the moment that
-# happens, using only the existing package.json/lockfile - nothing
-# about the frontend's application code is invented here.
 
 # ---------- deps ----------
 FROM node:20-alpine AS deps

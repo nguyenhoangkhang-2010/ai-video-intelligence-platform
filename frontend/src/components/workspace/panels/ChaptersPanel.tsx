@@ -1,5 +1,7 @@
 "use client";
 
+import { useAccentSlotClaim } from "@/components/3d/workspace3d/AccentSlotContext";
+import { Workspace3DObject } from "@/components/3d/workspace3d/Workspace3DObject";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { ErrorState } from "@/components/ui/ErrorState";
 import { ProcessingState } from "@/components/ui/ProcessingState";
@@ -22,6 +24,10 @@ import type { VideoStatus } from "@/types/video";
 export function ChaptersPanel({ videoId, videoStatus }: { videoId: number; videoStatus: VideoStatus }) {
   const chapters = useChapters(videoId, videoStatus);
   const player = useVideoPlayer();
+  // Claims the shared Workspace accent slot only for the render passes
+  // that actually mount the chapter-strip Workspace3DObject below (see
+  // AccentSlotContext.tsx) - called unconditionally (rules of hooks).
+  useAccentSlotClaim(!chapters.isLoading && !chapters.isError && (!chapters.data || chapters.data.length === 0));
 
   if (chapters.isLoading) {
     return (
@@ -38,21 +44,35 @@ export function ChaptersPanel({ videoId, videoStatus }: { videoId: number; video
   }
 
   if (!chapters.data || chapters.data.length === 0) {
+    // rs_chapter_strip.glb is baked to exactly 5 segments, so it can
+    // never honestly stand in for this video's own real, arbitrary-
+    // length chapter list (that's still the HTML timeline below, once
+    // real chapters exist) - it's used here only in the two states
+    // where there is no real chapter array yet to misrepresent, as a
+    // purely abstract "this is what a narrative map looks like" motif.
     if (!isTerminalVideoStatus(videoStatus)) {
       return (
-        <ProcessingState
-          icon="chapters"
-          title="Chapters are being detected…"
-          description="This updates automatically the moment they're ready — no need to refresh."
-        />
+        <div className="flex flex-col items-center gap-4 py-4">
+          <Workspace3DObject model="chapterStrip" loopClip="Scan" className="h-16 w-40" />
+          <ProcessingState
+            icon="chapters"
+            title="Chapters are being detected…"
+            description="This updates automatically the moment they're ready — no need to refresh."
+            compact
+          />
+        </div>
       );
     }
     return (
-      <EmptyState
-        icon="chapters"
-        title="No chapters detected"
-        description="Chapter detection is best-effort — short or single-topic videos may not produce any."
-      />
+      <div className="flex flex-col items-center gap-4 py-4">
+        <Workspace3DObject model="chapterStrip" className="h-16 w-40 opacity-70" />
+        <EmptyState
+          icon="chapters"
+          title="No chapters detected"
+          description="Chapter detection is best-effort — short or single-topic videos may not produce any."
+          compact
+        />
+      </div>
     );
   }
 

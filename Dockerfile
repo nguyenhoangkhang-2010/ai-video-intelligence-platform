@@ -17,6 +17,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libsndfile1 \
     libgl1 \
     libglib2.0-0 \
+    gosu \
     && rm -rf /var/lib/apt/lists/*
 
 RUN python -m pip install --upgrade pip setuptools wheel
@@ -43,7 +44,12 @@ ENV PYTHONUNBUFFERED=1
 
 RUN groupadd --system app && useradd --system --gid app --home-dir /app app \
     && chown -R app:app /app
-USER app
+
+# Deliberately NOT `USER app` here - see backend/scripts/
+# docker-entrypoint.sh and deployment/docker/backend.Dockerfile's own
+# copy of this same comment for why the entrypoint needs to start as
+# root and drop to "app" (via gosu) itself, rather than the image
+# doing it upfront.
 
 WORKDIR /app/backend
 

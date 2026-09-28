@@ -1,5 +1,8 @@
 "use client";
 
+import { useAccentSlotClaim } from "@/components/3d/workspace3d/AccentSlotContext";
+import { statusBadgeHideNodes } from "@/components/3d/workspace3d/registry";
+import { Workspace3DObject } from "@/components/3d/workspace3d/Workspace3DObject";
 import { BaseBadge, type Tone } from "@/components/ui/StatusBadge";
 import { ErrorState } from "@/components/ui/ErrorState";
 import { Icon, type IconName } from "@/components/ui/Icon";
@@ -60,15 +63,19 @@ export function OverviewPanel({ video, onNavigate }: OverviewPanelProps) {
   const chapters = useChapters(video.id, video.status);
   const flashcards = useFlashcards(video.id, video.status);
   const player = useVideoPlayer();
+  // Claims the shared Workspace accent slot only for the render passes
+  // that actually mount the status-badge Workspace3DObject below (see
+  // AccentSlotContext.tsx) - called unconditionally (rules of hooks),
+  // with the same real availability check the accent's own render
+  // guard depends on.
+  useAccentSlotClaim(!meeting.isLoading && !meeting.isError);
 
   if (meeting.isLoading) {
     return (
       <div className="flex flex-col gap-4 p-6">
         <Skeleton className="h-8 w-2/3" />
-        <div className="grid grid-cols-1 gap-4 lg:grid-cols-[1fr_300px]">
-          <Skeleton className="h-40 w-full" />
-          <Skeleton className="h-40 w-full" />
-        </div>
+        <Skeleton className="h-40 w-full" />
+        <Skeleton className="h-24 w-full" />
       </div>
     );
   }
@@ -94,22 +101,53 @@ export function OverviewPanel({ video, onNavigate }: OverviewPanelProps) {
   ];
   const readyCount = capabilities.filter((capability) => capability.ready).length;
 
+  // rs_status_badges.glb bakes all three states as nested groups in
+  // one file (see registry.ts's STATUS_BADGE_GROUPS) - hiding the
+  // other two leaves only the one matching this video's own real
+  // `status`, so the accent visually confirms the same fact
+  // `videoStatusLabel` already states in text, never a second/
+  // duplicate signal.
+  const statusBadgeHide = statusBadgeHideNodes(
+    video.status === "processed" ? "ready" : video.status === "failed" ? "failed" : "processing",
+  );
+
   return (
     <div className="flex flex-col gap-8 p-6 sm:p-8">
-      <div>
-        <p className="text-label font-medium uppercase tracking-[0.14em] text-accent">AI Video Brief</p>
-        <h1 className="mt-2 font-display text-display-lg font-semibold leading-tight text-text-primary">
-          {video.title}
-        </h1>
-        <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1 text-body-sm text-text-muted">
-          <span>{formatDate(video.created_at)}</span>
-          {video.duration > 0 && <span className="font-mono">{formatTimecode(video.duration)}</span>}
-          {video.language !== "unknown" && <span className="uppercase tracking-wide">{video.language}</span>}
-          <span>{videoStatusLabel(video.status)}</span>
+      <div className="flex items-start justify-between gap-4">
+        <div className="min-w-0">
+          <p className="text-label font-medium uppercase tracking-[0.14em] text-accent">AI Video Brief</p>
+          <h1 className="mt-2 font-display text-display-lg font-semibold leading-tight text-text-primary">
+            {video.title}
+          </h1>
+          <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1 text-body-sm text-text-muted">
+            <span>{formatDate(video.created_at)}</span>
+            {video.duration > 0 && <span className="font-mono">{formatTimecode(video.duration)}</span>}
+            {video.language !== "unknown" && <span className="uppercase tracking-wide">{video.language}</span>}
+            <span>{videoStatusLabel(video.status)}</span>
+          </div>
         </div>
+        <Workspace3DObject
+          model="statusBadges"
+          hideNodes={statusBadgeHide}
+          loopClip="Pulse"
+          className="hidden h-14 w-20 shrink-0 sm:block"
+        />
       </div>
 
-      <div className="grid grid-cols-1 gap-8 lg:grid-cols-[1fr_300px]">
+      {/*
+       * A single editorial column, not a side-by-side grid - the old
+       * `lg:grid-cols-[1fr_300px]` split was tuned for the full-width
+       * layout this panel used to run in. Now that the Workspace is a
+       * real video|content split (see the workspace page), this column
+       * is itself only ~400-570px wide even on a large desktop, which
+       * is too narrow for a fixed 300px side panel to breathe next to
+       * an editorial lead paragraph - found live, it left the summary
+       * crushed into roughly 230-270px. Stacking reads better at every
+       * one of these narrower widths, and still feels like a real
+       * report (summary, then readiness, then chapters), not a
+       * dashboard forcing itself into a column too narrow for it.
+       */}
+      <div className="flex flex-col gap-8">
         {/* Executive summary — large, editorial lead, not a truncated card. */}
         <section className="min-w-0">
           <p className="text-label font-semibold uppercase tracking-wide text-text-secondary">Executive summary</p>
@@ -149,8 +187,13 @@ export function OverviewPanel({ video, onNavigate }: OverviewPanelProps) {
           )}
         </section>
 
-        {/* Insight stack — compact, not a grid of boxes. */}
-        <section className="min-w-0 lg:border-l lg:border-border lg:pl-6">
+        {/*
+         * Readiness — a two-column strip of compact badges rather than
+         * a stacked list, now that it has the full column width to
+         * itself instead of a cramped 300px sidebar - reads as one
+         * quick scan of "what's ready" instead of a tall list.
+         */}
+        <section className="min-w-0 border-t border-border pt-6">
           <div className="flex items-center justify-between">
             <p className="text-label font-semibold uppercase tracking-wide text-text-secondary">Readiness</p>
             <span className="font-mono text-caption text-text-muted">
@@ -165,7 +208,7 @@ export function OverviewPanel({ video, onNavigate }: OverviewPanelProps) {
             <Icon name="chat" size={14} />
             Ask about this video
           </button>
-          <div className="mt-4 flex flex-col divide-y divide-border">
+          <div className="mt-4 grid grid-cols-1 gap-x-4 gap-y-0.5 divide-y divide-border sm:grid-cols-2 sm:divide-y-0">
             {capabilities.map((capability) => (
               <button
                 key={capability.section}

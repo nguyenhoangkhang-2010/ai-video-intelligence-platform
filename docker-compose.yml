@@ -253,10 +253,12 @@ services:
     depends_on:
       - prometheus
 
-  # Not started by a plain `docker compose up` - the frontend app
-  # (frontend/) is currently an empty scaffold with no installable
-  # package.json, so its build would fail. Activate explicitly once
-  # real frontend code exists with `docker compose --profile frontend up`.
+  # Not started by a plain `docker compose up` - opt-in production-build
+  # frontend container for testing the built (not `next dev`) app
+  # locally. Activate with `docker compose --profile frontend up`.
+  # Day-to-day frontend development still uses `npm run dev` directly
+  # (frontend/) against this stack's api service, which is faster to
+  # iterate on than rebuilding this image on every change.
   frontend:
     profiles: ["frontend"]
 

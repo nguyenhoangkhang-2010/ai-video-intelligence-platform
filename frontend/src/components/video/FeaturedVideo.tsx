@@ -24,6 +24,14 @@ export function FeaturedVideo({ video }: { video: Video }) {
           className="absolute inset-0 bg-[radial-gradient(ellipse_at_30%_20%,rgb(var(--color-surface-elevated))_0%,rgb(var(--color-surface-sunken))_75%)]"
           aria-hidden="true"
         />
+        {/*
+         * rs_video_frame.glb moved to the real Workspace video player
+         * (see app/(app)/videos/[id]/page.tsx) - it now wraps the video
+         * that's actually playing there, instead of decorating this
+         * card, which has no real footage to frame (see the module
+         * comment above: "no thumbnail exists... never dressed up to
+         * look like a real video frame").
+         */}
         <div
           className="absolute inset-0 opacity-[0.07] transition-opacity duration-base group-hover:opacity-[0.12]"
           style={{

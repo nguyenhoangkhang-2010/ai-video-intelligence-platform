@@ -69,7 +69,18 @@ export function NovaScene({ children, mode = "ambient" }: NovaSceneProps) {
       <directionalLight position={[1.5, 2.5, 3]} intensity={1.6} color="#ffffff" />
       <directionalLight position={[-2, 1, -1.5]} intensity={0.3} color="#5CF2E3" />
       <Suspense fallback={null}>
-        <Environment preset="studio" environmentIntensity={0.6} />
+        {/*
+         * Self-hosted, not drei's preset="studio" (which fetches from a
+         * third-party CDN hardcoded into @react-three/drei itself). That
+         * CDN redirects cross-origin (raw.githack.com -> raw.githubusercontent.com),
+         * so no CSP connect-src allowlist of the first hop actually covers
+         * the real fetch target - confirmed live, it kept failing even
+         * once the first origin was allowlisted. Self-hosting the exact
+         * same asset removes the runtime dependency on any third party
+         * entirely: no CSP entry needed beyond 'self', works offline,
+         * and survives if that CDN ever changes its redirect chain again.
+         */}
+        <Environment files="/assets/hdr/studio_small_03_1k.hdr" environmentIntensity={0.6} />
         {children}
       </Suspense>
     </Canvas>

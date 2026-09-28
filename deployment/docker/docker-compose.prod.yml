@@ -16,15 +16,31 @@
 # .env.production is never committed - see .env.example for the
 # variables it must define (this compose file reads the same names).
 #
-# This is a deployment FOUNDATION: it does not include TLS
-# termination, secrets-manager integration, autoscaling, Kubernetes,
-# or an actual target host/provider - see deployment/docker/README.md
-# and docs/deployment.md for what is and is not covered.
+# nginx terminates TLS using deployment/nginx/certs/{localhost.crt,
+# localhost.key} (see deployment/nginx/nginx.conf and
+# deployment/docker/README.md for how to generate/replace them - the
+# key is never committed, see .gitignore). This is still a deployment
+# FOUNDATION in every other respect: no secrets-manager integration,
+# no autoscaling, no Kubernetes, no actual target host/provider - see
+# deployment/docker/README.md and docs/deployment.md for what is and
+# is not covered.
 #
 # Resource limits below are conservative starting points, not
 # universally-correct values for every deployment - tune via the
 # *_CPU_LIMIT/*_MEMORY_LIMIT environment variables (see .env.example)
 # once you know this workload's actual behavior on your hardware.
+#
+# Explicit project name: without one, Compose defaults to the
+# basename of the directory THIS FILE lives in ("docker"), not the
+# repository name - found live, on this exact machine, colliding with
+# an unrelated project whose own compose file also happens to live in
+# a directory named "docker". Compose then treated that project's
+# containers as this stack's "orphans" (visible in `docker compose
+# ... ps -a` output alongside this stack's own services) and vice
+# versa. An explicit name removes the ambiguity regardless of what
+# directory the file happens to sit in on any given machine.
+name: ai-video-intelligence-prod
+
 services:
   db:
     image: postgres:16-alpine
@@ -88,6 +104,14 @@ services:
       CELERY_RESULT_BACKEND: redis://redis:6379/0
       ENVIRONMENT: production
       DEBUG: "False"
+      # Deliberately under the storage_data volume, NOT the image's
+      # own default (~app/.cache/huggingface, outside any volume) -
+      # found live: without this override, a genuinely large embedding
+      # model download (BGE-M3, several GB) landed outside storage_data
+      # entirely, so it would silently re-download in full on every
+      # container recreation instead of persisting - same reasoning as
+      # docker-compose.yml's (development) identical override.
+      HF_HOME: /app/storage/.cache/huggingface
 
     volumes:
       - storage_data:/app/storage
@@ -144,6 +168,8 @@ services:
       # "api" is the single designated migrator (see
       # backend/scripts/docker-entrypoint.sh).
       RUN_MIGRATIONS_ON_START: "false"
+      # See the "api" service's HF_HOME comment above - same reasoning.
+      HF_HOME: /app/storage/.cache/huggingface
 
     volumes:
       - storage_data:/app/storage
@@ -208,6 +234,8 @@ services:
       RUN_MIGRATIONS_ON_START: "false"
       WHISPER_DEVICE: cuda
       METRICS_WORKER_PORT: 9101
+      # See the "api" service's HF_HOME comment above - same reasoning.
+      HF_HOME: /app/storage/.cache/huggingface
 
     volumes:
       - storage_data:/app/storage
@@ -250,12 +278,20 @@ services:
 
     ports:
       - "80:80"
+      - "443:443"
 
     volumes:
       - ../nginx/nginx.conf:/etc/nginx/conf.d/default.conf:ro
+      - ../nginx/certs:/etc/nginx/certs:ro
 
     depends_on:
       - api
+    # NOT depends_on: frontend - frontend is profile-gated ("frontend"
+    # profile, see above) and nginx itself is not, so a plain
+    # `docker compose up` (no --profile frontend, i.e. backend-only)
+    # must still bring nginx up cleanly. When the frontend profile
+    # isn't enabled, "/" simply 502s until it is - the existing,
+    # documented behavior for this optional service.
 
 volumes:
   postgres_data:

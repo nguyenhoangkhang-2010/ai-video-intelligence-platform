@@ -18,8 +18,8 @@ export function WorkspaceHeader({ video }: { video: Video }) {
   const [confirmDelete, setConfirmDelete] = useState(false);
 
   return (
-    <header className="flex shrink-0 items-start justify-between gap-4 border-b border-border px-5 py-5 sm:px-8 sm:py-6">
-      <div className="flex min-w-0 items-start gap-3">
+    <header className="flex shrink-0 items-start justify-between gap-4 border-b border-border px-5 py-6 sm:px-8 sm:py-7">
+      <div className="flex min-w-0 items-start gap-3.5">
         <Link
           href={ROUTES.library}
           aria-label="Back to library"
@@ -36,12 +36,21 @@ export function WorkspaceHeader({ video }: { video: Video }) {
             <span>Workspace</span>
           </nav>
           <h1
-            className="mt-1 truncate font-display text-heading font-semibold leading-tight tracking-tight text-text-primary"
+            className="mt-1.5 truncate font-display text-heading-lg font-semibold leading-tight tracking-tight text-text-primary"
             title={video.title}
           >
             {video.title}
           </h1>
-          <p className="mt-1.5 truncate text-body-sm text-text-muted">
+          {/*
+           * A single grouped metadata line - date/duration/language as
+           * one quiet fact. Deliberately NOT also repeating "AI-ready"/
+           * status here: `VideoStatusBadge` in the header's own
+           * top-right already says exactly this (found live: showing
+           * both was two signals for one fact, which is precisely what
+           * the design brief calls out as "duplicate status signal" -
+           * removed rather than kept as harmless redundancy).
+           */}
+          <p className="mt-2 truncate text-body-sm text-text-muted">
             {formatDate(video.created_at)}
             {video.duration > 0 && ` · ${formatTimecode(video.duration)}`}
             {video.language !== "unknown" && ` · ${video.language.toUpperCase()}`}

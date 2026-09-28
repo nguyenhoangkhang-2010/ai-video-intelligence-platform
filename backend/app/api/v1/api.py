@@ -13,6 +13,7 @@ from app.api.v1.endpoints.translations import router as translations_router
 from app.api.v1.endpoints.meetings import router as meetings_router
 from app.api.v1.endpoints.chapters import router as chapters_router
 from app.api.v1.endpoints.flashcards import router as flashcards_router
+from app.api.v1.endpoints.chat_history import router as chat_history_router
 
 
 api_router = APIRouter()
@@ -30,3 +31,4 @@ api_router.include_router(translations_router)
 api_router.include_router(meetings_router)
 api_router.include_router(chapters_router)
 api_router.include_router(flashcards_router)
+api_router.include_router(chat_history_router)

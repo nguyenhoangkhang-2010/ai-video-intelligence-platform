@@ -9,8 +9,14 @@ import type { Quiz } from "@/types/quiz";
 interface QuizQuestionCardProps {
   quiz: Quiz;
   index: number;
-  /** Fired once, the first time this question is answered/revealed — lets the panel show a real "X of N" session progress indicator. */
-  onAnswered?: () => void;
+  /**
+   * Fired once, the first time this question is answered/revealed —
+   * lets the panel show a real "X of N" session progress indicator.
+   * `wasCorrect` is the same client-side comparison this card already
+   * makes to render the check/cross marks - `undefined` for the
+   * reveal-only short-answer type, which has no notion of right/wrong.
+   */
+  onAnswered?: (wasCorrect?: boolean) => void;
   /** The focused, one-question-at-a-time presentation (QuizPanel) - larger, un-boxed, the question itself as the focal object rather than one card in a list. */
   focused?: boolean;
 }
@@ -28,15 +34,16 @@ export function QuizQuestionCard({ quiz, index, onAnswered, focused }: QuizQuest
   const options = quiz.type === "multiple_choice" ? parseQuizOptions(quiz.options) : ["True", "False"];
   const isChoiceType = quiz.type === "multiple_choice" || quiz.type === "true_false";
 
-  function reveal() {
-    if (!revealed) onAnswered?.();
+  function reveal(wasCorrect?: boolean) {
+    if (!revealed) onAnswered?.(wasCorrect);
     setRevealed(true);
   }
 
   function choose(option: string) {
     if (revealed) return;
     setSelected(option);
-    reveal();
+    const wasCorrect = option.trim().toLowerCase() === quiz.answer.trim().toLowerCase();
+    reveal(wasCorrect);
   }
 
   return (
@@ -102,7 +109,7 @@ export function QuizQuestionCard({ quiz, index, onAnswered, focused }: QuizQuest
           {!revealed ? (
             <button
               type="button"
-              onClick={reveal}
+              onClick={() => reveal()}
               className="rounded border border-border-strong bg-surface-elevated px-3 py-1.5 text-body-sm text-text-secondary transition-colors duration-fast hover:border-accent hover:text-accent"
             >
               Reveal answer

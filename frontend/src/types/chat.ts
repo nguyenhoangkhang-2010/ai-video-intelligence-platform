@@ -2,10 +2,11 @@ import type { SearchResult } from "@/types/search";
 
 /**
  * Matches backend app/schemas/rag.py::RAGResult exactly — these are
- * the only four states that exist; nothing is stateful, no
- * conversation is persisted server-side (see docs/api/rest_api.md,
- * Search & RAG section). Client-side chat history is
- * session/component-local only, never implying a saved conversation.
+ * the only four states that exist. Retrieval/generation itself stays
+ * stateless (no prior turn is fed back into a later call); only a
+ * genuinely `answered` turn is additionally recorded server-side to
+ * `ChatHistory` for later replay (see useChat.ts and
+ * docs/api/rest_api.md, Search & RAG section).
  */
 export type RagStatus = "answered" | "empty_query" | "no_embeddings" | "no_relevant_chunks";
 
@@ -17,7 +18,18 @@ export interface RagResult {
   sources: SearchResult[];
 }
 
-/** A single turn in the client-local (not persisted) chat transcript. */
+/** Matches backend app/schemas/chat_history.py::ChatHistoryRead — one persisted, previously-answered turn. */
+export interface ChatHistoryEntry {
+  id: number;
+  user_id: number;
+  video_id: number;
+  question: string;
+  answer: string;
+  sources: SearchResult[];
+  created_at: string;
+}
+
+/** A single turn in the chat transcript — seeded from persisted ChatHistoryEntry rows on load, then appended to locally as new turns are sent (see useChat.ts). */
 export interface ChatMessage {
   id: string;
   role: "user" | "assistant";

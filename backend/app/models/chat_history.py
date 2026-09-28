@@ -51,6 +51,18 @@ class ChatHistory(Base):
         nullable=False,
     )
 
+    # JSON-serialized list[SearchResult] (see app/schemas/search.py) -
+    # the retrieved chunks this answer was actually grounded in, kept
+    # so a reloaded history entry can still show real citations rather
+    # than silently losing them. Serialized/deserialized in
+    # ChatHistoryService, same convention as Quiz.options (a Text
+    # column for structured-but-simple data, not a new JSON column
+    # type this codebase doesn't otherwise use).
+    sources: Mapped[str | None] = mapped_column(
+        Text,
+        nullable=True,
+    )
+
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         default=datetime.utcnow,

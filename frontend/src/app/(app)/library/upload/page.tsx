@@ -5,7 +5,8 @@ import { useEffect, useRef, useState, type DragEvent } from "react";
 
 import { useNovaAttention } from "@/components/3d/NovaAttentionContext";
 import { Nova } from "@/components/3d/Nova";
-import { Button } from "@/components/ui/Button";
+import { Button3D } from "@/components/3d/workspace3d/Button3D";
+import { Workspace3DObject } from "@/components/3d/workspace3d/Workspace3DObject";
 import { Icon } from "@/components/ui/Icon";
 import { PipelineTracker } from "@/components/upload/PipelineTracker";
 import { useUpload } from "@/hooks/useUpload";
@@ -93,9 +94,19 @@ export default function UploadStudioPage() {
                 isDragging ? "border-accent bg-accent-muted" : "border-border-strong hover:border-text-muted",
               )}
             >
-              <div className="flex h-12 w-12 items-center justify-center rounded-full bg-surface-elevated text-accent">
-                <Icon name="upload" size={22} />
-              </div>
+              {/*
+               * rs_upload_tray.glb's real "Idle" clip (a small arrow
+               * bob inviting a drop) - shown only while this dropzone
+               * itself is genuinely idle (this whole block already
+               * only renders for `stage === "idle"`). Its "Drop"
+               * one-shot clip isn't used here: `handleFile` flips
+               * `stage` to "uploading" essentially the same tick a
+               * real file is handled, unmounting this block before a
+               * one-shot clip could ever finish playing - triggering
+               * it would be motion for its own sake, not a real state
+               * anyone would see.
+               */}
+              <Workspace3DObject model="uploadTray" loopClip="Idle" className="h-16 w-24" />
               <div>
                 <p className="text-body font-medium text-text-primary">Drop a video here, or click to browse</p>
                 <p className="mt-1 text-caption text-text-muted">MP4, MOV, WebM, or MKV — processing starts automatically.</p>
@@ -137,9 +148,9 @@ export default function UploadStudioPage() {
             <div className="mt-3 h-1.5 w-full overflow-hidden rounded-full bg-surface-elevated">
               <div className="h-full rounded-full bg-ai transition-[width] duration-base ease-calm" style={{ width: `${progress}%` }} />
             </div>
-            <Button variant="secondary" size="sm" className="mt-4" onClick={cancel}>
+            <Button3D glbModel="buttonSecondary" variant="secondary" size="sm" className="mt-4" onClick={cancel}>
               Cancel upload
-            </Button>
+            </Button3D>
           </div>
         )}
 
@@ -154,7 +165,8 @@ export default function UploadStudioPage() {
               <p className="text-body font-medium text-text-primary">Upload failed</p>
               <p className="mt-1 max-w-sm text-body-sm text-text-muted">{error}</p>
             </div>
-            <Button
+            <Button3D
+              glbModel="buttonPrimary"
               size="sm"
               onClick={() => {
                 reset();
@@ -162,7 +174,7 @@ export default function UploadStudioPage() {
               }}
             >
               Try again
-            </Button>
+            </Button3D>
           </div>
         )}
 

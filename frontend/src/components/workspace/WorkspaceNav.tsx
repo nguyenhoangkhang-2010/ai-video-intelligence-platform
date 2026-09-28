@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, type KeyboardEvent } from "react";
 
 import { useNovaAttention } from "@/components/3d/NovaAttentionContext";
 import { Icon } from "@/components/ui/Icon";
@@ -31,6 +31,50 @@ function underlineClasses(tone: "ai" | "atmosphere" | undefined) {
   if (tone === "ai") return "bg-ai";
   if (tone === "atmosphere") return "bg-atmosphere";
   return "bg-accent";
+}
+
+// A restrained "elevated surface" for the active Level 2 tab - the
+// same tone-muted fill already used elsewhere (Button's own variants,
+// badge treatments), just applied here so the active mode reads as a
+// raised tab rather than only an underline + color change. Kept to a
+// single shadow step (shadow-sm) and a light tint, not a filled pill -
+// this is a navigation control that stays legible next to eight
+// siblings, not a card.
+function surfaceClasses(tone: "ai" | "atmosphere" | undefined, isActive: boolean) {
+  if (!isActive) return "";
+  if (tone === "ai") return "bg-ai-muted shadow-sm";
+  if (tone === "atmosphere") return "bg-atmosphere-muted shadow-sm";
+  return "bg-accent-muted shadow-sm";
+}
+
+/**
+ * Left/Right (and Home/End) move focus to the adjacent button *within
+ * the same row* and activate it immediately - the standard "automatic
+ * activation" tabs keyboard pattern (WAI-ARIA Authoring Practices),
+ * matching what Tab/Shift+Tab + Enter/Space already give for free on
+ * plain `<button>`s. Implemented by walking DOM siblings rather than
+ * tracking a parallel refs array - each row already renders nothing
+ * but its own same-row buttons, so `previous/nextElementSibling` can't
+ * cross into the other row.
+ */
+function handleRowArrowKey(event: KeyboardEvent<HTMLButtonElement>) {
+  const key = event.key;
+  if (key !== "ArrowLeft" && key !== "ArrowRight" && key !== "Home" && key !== "End") return;
+  event.preventDefault();
+  const current = event.currentTarget;
+  const row = current.parentElement;
+  if (!row) return;
+  const buttons = Array.from(row.querySelectorAll<HTMLButtonElement>("button"));
+  const index = buttons.indexOf(current);
+  if (index === -1) return;
+  let nextIndex: number;
+  if (key === "Home") nextIndex = 0;
+  else if (key === "End") nextIndex = buttons.length - 1;
+  else if (key === "ArrowRight") nextIndex = (index + 1) % buttons.length;
+  else nextIndex = (index - 1 + buttons.length) % buttons.length;
+  const next = buttons[nextIndex];
+  next?.focus();
+  next?.click();
 }
 
 /**
@@ -78,6 +122,7 @@ export function WorkspaceNav({ active, onSelect, compact = false, className }: W
               key={group.label}
               type="button"
               onClick={() => selectSection(group.ids[0]!)}
+              onKeyDown={handleRowArrowKey}
               aria-current={group.label === activeGroup.label ? "true" : undefined}
               className={cn(
                 "shrink-0 whitespace-nowrap font-semibold uppercase tracking-wider transition-colors duration-fast",
@@ -109,6 +154,7 @@ export function WorkspaceNav({ active, onSelect, compact = false, className }: W
                   key={group.label}
                   type="button"
                   onClick={() => setExpandedLabel(group.label)}
+                  onKeyDown={handleRowArrowKey}
                   aria-expanded={isExpanded}
                   className="group flex shrink-0 flex-col items-center gap-1.5 pb-1.5"
                 >
@@ -141,11 +187,13 @@ export function WorkspaceNav({ active, onSelect, compact = false, className }: W
                   type="button"
                   title={section.label}
                   onClick={() => selectSection(section.id)}
+                  onKeyDown={handleRowArrowKey}
                   aria-current={isActive ? "page" : undefined}
                   className={cn(
-                    "flex shrink-0 items-center gap-1.5 border-b-2 px-2 py-2 text-body-sm font-medium transition-colors duration-fast",
-                    isActive ? "border-current" : "border-transparent",
+                    "flex shrink-0 items-center gap-1.5 rounded-t-md border-b-2 px-2.5 py-2 text-body-sm font-medium transition-[background-color,box-shadow,color,border-color] duration-fast",
+                    isActive ? "border-current" : "border-transparent hover:bg-surface-hover",
                     toneClasses(section.tone, isActive),
+                    surfaceClasses(section.tone, isActive),
                   )}
                 >
                   <Icon name={section.icon} size={14} className="shrink-0" />

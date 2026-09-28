@@ -1,0 +1,123 @@
+[
+  {
+    "file": "rs_button_primary.glb",
+    "tris": 6366,
+    "kb": 380,
+    "clips": [
+      "Hover",
+      "Press"
+    ]
+  },
+  {
+    "file": "rs_button_secondary.glb",
+    "tris": 8540,
+    "kb": 507,
+    "clips": [
+      "Hover",
+      "Press"
+    ]
+  },
+  {
+    "file": "rs_button_ai.glb",
+    "tris": 6718,
+    "kb": 392,
+    "clips": [
+      "Hover",
+      "Press",
+      "Thinking"
+    ]
+  },
+  {
+    "file": "rs_icon_keys.glb",
+    "tris": 52588,
+    "kb": 2230,
+    "clips": [
+      "Ripple"
+    ]
+  },
+  {
+    "file": "rs_icons.glb",
+    "tris": 52320,
+    "kb": 1479,
+    "clips": []
+  },
+  {
+    "file": "rs_video_frame.glb",
+    "tris": 18034,
+    "kb": 865,
+    "clips": [
+      "Playback",
+      "Intro",
+      "Hover_Play",
+      "AI_Live"
+    ]
+  },
+  {
+    "file": "rs_chapter_strip.glb",
+    "tris": 3988,
+    "kb": 249,
+    "clips": [
+      "Scan"
+    ]
+  },
+  {
+    "file": "rs_pipeline.glb",
+    "tris": 40494,
+    "kb": 2174,
+    "clips": [
+      "Process"
+    ]
+  },
+  {
+    "file": "rs_upload_tray.glb",
+    "tris": 11796,
+    "kb": 467,
+    "clips": [
+      "Idle",
+      "Drop"
+    ]
+  },
+  {
+    "file": "rs_ai_answer.glb",
+    "tris": 5916,
+    "kb": 341,
+    "clips": [
+      "Answer"
+    ]
+  },
+  {
+    "file": "rs_flashcards.glb",
+    "tris": 5960,
+    "kb": 350,
+    "clips": [
+      "Flip",
+      "Float"
+    ]
+  },
+  {
+    "file": "rs_status_badges.glb",
+    "tris": 8232,
+    "kb": 428,
+    "clips": [
+      "Pulse"
+    ]
+  },
+  {
+    "file": "rs_logo_mark.glb",
+    "tris": 1584,
+    "kb": 56,
+    "clips": [
+      "Float",
+      "Signal"
+    ]
+  },
+  {
+    "file": "rs_quiz_card.glb",
+    "tris": 14280,
+    "kb": 763,
+    "clips": [
+      "Answer_Correct",
+      "Answer_Wrong"
+    ]
+  }
+]

@@ -3,6 +3,8 @@
 import { useEffect } from "react";
 
 import { FlashcardView } from "@/components/flashcards/FlashcardView";
+import { useAccentSlotClaim } from "@/components/3d/workspace3d/AccentSlotContext";
+import { Workspace3DObject } from "@/components/3d/workspace3d/Workspace3DObject";
 import { Button } from "@/components/ui/Button";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { ErrorState } from "@/components/ui/ErrorState";
@@ -21,6 +23,11 @@ export function FlashcardsPanel({ videoId, videoStatus }: { videoId: number; vid
   const exportFlashcards = useExportFlashcards(videoId);
   const total = flashcards.data?.length ?? 0;
   const study = useFlashcardStudy(total);
+  // Claims the shared Workspace accent slot only while the real
+  // completion accent is actually mounted below (see
+  // AccentSlotContext.tsx) - the same real condition the accent's own
+  // render guard uses.
+  useAccentSlotClaim(study.completed.size === total && total > 0);
 
   useEffect(() => {
     study.reset();
@@ -147,9 +154,20 @@ export function FlashcardsPanel({ videoId, videoStatus }: { videoId: number; vid
         <p className="text-caption text-text-disabled">Space to flip · Arrow keys to navigate</p>
 
         {allCompleted && (
-          <div className="flex items-center gap-2 rounded-full border border-warm/30 bg-warm-muted px-3 py-1.5 text-caption font-medium text-warm">
-            <Icon name="check" size={13} />
-            You&apos;ve reviewed all {total} cards
+          <div className="flex animate-rise flex-col items-center gap-2">
+            {/*
+             * rs_flashcards.glb (ui-3d/README.md) - its real "Float"
+             * clip as a small completion accent, shown only once
+             * `study.completed` (real session state, every card this
+             * visit has actually been flipped) reaches the total -
+             * never a decorative default, only a genuine "you finished
+             * these" moment.
+             */}
+            <Workspace3DObject model="flashcards" loopClip="Float" className="h-20 w-20" />
+            <div className="flex items-center gap-2 rounded-full border border-warm/30 bg-warm-muted px-3 py-1.5 text-caption font-medium text-warm">
+              <Icon name="check" size={13} />
+              You&apos;ve reviewed all {total} cards
+            </div>
           </div>
         )}
 

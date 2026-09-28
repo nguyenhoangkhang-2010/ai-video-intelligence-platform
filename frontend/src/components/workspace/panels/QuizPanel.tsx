@@ -8,6 +8,8 @@ import { Icon } from "@/components/ui/Icon";
 import { ProcessingState } from "@/components/ui/ProcessingState";
 import { Skeleton } from "@/components/ui/Spinner";
 import { QuizQuestionCard } from "@/components/quiz/QuizQuestionCard";
+import { useAccentSlotClaim } from "@/components/3d/workspace3d/AccentSlotContext";
+import { Workspace3DObject } from "@/components/3d/workspace3d/Workspace3DObject";
 import { PanelHeader } from "@/components/workspace/PanelHeader";
 import { useQuizzes } from "@/hooks/useQuizzes";
 import { toApiError } from "@/lib/axios";
@@ -51,6 +53,15 @@ export function QuizPanel({ videoId, videoStatus }: { videoId: number; videoStat
   const quizzes = useQuizzes(videoId, videoStatus);
   const [index, setIndex] = useState(0);
   const [answered, setAnswered] = useState<Set<number>>(new Set());
+  // Real client-side correctness from THIS question's own answer
+  // reveal (see QuizQuestionCard - never a fabricated score), driving
+  // a brief rs_quiz_card.glb reaction accent. `reactionKey` changes on
+  // every reveal so the one-shot clip replays even if the same
+  // correct/wrong value repeats back to back.
+  const [reaction, setReaction] = useState<{ correct: boolean; key: number } | null>(null);
+  // Claims the shared Workspace accent slot only while a real reaction
+  // is actually mounted below (see AccentSlotContext.tsx).
+  useAccentSlotClaim(reaction !== null);
 
   if (quizzes.isLoading) {
     return (
@@ -107,13 +118,36 @@ export function QuizPanel({ videoId, videoStatus }: { videoId: number; videoStat
       />
 
       <div className="flex flex-1 flex-col items-center justify-center gap-6 overflow-y-auto p-6">
-        <div key={quiz.id} className="w-full max-w-lg animate-rise">
+        <div key={quiz.id} className="relative w-full max-w-lg animate-rise">
           <QuizQuestionCard
             quiz={quiz}
             index={index}
             focused
-            onAnswered={() => setAnswered((current) => new Set(current).add(index))}
+            onAnswered={(wasCorrect) => {
+              setAnswered((current) => new Set(current).add(index));
+              if (wasCorrect !== undefined) {
+                setReaction((current) => ({ correct: wasCorrect, key: (current?.key ?? 0) + 1 }));
+              }
+            }}
           />
+          {/*
+           * rs_quiz_card.glb (ui-3d/README.md) - a small, secondary
+           * reaction accent playing its real Answer_Correct/
+           * Answer_Wrong clip once per reveal, driven entirely by the
+           * same client-side correctness check the card itself already
+           * makes (never a fabricated score). Positioned beside the
+           * question, not over it, so it never blocks reading the real
+           * answer state the card already shows.
+           */}
+          {reaction && (
+            <Workspace3DObject
+              key={reaction.key}
+              model="quizCard"
+              playClip={reaction.correct ? "Answer_Correct" : "Answer_Wrong"}
+              playKey={reaction.key}
+              className="pointer-events-none absolute -right-4 -top-4 hidden h-20 w-20 sm:block lg:-right-24 lg:h-24 lg:w-24"
+            />
+          )}
         </div>
 
         <div className="flex items-center gap-3">

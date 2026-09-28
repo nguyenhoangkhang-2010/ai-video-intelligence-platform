@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useState, type FormEvent } from "react";
 
 import { useNovaAttention } from "@/components/3d/NovaAttentionContext";
-import { Button } from "@/components/ui/Button";
+import { Button3D } from "@/components/3d/workspace3d/Button3D";
 import { Input } from "@/components/ui/Input";
 import { useAuth } from "@/hooks/useAuth";
 import { toApiError } from "@/lib/axios";
@@ -102,9 +102,9 @@ export default function RegisterPage() {
           </p>
         )}
 
-        <Button type="submit" isLoading={isSubmitting} fullWidth className="mt-1">
+        <Button3D glbModel="buttonPrimary" type="submit" isLoading={isSubmitting} fullWidth className="mt-1">
           Create account
-        </Button>
+        </Button3D>
       </form>
 
       <p className="mt-6 text-center text-body-sm text-text-muted">

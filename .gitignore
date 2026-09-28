@@ -186,3 +186,12 @@ assets/demo/*.mkv
 ############################
 backend/storage/faiss/*
 !backend/storage/faiss/.gitkeep
+
+############################
+# TLS certificates/keys - locally-generated for dev/staging HTTPS
+# termination (deployment/nginx/certs/). A real deployment supplies
+# its own certificate (e.g. Let's Encrypt) out of band; the private
+# key must never be committed regardless of how it was generated.
+############################
+deployment/nginx/certs/*
+!deployment/nginx/certs/.gitkeep

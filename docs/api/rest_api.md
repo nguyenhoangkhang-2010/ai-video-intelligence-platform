@@ -134,7 +134,11 @@ Fields: `id`, `video_id`, `type` (`multiple_choice` \| `true_false` \| `short_an
 - `no_embeddings` - the video hasn't finished embedding generation yet.
 - `no_relevant_chunks` - embeddings exist, but nothing matched well enough.
 
-Stateless by design: no conversation history is persisted or fed back into later calls. A `ChatHistory` model/repository already exist but are intentionally unwired (no service, no write path) - this phase confirmed RAG should stay stateless rather than build conversational memory, since nothing currently needs it (see the backend-completion report).
+Retrieval/generation is stateless: no prior turn is fed back into a later call, and nothing here makes RAG conversational. What changed this phase: a genuinely answered turn (`status == "answered"`) is now also recorded to `ChatHistory` (`user_id`, `video_id`, `question`, `answer`, `sources`) immediately after the response is computed - this only lets the caller *replay* their own past turns for a video, via the new read endpoint below, and never changes what a given `/rag` call returns. `empty_query`/`no_embeddings`/`no_relevant_chunks` are never recorded (there is no real answer to remember). The write is best-effort - a failure there is logged, not turned into an error response, since the caller already has their real answer either way.
+
+| Method | Path | Auth | Description |
+|---|---|---|---|
+| GET | `/videos/{video_id}/chat-history` | Yes | This user's own past AI Chat turns for the video, oldest first. `sources` mirrors the `RAGResult.sources` shape from the turn that produced each entry. |
 
 Retrieval: dense (FAISS) + sparse (BM25) fused via Reciprocal Rank Fusion (`ai/retrieval/hybrid_search.py`), then optionally reranked with a cross-encoder (`ai/reranking/cross_encoder.py`) - both wired into the live RAG dependency (`app/api/deps.py::get_rag_pipeline`) as of this phase, gated by `settings.retrieval.hybrid_enabled`/`reranking_enabled` (both default `true`, `RETRIEVAL_HYBRID_ENABLED`/`RETRIEVAL_RERANKING_ENABLED`). The reranker's cross-encoder model is loaded once per process and reused, not reloaded per request; if it fails to load (no network/model cache), that failure is logged once and RAG falls back to dense+hybrid retrieval with no reranking - it never breaks a request. The `RAGResult`/`SearchResult` API contract is unchanged; only retrieval quality changed. Plain semantic search (`POST /search/videos/{video_id}`, no `/rag`) is unaffected and stays dense-only, as documented above.
 

@@ -44,6 +44,9 @@ from app.services.chapter import ChapterService
 from app.repositories.flashcard import FlashcardRepository
 from app.services.flashcard import FlashcardService
 
+from app.repositories.chat_history import ChatHistoryRepository
+from app.services.chat_history import ChatHistoryService
+
 from app.storage.base import StorageBackend
 from app.storage.factory import get_storage_backend as _get_storage_backend
 
@@ -203,6 +206,12 @@ def get_flashcard_service(
 ) -> FlashcardService:
     repository = FlashcardRepository(db)
     return FlashcardService(repository)
+
+def get_chat_history_service(
+    db: Session = Depends(get_db),
+) -> ChatHistoryService:
+    repository = ChatHistoryRepository(db)
+    return ChatHistoryService(repository)
 
 def get_storage_backend() -> StorageBackend:
     """

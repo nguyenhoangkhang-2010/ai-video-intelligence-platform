@@ -65,6 +65,31 @@ export function NovaModel({ state, trackPointer = true, onGestureEnd, externalPo
   // references, so SkeletonUtils.clone is required.
   const scene = useMemo(() => SkeletonUtils.clone(sharedScene) as THREE.Group, [sharedScene]);
 
+  // Rest-pose quaternions for the 3 bones the look layer ever touches,
+  // captured once from this fresh clone before any AnimationMixer has
+  // written a single frame to it - i.e. the GLB's own bind pose, a
+  // stable reference that never drifts. This is the fix for a real
+  // eye-glitch bug (found live, not hypothetical): parsing nova.glb's
+  // own animation channels directly shows EVERY clip except Float
+  // (Root-only) and Blink (Eye_L/R *scale*, for closing the lid - not
+  // rotation) keys Head.rotation/Eye_L.rotation/Eye_R.rotation itself,
+  // including Idle_Breathe - the default state Nova spends almost all
+  // its time in. The old look layer composed its offset by multiplying
+  // onto whatever the mixer had *just* written that frame -
+  // mathematically non-accumulating (so it never spun out of control),
+  // but that base was Idle_Breathe's own oscillating eye keyframes, not
+  // a stable rest position. Composing a mouse-tracking offset onto a
+  // constantly-drifting, not-necessarily-L/R-symmetric base is what
+  // actually produced the visible misaligned/jittery eyes on hover.
+  const restQuaternions = useMemo(() => {
+    const rest = new Map<string, THREE.Quaternion>();
+    for (const name of ["Head", "Eye_L", "Eye_R"]) {
+      const obj = scene.getObjectByName(name);
+      if (obj) rest.set(name, obj.quaternion.clone());
+    }
+    return rest;
+  }, [scene]);
+
   const { actions, mixer } = useAnimations(animations, group);
   const current = useRef<THREE.AnimationAction | null>(null);
   const look = useRef(new THREE.Vector2());
@@ -129,23 +154,39 @@ export function NovaModel({ state, trackPointer = true, onGestureEnd, externalPo
   // `externalPointer` when supplied (the ambient instance; a mutable
   // object updated in place by lib/globalPointer.ts, read fresh every
   // frame here rather than via React state - avoids a re-render on
-  // every mouse move), applied after the mixer each frame. Skipped
+  // every mouse move), applied after the mixer each frame (drei's
+  // useAnimations already runs its own useFrame calling mixer.update(),
+  // registered before this one - i.e. earlier in the same tick). Skipped
   // entirely in reduced-motion mode.
   //
-  // Every real gesture clip (verified against the GLB directly) keys
-  // Head/Eye_L/Eye_R itself, so the mixer's update() - which drei's
-  // useAnimations already runs in its own useFrame, registered before
-  // this one, i.e. earlier in the same tick - has already written an
-  // absolute, freshly authored value into these bones by the time this
-  // runs. Composing one small, angle-bounded offset on top of that per
-  // frame (never adding to what we ourselves wrote last frame) is what
-  // keeps this from ever compounding into a runaway spin.
+  // SETS Head/Eye_L/Eye_R from a captured rest quaternion each frame,
+  // rather than multiplying an offset onto whatever the mixer just
+  // wrote - a real fix, not a tweak. Parsing nova.glb directly (see
+  // restQuaternions above) shows every clip except Float and Blink
+  // keys these same 3 bones itself, including Idle_Breathe (the
+  // default state Nova is in essentially all the time a cursor is
+  // active). The old code composed its offset onto that clip's own,
+  // constantly-drifting eye keyframes - mathematically bounded so it
+  // never spun, but the base it composed onto was never a stable
+  // reference, which is what actually produced visibly
+  // misaligned/jittery eyes on hover (confirmed by parsing the GLB's
+  // animation channels, not assumed). Setting from a fixed rest pose
+  // instead means the clip's own Head/Eye_L/Eye_R keyframes are simply
+  // never seen for these frames - overridden, not fought with - while
+  // every other track that same clip drives (Chest.scale,
+  // Hips/Spine/arms, Nova_Face/Nova_Cheeks morph weights) keeps
+  // animating completely normally, since those properties are never
+  // touched here.
   //
-  // Two clips are exempt: Look_At_Camera centers the gaze instead of
-  // following the pointer (it's the "Nova notices you" reaction), and
-  // Look_Around/Think already tell their own deliberate story with the
-  // eyes, so the procedural layer steps aside entirely rather than
-  // visibly fighting them.
+  // Two clips still exempt entirely (skip the override, let their own
+  // authored Head/Eye_L/Eye_R keyframes show through undisturbed):
+  // Look_Around and Think are genuinely ABOUT where Nova's eyes go -
+  // overriding them would erase the one thing those gestures exist to
+  // express. Look_At_Camera is NOT exempt - it's kept under procedural
+  // control (targeting dead-center instead of the pointer) so a
+  // "Nova notices you" moment still resolves through the same safe,
+  // non-conflicting mechanism as everything else, rather than reviving
+  // the old multiply-onto-clip path for just one state.
   useFrame(({ pointer }, delta) => {
     if (!trackPointer) return;
 
@@ -156,7 +197,10 @@ export function NovaModel({ state, trackPointer = true, onGestureEnd, externalPo
     const head = scene.getObjectByName("Head");
     const eyeL = scene.getObjectByName("Eye_L");
     const eyeR = scene.getObjectByName("Eye_R");
-    if (!head || !eyeL || !eyeR) return;
+    const headRest = restQuaternions.get("Head");
+    const eyeLRest = restQuaternions.get("Eye_L");
+    const eyeRRest = restQuaternions.get("Eye_R");
+    if (!head || !eyeL || !eyeR || !headRest || !eyeLRest || !eyeRRest) return;
 
     const isLookingAtCamera = gesture === actions.Look_At_Camera;
     // externalPointer has a real "cursor left the window" signal
@@ -171,13 +215,13 @@ export function NovaModel({ state, trackPointer = true, onGestureEnd, externalPo
     const headOffset = new THREE.Quaternion().setFromEuler(
       new THREE.Euler(-y * HEAD_PITCH_LIMIT, x * HEAD_YAW_LIMIT, 0),
     );
-    head.quaternion.multiply(headOffset);
+    head.quaternion.copy(headRest).multiply(headOffset);
 
     const eyeOffset = new THREE.Quaternion().setFromEuler(
       new THREE.Euler(-y * EYE_PITCH_LIMIT, x * EYE_YAW_LIMIT, 0),
     );
-    eyeL.quaternion.multiply(eyeOffset);
-    eyeR.quaternion.multiply(eyeOffset);
+    eyeL.quaternion.copy(eyeLRest).multiply(eyeOffset);
+    eyeR.quaternion.copy(eyeRRest).multiply(eyeOffset);
   });
 
   return <primitive ref={group} object={scene} />;

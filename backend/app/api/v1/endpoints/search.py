@@ -13,10 +13,12 @@ from app.core.rate_limit import rate_limit
 from app.database.session import get_db
 from app.repositories.embedding import EmbeddingRepository
 
+from app.api.deps import get_chat_history_service
 from app.api.deps import get_rag_pipeline
 from app.api.deps import get_video_service
 
 from app.pipelines.rag_pipeline import RAGPipeline
+from app.services.chat_history import ChatHistoryService
 from app.services.video import VideoService
 
 from app.schemas.rag import RAGResult
@@ -98,10 +100,21 @@ def ask_video(
     current_user: User = Depends(get_current_user),
     video_service: VideoService = Depends(get_video_service),
     rag_pipeline: RAGPipeline = Depends(get_rag_pipeline),
+    chat_history_service: ChatHistoryService = Depends(get_chat_history_service),
 ):
     """
     Ask a question grounded in a video's transcript content, using
     retrieval-augmented generation scoped to that video only.
+
+    Retrieval/generation stays stateless (no prior turns are fed back
+    into this call) - only the *record* of a genuinely answered turn is
+    persisted afterward, via ChatHistoryService, so the AI Chat panel
+    can restore a user's own conversation after a refresh or when
+    reopening the video (see docs/api/rest_api.md, Search & RAG).
+    Never recorded for empty_query/no_embeddings/no_relevant_chunks -
+    there is no real answer to remember for those. The write is
+    best-effort: a failure here is logged, never turned into an error
+    response, since the person asking still got their real answer.
     """
 
     video_service.get_video(
@@ -115,8 +128,25 @@ def ask_video(
         request.query,
     )
 
-    return rag_pipeline.ask(
+    result = rag_pipeline.ask(
         video_id=video_id,
         query=request.query,
         top_k=request.top_k,
     )
+
+    if result.status == "answered" and result.answer:
+        try:
+            chat_history_service.record(
+                user_id=current_user.id,
+                video_id=video_id,
+                question=request.query,
+                answer=result.answer,
+                sources=result.sources,
+            )
+        except Exception:
+            logger.exception(
+                "Failed to record chat history for video %s (answer still returned).",
+                video_id,
+            )
+
+    return result

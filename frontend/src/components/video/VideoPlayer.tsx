@@ -76,7 +76,7 @@ export function VideoPlayer({ src, title, chapters = [] }: VideoPlayerProps) {
       aria-label={`Video player — ${title}`}
       tabIndex={0}
       onKeyDown={handlePlayerKeyDown}
-      className="group/player relative aspect-video w-full overflow-hidden rounded-2xl bg-black outline-none focus-visible:ring-2 focus-visible:ring-accent/60"
+      className="group/player relative mx-auto aspect-video max-h-[42vh] w-auto max-w-full overflow-hidden rounded-2xl bg-black outline-none focus-visible:ring-2 focus-visible:ring-accent/60"
       onMouseEnter={() => setShowControls(true)}
       onMouseLeave={() => player.isPlaying && setShowControls(false)}
     >

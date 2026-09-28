@@ -137,21 +137,31 @@ export function TranslationPanel({ videoId, videoStatus }: { videoId: number; vi
 
       <div className="flex-1 overflow-hidden">
         {hasSource ? (
-          <div className="grid h-full grid-cols-1 divide-y divide-border overflow-y-auto lg:grid-cols-2 lg:divide-x lg:divide-y-0 lg:overflow-hidden">
-            <div className="overflow-y-auto px-6 py-5 lg:h-full">
-              <p className="sticky top-0 mb-3 text-label font-semibold uppercase tracking-[0.12em] text-text-muted">
+          /*
+           * A stacked reading pair, not a side-by-side grid - the old
+           * `lg:grid-cols-2` split fired at the same 1024px viewport
+           * breakpoint where the Workspace's own content column drops
+           * to ~42% width, leaving each pane only ~200-290px wide: too
+           * cramped for the bilingual reading experience this panel
+           * exists for. Original leads compact (it's context, not the
+           * point of this panel); the translation reads full-width and
+           * prominent underneath, both scrolling together as one column.
+           */
+          <div className="h-full overflow-y-auto">
+            <div className="border-b border-border px-6 py-5">
+              <p className="mb-3 text-label font-semibold uppercase tracking-[0.12em] text-text-muted">
                 Original
                 {transcript.data && <span className="ml-1.5 text-text-disabled">· {transcript.data.language}</span>}
               </p>
-              <p className="max-w-[60ch] whitespace-pre-wrap text-body-lg leading-[1.75] text-text-secondary">
+              <p className="max-w-[68ch] whitespace-pre-wrap text-body-sm leading-[1.75] text-text-muted">
                 {transcript.data!.text}
               </p>
             </div>
-            <div className="overflow-y-auto px-6 py-5 lg:h-full">
-              <p className="sticky top-0 mb-3 text-label font-semibold uppercase tracking-[0.12em] text-atmosphere">
+            <div className="px-6 py-5">
+              <p className="mb-3 text-label font-semibold uppercase tracking-[0.12em] text-atmosphere">
                 English translation
               </p>
-              <p className="max-w-[60ch] whitespace-pre-wrap text-body-lg leading-[1.75] text-text-secondary">
+              <p className="max-w-[68ch] whitespace-pre-wrap text-body-lg leading-[1.75] text-text-secondary">
                 <Highlight text={translation.subtitle} query={filter} />
               </p>
             </div>
