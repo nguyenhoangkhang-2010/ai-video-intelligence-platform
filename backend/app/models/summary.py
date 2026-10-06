@@ -5,6 +5,7 @@ from sqlalchemy import ForeignKey
 from sqlalchemy import Integer
 from sqlalchemy import String
 from sqlalchemy import Text
+from sqlalchemy import UniqueConstraint
 
 from sqlalchemy.orm import Mapped
 from sqlalchemy.orm import mapped_column
@@ -16,6 +17,18 @@ class Summary(Base):
     """Summary ORM model."""
 
     __tablename__ = "summaries"
+    __table_args__ = (
+        # One summary per (video, type) - SummaryService.save_summary
+        # is the only write path the pipeline uses (video_pipeline.py
+        # summary_stage), and it already upserts on this exact key;
+        # this constraint is what makes that upsert correct under a
+        # genuine concurrent write too, not just in the common
+        # single-writer case.
+        UniqueConstraint(
+            "video_id", "type",
+            name="uq_summaries_video_id_type",
+        ),
+    )
 
     id: Mapped[int] = mapped_column(
         Integer,

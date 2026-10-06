@@ -1,6 +1,7 @@
 import logging
 
-from ai.embedding.embedder import Embedder
+from ai.embedding.factory import get_embedding_provider
+from ai.embedding.provider import EmbeddingProvider
 
 
 logger = logging.getLogger(__name__)
@@ -11,8 +12,9 @@ class EmbeddingWorker:
 
     def __init__(
         self,
+        embedder: EmbeddingProvider | None = None,
     ):
-        self.embedder = Embedder()
+        self.embedder = embedder or get_embedding_provider()
 
     def process(
         self,

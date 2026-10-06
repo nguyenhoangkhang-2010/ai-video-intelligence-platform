@@ -1,3 +1,11 @@
+import threading
+
+import pytest
+from sqlalchemy import create_engine
+from sqlalchemy.exc import IntegrityError
+from sqlalchemy.orm import sessionmaker
+
+from app.database.base import Base
 from app.models.processing_job import ProcessingJob
 from app.models.user import User
 from app.models.video import Video
@@ -141,3 +149,129 @@ def test_get_by_id_and_owner_returns_none_for_a_different_owner(db_session):
     found = repository.get_by_id_and_owner(job.id, owner_b.id)
 
     assert found is None
+
+
+def test_cannot_create_a_second_active_job_for_the_same_video(db_session):
+    """
+    Real DB-level guarantee: at most one PENDING/RUNNING job per
+    video (uq_processing_jobs_active_per_video), enforced so a future
+    reprocess trigger (or a bug) can't silently create two workers
+    racing to process the same video from two different job rows -
+    claim_for_running()'s atomic claim only protects against
+    redelivery of the *same* job_id, not this.
+    """
+    owner = _create_user(db_session)
+    job = _create_job_for_owner(db_session, owner, status="PENDING", filename="a.mp4")
+
+    db_session.add(
+        ProcessingJob(video_id=job.video_id, job_type="transcription", status="RUNNING")
+    )
+    with pytest.raises(IntegrityError):
+        db_session.commit()
+
+
+def test_completed_job_does_not_block_a_new_active_job(db_session):
+    """
+    The partial index only covers PENDING/RUNNING - a video with only
+    terminal (COMPLETED/FAILED) history must still be able to get a
+    new active job.
+    """
+    owner = _create_user(db_session)
+    job = _create_job_for_owner(db_session, owner, status="COMPLETED", filename="a.mp4")
+
+    new_job = ProcessingJob(
+        video_id=job.video_id, job_type="transcription", status="PENDING",
+    )
+    db_session.add(new_job)
+    db_session.commit()  # must not raise
+
+    assert new_job.id is not None
+
+
+def test_two_failed_jobs_for_the_same_video_do_not_collide(db_session):
+    """
+    Historical (terminal) rows are entirely outside the partial
+    index's scope - unlike an active-job collision, there is no limit
+    on how many FAILED/COMPLETED rows a video can accumulate.
+    """
+    owner = _create_user(db_session)
+    job = _create_job_for_owner(db_session, owner, status="FAILED", filename="a.mp4")
+
+    db_session.add(
+        ProcessingJob(video_id=job.video_id, job_type="transcription", status="FAILED")
+    )
+    db_session.commit()  # must not raise
+
+
+def test_concurrent_claim_only_one_worker_wins(tmp_path):
+    """
+    Two independent sessions, each with its OWN real SQLite
+    connection (file-backed DB, not a shared in-memory connection),
+    race to claim the same PENDING job via claim_for_running() from
+    separate threads. A true multi-connection concurrency test, not
+    two mocks and not two sessions time-sliced on one connection
+    object (an in-memory StaticPool engine was tried first and
+    produced a flaky `sqlite3.InterfaceError` from genuinely
+    concurrent cursor use on one shared connection - a driver-level
+    artifact of sharing a single connection object across threads,
+    not a meaningful result. A file-backed DB with one connection per
+    thread avoids that entirely while still exercising two real,
+    independent database connections.
+
+    Caveat, stated explicitly per the approved Phase 2 design: SQLite
+    does not reproduce PostgreSQL's row-level locking semantics -
+    SQLite serializes concurrent writers with a single database-level
+    write lock, so this test proves claim_for_running()'s observable
+    contract ("exactly one winner, no duplicate claim"), not
+    PostgreSQL's specific row-locking mechanism.
+    """
+    db_path = tmp_path / "concurrent_claim.db"
+    engine = create_engine(f"sqlite:///{db_path}")
+    Base.metadata.create_all(bind=engine)
+    SessionLocal = sessionmaker(bind=engine, autoflush=False, autocommit=False)
+
+    setup_session = SessionLocal()
+    owner = _create_user(setup_session)
+    job = _create_job_for_owner(setup_session, owner, status="PENDING", filename="a.mp4")
+    job_id = job.id
+    setup_session.close()
+    engine.dispose()
+
+    results: list[ProcessingJob | None] = [None, None]
+    errors: list[Exception] = []
+
+    def _claim(index: int) -> None:
+        # Each thread opens its own engine/connection to the same
+        # file-backed database, rather than sharing one connection
+        # object across threads.
+        thread_engine = create_engine(f"sqlite:///{db_path}")
+        ThreadSessionLocal = sessionmaker(bind=thread_engine, autoflush=False, autocommit=False)
+        session = ThreadSessionLocal()
+        try:
+            results[index] = ProcessingJobRepository(session).claim_for_running(job_id)
+        except Exception as exc:  # pragma: no cover - surfaced via errors list
+            errors.append(exc)
+        finally:
+            session.close()
+            thread_engine.dispose()
+
+    thread_a = threading.Thread(target=_claim, args=(0,))
+    thread_b = threading.Thread(target=_claim, args=(1,))
+    thread_a.start()
+    thread_b.start()
+    thread_a.join()
+    thread_b.join()
+
+    assert errors == []
+
+    winners = [result for result in results if result is not None]
+    losers = [result for result in results if result is None]
+    assert len(winners) == 1
+    assert len(losers) == 1
+
+    verify_engine = create_engine(f"sqlite:///{db_path}")
+    verify_session = sessionmaker(bind=verify_engine)()
+    final = ProcessingJobRepository(verify_session).get_by_id(job_id)
+    assert final.status == "RUNNING"
+    verify_session.close()
+    verify_engine.dispose()

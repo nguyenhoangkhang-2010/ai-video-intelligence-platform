@@ -14,6 +14,7 @@ def _make_pipeline():
     quiz_service = MagicMock(name="quiz_service")
     chapter_service = MagicMock(name="chapter_service")
     flashcard_service = MagicMock(name="flashcard_service")
+    storage = MagicMock(name="storage")
 
     with (
         patch("app.pipelines.video_pipeline.TranscriptionWorker"),
@@ -34,12 +35,13 @@ def _make_pipeline():
             quiz_service=quiz_service,
             chapter_service=chapter_service,
             flashcard_service=flashcard_service,
+            storage=storage,
         )
 
     return pipeline, flashcard_service
 
 
-def test_flashcard_stage_replaces_old_flashcards_before_persisting_new_ones():
+def test_flashcard_stage_atomically_replaces_old_flashcards_with_new_ones():
     pipeline, flashcard_service = _make_pipeline()
 
     transcript = MagicMock(name="transcript")
@@ -49,24 +51,25 @@ def test_flashcard_stage_replaces_old_flashcards_before_persisting_new_ones():
         {"question": "Front?", "answer": "Back.", "difficulty": "medium"},
     ]
 
-    manager = MagicMock()
-    manager.attach_mock(flashcard_service.delete_by_video_id, "delete")
-    manager.attach_mock(flashcard_service.create_flashcard, "create")
-
     pipeline.flashcard_stage(job_id=1, video_id=10, transcript=transcript)
 
-    assert [entry[0] for entry in manager.mock_calls] == ["delete", "create"]
-    flashcard_service.delete_by_video_id.assert_called_once_with(10)
+    # Idempotent by atomic replacement, not delete-then-per-row-create:
+    # replace_for_video is called exactly once with the complete new
+    # artifact set (see FlashcardRepository.replace_for_video).
+    flashcard_service.replace_for_video.assert_called_once()
+    call_args = flashcard_service.replace_for_video.call_args.args
+    assert call_args[0] == 10
 
-    created = flashcard_service.create_flashcard.call_args.args[0]
-    assert isinstance(created, FlashcardCreate)
-    assert created.video_id == 10
-    assert created.question == "Front?"
-    assert created.answer == "Back."
-    assert created.difficulty == "medium"
+    created = call_args[1]
+    assert len(created) == 1
+    assert isinstance(created[0], FlashcardCreate)
+    assert created[0].video_id == 10
+    assert created[0].question == "Front?"
+    assert created[0].answer == "Back."
+    assert created[0].difficulty == "medium"
 
 
-def test_flashcard_stage_deletes_old_flashcards_even_when_none_generated():
+def test_flashcard_stage_replaces_with_empty_set_when_none_generated():
     pipeline, flashcard_service = _make_pipeline()
 
     transcript = MagicMock(name="transcript")
@@ -76,5 +79,7 @@ def test_flashcard_stage_deletes_old_flashcards_even_when_none_generated():
 
     pipeline.flashcard_stage(job_id=1, video_id=10, transcript=transcript)
 
-    flashcard_service.delete_by_video_id.assert_called_once_with(10)
-    flashcard_service.create_flashcard.assert_not_called()
+    # Still calls replace_for_video (with an empty list) rather than a
+    # bare delete - this atomically clears any stale flashcards from a
+    # previous attempt even when nothing new was generated.
+    flashcard_service.replace_for_video.assert_called_once_with(10, [])

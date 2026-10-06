@@ -26,13 +26,22 @@ def sanitize_filename(filename: str) -> str:
     Reduce a client-supplied filename to a safe basename before it is
     ever used to build a filesystem path.
 
-    `Path(filename).name` drops any directory component a crafted
-    filename might carry (e.g. "../../etc/passwd" or an absolute
-    path), and the character allowlist removes anything else that
-    could be used to escape the intended upload directory or inject
-    shell/filesystem-special characters. The result is never empty.
+    `Path(...).name` drops any directory component a crafted filename
+    might carry (e.g. "../../etc/passwd" or an absolute path), and the
+    character allowlist removes anything else that could be used to
+    escape the intended upload directory or inject shell/filesystem-
+    special characters. The result is never empty.
+
+    Backslashes are normalized to "/" first: this server runs on
+    POSIX, where `pathlib.Path` does not treat "\\" as a separator, so
+    a client-supplied Windows-style path (e.g.
+    "C:\\Windows\\System32\\evil.mp4") would otherwise survive
+    `Path(...).name` intact and only get its separators collapsed to
+    "_" by the character allowlist below, instead of having its
+    directory component stripped like every other path style.
     """
-    name = Path(filename or "").name
+    name = (filename or "").replace("\\", "/")
+    name = Path(name).name
     name = name.strip().strip(".")
 
     if not name:

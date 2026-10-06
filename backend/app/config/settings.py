@@ -189,6 +189,16 @@ class HuggingFaceSettings(BaseConfig):
 class LLMSettings(BaseConfig):
     """LLM configuration."""
 
+    # Selects which LLMProvider implementation ai.llm.factory.
+    # get_llm_provider() returns. "ollama" is the only implementation
+    # today; this exists so a future provider is a config value and a
+    # new factory branch, not a change to every call site that
+    # currently constructs OllamaClient() directly.
+    provider: Literal["ollama"] = Field(
+        default="ollama",
+        alias="LLM_PROVIDER",
+    )
+
     ollama_base_url: str = Field(
         default="http://localhost:11434",
         alias="OLLAMA_BASE_URL",
@@ -299,6 +309,33 @@ class ChapterSettings(BaseConfig):
     use_llm_labeling: bool = Field(
         default=True,
         alias="CHAPTER_USE_LLM_LABELING",
+    )
+
+    max_context_chars: int = Field(
+        default=6000,
+        alias="CHAPTER_MAX_CONTEXT_CHARS",
+    )
+
+# =============================================================================
+# Summarization
+# =============================================================================
+class SummarySettings(BaseConfig):
+    """Summarization configuration."""
+
+    max_context_chars: int = Field(
+        default=12000,
+        alias="SUMMARY_MAX_CONTEXT_CHARS",
+    )
+
+# =============================================================================
+# Translation
+# =============================================================================
+class TranslationSettings(BaseConfig):
+    """Translation configuration."""
+
+    max_context_chars: int = Field(
+        default=12000,
+        alias="TRANSLATION_MAX_CONTEXT_CHARS",
     )
 
 # =============================================================================
@@ -643,6 +680,8 @@ class Settings(BaseModel):
     retrieval: RetrievalSettings = Field(default_factory=RetrievalSettings)
     speech: SpeechSettings = Field(default_factory=SpeechSettings)
     chapter: ChapterSettings = Field(default_factory=ChapterSettings)
+    summary: SummarySettings = Field(default_factory=SummarySettings)
+    translation: TranslationSettings = Field(default_factory=TranslationSettings)
     quiz: QuizSettings = Field(default_factory=QuizSettings)
     flashcard: FlashcardSettings = Field(default_factory=FlashcardSettings)
     knowledge_graph: KnowledgeGraphSettings = Field(default_factory=KnowledgeGraphSettings)

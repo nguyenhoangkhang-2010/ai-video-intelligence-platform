@@ -5,6 +5,7 @@ import { useState } from "react";
 
 import { Icon } from "@/components/ui/Icon";
 import { VideoStatusBadge } from "@/components/ui/StatusBadge";
+import { VideoThumbnail } from "@/components/video/VideoThumbnail";
 import { ROUTES } from "@/lib/constants";
 import { cn, formatDate, formatTimecode } from "@/lib/utils";
 import type { Video } from "@/types/video";
@@ -17,13 +18,13 @@ interface VideoRowProps {
 /**
  * A horizontal media-archive row, not a grid card — the library reads
  * as a list of media objects with real metadata, not a wall of
- * identical tiles. Same honesty constraint as the old VideoCard it
- * replaces: no thumbnail exists in the API, so the slate stays an
- * abstract media surface, never a faked frame.
+ * identical tiles. The media surface shows this video's real,
+ * extracted frame when one exists (see VideoThumbnail); otherwise it
+ * stays the same honest abstract pattern it always has, never a faked
+ * frame.
  */
 export function VideoRow({ video, onDelete }: VideoRowProps) {
   const [menuOpen, setMenuOpen] = useState(false);
-  const isProcessing = video.status === "uploaded" || video.status === "processing";
 
   return (
     <div className="group relative flex items-center gap-4 py-3 transition-colors duration-fast hover:bg-surface-hover sm:gap-5 sm:px-3">
@@ -32,30 +33,23 @@ export function VideoRow({ video, onDelete }: VideoRowProps) {
         aria-label={video.title}
         className="relative aspect-video w-28 shrink-0 overflow-hidden rounded-md bg-[radial-gradient(ellipse_at_top_left,rgb(var(--color-surface-elevated))_0%,rgb(var(--color-surface-sunken))_72%)] sm:w-36"
       >
-        <div
-          className="absolute inset-0 opacity-[0.06] transition-opacity duration-base group-hover:opacity-[0.12]"
-          style={{
-            backgroundImage:
-              "repeating-linear-gradient(115deg, rgb(var(--color-ai)) 0px, rgb(var(--color-ai)) 1px, transparent 1px, transparent 18px)",
-          }}
-          aria-hidden="true"
-        />
+        <VideoThumbnail video={video} patternSpacing={18} />
         <span className="absolute inset-0 flex items-center justify-center">
           <Icon
             name="play"
             size={16}
-            className="text-text-disabled opacity-70 transition-[opacity,transform] duration-base ease-calm group-hover:scale-110 group-hover:text-accent group-hover:opacity-100"
+            className={cn(
+              "transition-[opacity,transform] duration-base ease-calm group-hover:scale-110 group-hover:text-accent",
+              video.has_thumbnail
+                ? "rounded-full bg-bg/60 p-1.5 text-text-primary opacity-0 backdrop-blur-[2px] group-hover:opacity-100"
+                : "text-text-disabled opacity-70 group-hover:opacity-100",
+            )}
           />
         </span>
         {video.duration > 0 && (
           <span className="absolute bottom-1 right-1 rounded bg-bg/80 px-1 py-0.5 font-mono text-[10px] text-text-secondary backdrop-blur-[2px]">
             {formatTimecode(video.duration)}
           </span>
-        )}
-        {isProcessing && (
-          <div className="absolute inset-x-0 top-0 h-0.5 overflow-hidden bg-transparent">
-            <div className="h-full w-1/3 animate-[shimmer_1.8s_ease-in-out_infinite] bg-ai" />
-          </div>
         )}
       </Link>
 

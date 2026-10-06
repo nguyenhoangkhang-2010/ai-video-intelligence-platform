@@ -1,3 +1,29 @@
+import os
+
+# Must run before the first import of app.config.settings (triggered
+# transitively by the app.* imports below) - pydantic-settings reads
+# real environment variables with higher precedence than .env, so this
+# reliably disables the Redis-backed rate limiter (app/core/rate_limit.py)
+# for the whole test process, never for the running api/celery
+# containers themselves (their own env is untouched).
+#
+# Real bug this fixes: test_videos_upload.py's TestClient hits the
+# real FastAPI app, which carries the real `rate_limit("upload", ...)`
+# dependency pointed at the real Redis instance (see conftest module
+# docstring below - there is no fake/in-memory Redis for these
+# endpoint tests). Its counter is keyed only by client IP
+# ("ratelimit:upload:testclient" - TestClient's fixed host) with a
+# 1-hour TTL, so repeated suite runs within an hour accumulate across
+# runs and eventually return 429 instead of each test's real expected
+# status - reproduced live: a fresh `redis-cli GET
+# ratelimit:upload:testclient` after a few back-to-back runs shows the
+# counter sitting at the configured limit. This is a test-isolation
+# gap, not a product bug - the rate limiter's own behavior already has
+# dedicated, fully-isolated coverage in tests/core/test_rate_limit.py,
+# which patches `settings.rate_limit.enabled` directly per test and so
+# is unaffected by this process-wide default.
+os.environ.setdefault("RATE_LIMIT_ENABLED", "false")
+
 import pytest
 
 from sqlalchemy import create_engine

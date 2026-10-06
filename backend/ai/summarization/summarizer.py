@@ -1,6 +1,8 @@
 import logging
 
-from ai.llm.ollama_client import OllamaClient
+from ai.llm.factory import get_llm_provider
+from ai.llm.provider import LLMProvider
+from app.config.settings import settings
 
 
 logger = logging.getLogger(__name__)
@@ -11,11 +13,11 @@ class Summarizer:
 
     def __init__(
         self,
-        llm_client: OllamaClient | None = None,
+        llm_client: LLMProvider | None = None,
     ):
         self.llm_client = (
             llm_client
-            or OllamaClient()
+            or get_llm_provider()
         )
 
     def summarize(
@@ -35,6 +37,9 @@ class Summarizer:
             "Generating summary."
         )
 
+        max_chars = settings.summary.max_context_chars
+        source_text = text[:max_chars]
+
         prompt = f"""
             Hãy tóm tắt transcript sau bằng tiếng Việt.
 
@@ -45,7 +50,7 @@ class Summarizer:
             - Chỉ trả về nội dung bản tóm tắt.
 
             Transcript:
-            {text}
+            {source_text}
             """.strip()
 
         summary = self.llm_client.generate(

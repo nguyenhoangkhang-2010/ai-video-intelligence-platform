@@ -28,10 +28,11 @@ def _make_user(user_id: int) -> User:
     )
 
 
-def _make_video(video_id: int, filename: str):
+def _make_video(video_id: int, filename: str, thumbnail_key: str | None = None):
     video = MagicMock(name="video")
     video.id = video_id
     video.filename = filename
+    video.thumbnail_key = thumbnail_key
     return video
 
 
@@ -110,6 +111,58 @@ def test_delete_video_removes_file_and_faiss_vectors(client):
     mock_vector_store_cls.return_value.replace.assert_called_once_with(
         remove_vector_ids={"v1", "v2"}, vectors=[], vector_ids=[],
     )
+
+
+def test_delete_video_also_removes_thumbnail_when_present(client):
+    current_user = _make_user(user_id=99)
+    video_service = MagicMock(name="video_service")
+    embedding_service = MagicMock(name="embedding_service")
+    storage = MagicMock(name="storage")
+
+    video_service.get_video.return_value = _make_video(
+        10, "clip.mp4", thumbnail_key="thumbnails/10.jpg",
+    )
+    video_service.delete_video.return_value = {"message": "Video deleted successfully"}
+    embedding_service.get_by_video_id.return_value = []
+
+    app.dependency_overrides[get_current_user] = lambda: current_user
+    app.dependency_overrides[get_video_service] = lambda: video_service
+    app.dependency_overrides[get_embedding_service] = lambda: embedding_service
+    app.dependency_overrides[get_storage_backend] = lambda: storage
+
+    response = client.delete("/api/v1/videos/10")
+
+    assert response.status_code == 200
+
+    # Both the source file and the extracted thumbnail are cleaned up
+    # through the same StorageBackend, keyed exactly as each was
+    # written (videos/{filename} for the source, thumbnail_key as
+    # persisted for the frame) - neither cleanup call depends on the
+    # other succeeding.
+    storage.delete.assert_any_call("thumbnails/10.jpg")
+    storage.delete.assert_any_call("videos/clip.mp4")
+    assert storage.delete.call_count == 2
+
+
+def test_delete_video_skips_thumbnail_cleanup_when_none_was_extracted(client):
+    current_user = _make_user(user_id=99)
+    video_service = MagicMock(name="video_service")
+    embedding_service = MagicMock(name="embedding_service")
+    storage = MagicMock(name="storage")
+
+    video_service.get_video.return_value = _make_video(10, "clip.mp4")
+    video_service.delete_video.return_value = {"message": "Video deleted successfully"}
+    embedding_service.get_by_video_id.return_value = []
+
+    app.dependency_overrides[get_current_user] = lambda: current_user
+    app.dependency_overrides[get_video_service] = lambda: video_service
+    app.dependency_overrides[get_embedding_service] = lambda: embedding_service
+    app.dependency_overrides[get_storage_backend] = lambda: storage
+
+    response = client.delete("/api/v1/videos/10")
+
+    assert response.status_code == 200
+    storage.delete.assert_called_once_with("videos/clip.mp4")
 
 
 def test_delete_video_still_succeeds_if_storage_cleanup_fails(client):

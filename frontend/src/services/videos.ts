@@ -65,3 +65,21 @@ export function getVideoStreamUrl(videoId: number): string {
   if (token) url.searchParams.set("token", token);
   return url.toString();
 }
+
+/**
+ * URL for this video's real, ffmpeg-extracted representative frame.
+ * Same token-as-query-param pattern as getVideoStreamUrl, since an
+ * <img> element can't attach an Authorization header either (see
+ * backend app/auth/dependencies.py::get_current_user_for_media).
+ *
+ * Callers must gate rendering on `video.has_thumbnail` - this always
+ * returns a URL, but the server 404s if no frame was extracted (still
+ * processing, or extraction failed), so this is only meant to be used
+ * once has_thumbnail is true.
+ */
+export function getVideoThumbnailUrl(videoId: number): string {
+  const token = getToken();
+  const url = new URL(`${API_V1_URL}/videos/${videoId}/thumbnail`);
+  if (token) url.searchParams.set("token", token);
+  return url.toString();
+}

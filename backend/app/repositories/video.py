@@ -70,6 +70,28 @@ class VideoRepository(BaseRepository[Video]):
             .filter(Video.status == status)
             .all()
         )
+
+    def get_processed_without_thumbnail(
+        self,
+        limit: int = 50,
+    ) -> list[Video]:
+        """
+        Candidates for the thumbnail backfill script (see
+        scripts/backfill_thumbnails.py): already-processed videos from
+        before the thumbnail feature existed, or whose extraction
+        failed and was never retried. Bounded by `limit` so a single
+        run never attempts an unbounded number of videos at once.
+        """
+        return (
+            self.db.query(Video)
+            .filter(
+                Video.status == "processed",
+                Video.thumbnail_key.is_(None),
+            )
+            .order_by(Video.id)
+            .limit(limit)
+            .all()
+        )
         
     def get_by_id_and_owner(
         self,

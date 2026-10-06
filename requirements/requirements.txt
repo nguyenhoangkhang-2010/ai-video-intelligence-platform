@@ -1,119 +1,82 @@
+# Pruned 2026-10-03 from ~131 packages: every removed package had zero
+# `import`/`from` hits anywhere in backend/ (code + tests + scripts),
+# zero references in Dockerfiles/CI/.github workflows/config files, and
+# no notebook content (notebooks/*.ipynb are empty scaffolding). The
+# full AI/ML stack this project actually runs on (torch, transformers,
+# sentence-transformers, FlagEmbedding, faster-whisper, pyannote.audio,
+# FAISS) plus anything plausibly required transitively by it
+# (accelerate, ctranslate2, safetensors, sentencepiece, soundfile,
+# tiktoken, torchaudio, torchvision, tqdm) was kept deliberately even
+# where this codebase never imports it directly, rather than removed on
+# a bare import-search result - see the backend dependency audit for
+# the full per-package classification this was based on.
+#
+# A real build-time regression was found and fixed during that same
+# pruning: `pwdlib` (bare) built and ran fine before this prune only
+# because some now-removed package transitively pulled in
+# argon2-cffi - app/core/security.py's `PasswordHash.recommended()`
+# needs it directly and raised `HasherNotAvailable` the moment a
+# freshly pruned image actually started. Pinned as `pwdlib[argon2]`
+# below so this dependency is explicit and correct on its own, not
+# accidentally satisfied by an unrelated package.
+#
+# Same category, second instance: removing the standalone
+# `email-validator` line broke `app/schemas/user.py`'s
+# `EmailStr` field (pydantic's own optional email-validation feature)
+# with `ImportError: email-validator is not installed` at import time
+# - fixed the same way, as `pydantic[email]` below, rather than restoring
+# a same-looking-unrelated top-level package.
+#
+# Third instance, found while verifying the rebuilt dev image: the
+# Dockerfile's own `pip install --upgrade pip setuptools wheel` step
+# (runs before this file is even copied in, so this is independent of
+# anything pruned here) resolves a setuptools new enough to have
+# dropped `pkg_resources` - `ai/speech/vad.py`'s real `webrtcvad`
+# import does a bare `import pkg_resources` and failed with
+# `ModuleNotFoundError` on a freshly built image. Verified live: `pip
+# install "setuptools<81"` restores it (with a deprecation warning,
+# not an error - matches that warning's own "pin to Setuptools<81"
+# text). Pinned explicitly below so `pip install -r requirements.txt`
+# re-asserts a working version regardless of what the Dockerfile's
+# own upgrade step resolved first.
 accelerate
-aiofiles
-aiohttp
 alembic
-apache-airflow
-apscheduler
-bandit
-beautifulsoup4
 bert-score
-bitsandbytes
-black
 boto3
 celery
 ctranslate2
-deep-translator
-diskcache
-docker
-duckdb
-dvc
-dynaconf
-emails
-email-validator
-evaluate
 faiss-cpu
 fastapi
 faster-whisper
-feast
 ffmpeg-python
 FlagEmbedding
-flake8
-grafana-api
-graphviz
-great-expectations
-gunicorn
 httpx
-hydra-core
-isort
-kafka-python
-kubernetes
-lancedb
-langchain
-langchain-community
-langchain-core
-langchain-text-splitters
 langdetect
-librosa
-loguru
-markdown
-matplotlib
-minio
-mlflow
-moviepy
-mypy
-neo4j
-networkx
-nltk
 numpy
-onnx
-onnxruntime
-opencv-python
-openpyxl
-opentelemetry-api
-opentelemetry-sdk
-optimum
-optuna
-orjson
-pandas
-peft
-pika
-plotly
-polars
-pre-commit
-prefect
 prometheus-client
-psutil
 psycopg[binary]
-pwdlib
+pwdlib[argon2]
 pyannote.audio
-pyarrow
-pyAudioAnalysis
-pydantic
+pydantic[email]
 pydantic-settings
-pymilvus
-pymupdf
-pysrt
-pytesseract
 pytest
 pytest-cov
-python-docx
 python-dotenv
 python-jose
 python-multipart
-python-pptx
-pyvis
-qdrant-client
 ragas
 rank-bm25
-ray
 redis
-reportlab
 requests
 rich
 rouge-score
 ruff
 safetensors
-scikit-learn
+setuptools<81
 sentencepiece
 sentence-transformers
-sentry-sdk
 soundfile
-spacy
-sqladmin
 sqlalchemy
-streamlit
-structlog
-summa
 tenacity
 tiktoken
 torch
@@ -121,11 +84,6 @@ torchaudio
 torchvision
 tqdm
 transformers
-trl
-unstructured
 uvicorn[standard]
-wandb
-weaviate-client
 webrtcvad
 websockets
-xformers

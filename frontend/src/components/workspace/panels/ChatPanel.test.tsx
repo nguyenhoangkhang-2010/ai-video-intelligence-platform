@@ -1,4 +1,5 @@
 import { AxiosError } from "axios";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -27,16 +28,25 @@ vi.mock("@/services/chat");
  * A real provider is enough; nothing 3D/WebGL needs mocking anymore.
  */
 function renderChatPanel(props: Parameters<typeof ChatPanel>[0]) {
+  const queryClient = new QueryClient({
+    defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
+  });
   return render(
-    <NovaAttentionProvider>
-      <ChatPanel {...props} />
-    </NovaAttentionProvider>,
+    <QueryClientProvider client={queryClient}>
+      <NovaAttentionProvider>
+        <ChatPanel {...props} />
+      </NovaAttentionProvider>
+    </QueryClientProvider>,
   );
 }
 
 describe("ChatPanel", () => {
   beforeEach(() => {
     vi.mocked(chatService.askVideo).mockReset();
+    // useChat seeds from persisted history on mount (see
+    // hooks/useChat.ts) - an empty history is the real "no prior
+    // turns yet" case these tests exercise, not an unmocked gap.
+    vi.mocked(chatService.getChatHistory).mockReset().mockResolvedValue([]);
   });
 
   it("renders a focusable, typeable message input with no disabled attribute", () => {

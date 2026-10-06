@@ -5,28 +5,27 @@ from app.services.semantic_search import SemanticSearchService
 
 def _make_service():
     """
-    Build a SemanticSearchService with its two internally-constructed
-    dependencies (Embedder, VectorStore) patched at their import site
-    inside app.services.semantic_search, BEFORE the service is
-    constructed, so __init__ never loads a real BGE-M3 model or a
-    real FAISS index. embedding_repository is injected as a mock.
+    Build a SemanticSearchService with a mock EmbeddingProvider
+    injected directly via its constructor (so __init__ never loads a
+    real BGE-M3 model) and VectorStore patched at its import site
+    inside app.services.semantic_search (so __init__ never loads a
+    real FAISS index). embedding_repository is injected as a mock.
     """
     embedding_repository = MagicMock(name="embedding_repository")
+    embedder = MagicMock(name="embedder")
 
-    with (
-        patch("app.services.semantic_search.Embedder") as mock_embedder_class,
-        patch(
-            "app.services.semantic_search.VectorStore",
-        ) as mock_vector_store_class,
-    ):
+    with patch(
+        "app.services.semantic_search.VectorStore",
+    ) as mock_vector_store_class:
         service = SemanticSearchService(
             embedding_repository=embedding_repository,
+            embedder=embedder,
         )
 
     return (
         service,
         embedding_repository,
-        mock_embedder_class.return_value,
+        embedder,
         mock_vector_store_class.return_value,
     )
 

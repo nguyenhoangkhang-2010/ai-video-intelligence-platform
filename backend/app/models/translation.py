@@ -5,6 +5,7 @@ from sqlalchemy import ForeignKey
 from sqlalchemy import Integer
 from sqlalchemy import String
 from sqlalchemy import Text
+from sqlalchemy import UniqueConstraint
 
 from sqlalchemy.orm import Mapped
 from sqlalchemy.orm import mapped_column
@@ -17,6 +18,18 @@ class Translation(Base):
     """Translation ORM model."""
 
     __tablename__ = "translations"
+    __table_args__ = (
+        # One translation per (video, language) - TranslationService.
+        # save_translation is the only write path the pipeline uses
+        # (video_pipeline.py translation_stage), and it already
+        # upserts on this exact key; this constraint is what makes
+        # that upsert correct under a genuine concurrent write too,
+        # not just in the common single-writer case.
+        UniqueConstraint(
+            "video_id", "language",
+            name="uq_translations_video_id_language",
+        ),
+    )
 
     id: Mapped[int] = mapped_column(
         Integer,

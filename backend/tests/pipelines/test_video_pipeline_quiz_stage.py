@@ -14,6 +14,7 @@ def _make_pipeline():
     quiz_service = MagicMock(name="quiz_service")
     chapter_service = MagicMock(name="chapter_service")
     flashcard_service = MagicMock(name="flashcard_service")
+    storage = MagicMock(name="storage")
 
     with (
         patch("app.pipelines.video_pipeline.TranscriptionWorker"),
@@ -34,12 +35,13 @@ def _make_pipeline():
             quiz_service=quiz_service,
             chapter_service=chapter_service,
             flashcard_service=flashcard_service,
+            storage=storage,
         )
 
     return pipeline, quiz_service
 
 
-def test_quiz_stage_replaces_old_quizzes_before_persisting_new_ones():
+def test_quiz_stage_atomically_replaces_old_quizzes_with_new_ones():
     pipeline, quiz_service = _make_pipeline()
 
     transcript = MagicMock(name="transcript")
@@ -54,24 +56,27 @@ def test_quiz_stage_replaces_old_quizzes_before_persisting_new_ones():
         },
     ]
 
-    manager = MagicMock()
-    manager.attach_mock(quiz_service.delete_by_video_id, "delete")
-    manager.attach_mock(quiz_service.create_quiz, "create")
-
     pipeline.quiz_stage(job_id=1, video_id=10, transcript=transcript)
 
-    assert [entry[0] for entry in manager.mock_calls] == ["delete", "create"]
-    quiz_service.delete_by_video_id.assert_called_once_with(10)
+    # Idempotent by atomic replacement, not delete-then-per-row-create:
+    # replace_for_video is called exactly once with the complete new
+    # artifact set, so a crash partway through can never leave a
+    # partial mix of old and new quizzes (see
+    # QuizRepository.replace_for_video).
+    quiz_service.replace_for_video.assert_called_once()
+    call_args = quiz_service.replace_for_video.call_args.args
+    assert call_args[0] == 10
 
-    created = quiz_service.create_quiz.call_args.args[0]
-    assert isinstance(created, QuizCreate)
-    assert created.video_id == 10
-    assert created.question == "Q1?"
-    assert created.answer == "A"
-    assert created.options == "A,B,C,D"
+    created = call_args[1]
+    assert len(created) == 1
+    assert isinstance(created[0], QuizCreate)
+    assert created[0].video_id == 10
+    assert created[0].question == "Q1?"
+    assert created[0].answer == "A"
+    assert created[0].options == "A,B,C,D"
 
 
-def test_quiz_stage_deletes_old_quizzes_even_when_no_new_quizzes_generated():
+def test_quiz_stage_replaces_with_empty_set_when_no_new_quizzes_generated():
     pipeline, quiz_service = _make_pipeline()
 
     transcript = MagicMock(name="transcript")
@@ -81,5 +86,7 @@ def test_quiz_stage_deletes_old_quizzes_even_when_no_new_quizzes_generated():
 
     pipeline.quiz_stage(job_id=1, video_id=10, transcript=transcript)
 
-    quiz_service.delete_by_video_id.assert_called_once_with(10)
-    quiz_service.create_quiz.assert_not_called()
+    # Still calls replace_for_video (with an empty list) rather than a
+    # bare delete - this atomically clears any stale quizzes from a
+    # previous attempt even when nothing new was generated.
+    quiz_service.replace_for_video.assert_called_once_with(10, [])

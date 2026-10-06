@@ -1,7 +1,8 @@
 """Orchestrates MCQ, True/False, and Short-Answer quiz generation."""
 import logging
 
-from ai.llm.ollama_client import OllamaClient
+from ai.llm.factory import get_llm_provider
+from ai.llm.provider import LLMProvider
 from ai.quiz_generation.mcq import MCQGenerator
 from ai.quiz_generation.quiz_result import QuizQuestion, QuizResult
 from ai.quiz_generation.short_answer import ShortAnswerGenerator
@@ -20,12 +21,12 @@ class QuizGenerator:
 
     def __init__(
         self,
-        llm_client: OllamaClient | None = None,
+        llm_client: LLMProvider | None = None,
         mcq_generator: MCQGenerator | None = None,
         true_false_generator: TrueFalseGenerator | None = None,
         short_answer_generator: ShortAnswerGenerator | None = None,
     ):
-        shared_client = llm_client or OllamaClient()
+        shared_client = llm_client or get_llm_provider()
 
         self.mcq_generator = mcq_generator or MCQGenerator(
             llm_client=shared_client,

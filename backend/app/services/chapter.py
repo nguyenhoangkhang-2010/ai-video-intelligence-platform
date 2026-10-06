@@ -48,3 +48,23 @@ class ChapterService:
         return self.repository.create(
             chapter,
         )
+
+    def replace_for_video(
+        self,
+        video_id: int,
+        chapters_data: list[ChapterCreate],
+    ) -> list[Chapter]:
+        """
+        Atomically replace every chapter row for `video_id` with
+        `chapters_data` - see ChapterRepository.replace_for_video for
+        the consistency guarantee this provides.
+        """
+        new_rows = [
+            Chapter(**data.model_dump())
+            for data in chapters_data
+        ]
+
+        return self.repository.replace_for_video(
+            video_id,
+            new_rows,
+        )

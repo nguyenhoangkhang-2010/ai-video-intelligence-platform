@@ -56,9 +56,9 @@ class TopicSegmenter:
             # always use the fallback") always wins over settings.
             self.embedder = embedder
         elif settings.chapter.use_embedding_segmentation:
-            from ai.embedding.embedder import Embedder
+            from ai.embedding.factory import get_embedding_provider
 
-            self.embedder = Embedder()
+            self.embedder = get_embedding_provider()
         else:
             self.embedder = None
 

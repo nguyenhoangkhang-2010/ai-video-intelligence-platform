@@ -2,7 +2,8 @@ import logging
 
 import numpy as np
 
-from ai.embedding.embedder import Embedder
+from ai.embedding.factory import get_embedding_provider
+from ai.embedding.provider import EmbeddingProvider
 from ai.embedding.vector_store import VectorStore
 from app.repositories.embedding import EmbeddingRepository
 
@@ -16,8 +17,9 @@ class SemanticSearchService:
     def __init__(
         self,
         embedding_repository: EmbeddingRepository,
+        embedder: EmbeddingProvider | None = None,
     ):
-        self.embedder = Embedder()
+        self.embedder = embedder or get_embedding_provider()
         self.vector_store = VectorStore(
             dimension=1024,
         )

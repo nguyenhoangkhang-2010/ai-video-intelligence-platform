@@ -305,13 +305,17 @@ a number that means something.
 
 ## Testing
 
-**Backend**: 503 tests (pytest), covering auth/ownership (every
+**Backend**: 556 tests (pytest), covering auth/ownership (every
 video-scoped endpoint has an explicit "not owned → 404" test), upload
 validation, deletion cleanup (file + FAISS vectors), processing job
 lifecycle/status-transition validation, translation, hybrid retrieval
 wiring (with reranker-unavailable fallback), semantic search, and the AI
 modules' own unit tests (chapter detection, quiz/flashcard generation,
-diarization, evaluation metrics, retrieval, reranking). Run with:
+diarization, evaluation metrics, retrieval, reranking). Rate-limited
+endpoints run with `RATE_LIMIT_ENABLED=false` in the test process only
+(set in `tests/conftest.py`, before any app import) so repeated local
+runs stay deterministic — production's own rate limiting is untouched.
+Run with:
 
 ```bash
 cd backend
@@ -320,9 +324,13 @@ pytest tests/ -q
 
 **Frontend**: TypeScript strict mode (`noUncheckedIndexedAccess`), typed
 end-to-end against the backend's actual Pydantic response shapes (every
-`types/*.ts` file cross-references the schema it mirrors). No automated
-frontend test suite exists yet — `npx tsc --noEmit` and `next build` are
-the current verification surface (see `frontend/package.json`).
+`types/*.ts` file cross-references the schema it mirrors). A Vitest +
+Testing Library suite (31 tests across 5 files) covers the video
+thumbnail component and the Search/Chat workspace panels; most other
+components, hooks, and services have no dedicated test yet.
+`npx tsc --noEmit`, `npm run lint` (ESLint, `next/core-web-vitals` +
+`next/typescript`), `npm run test`, and `npm run build` are all
+non-interactive and pass cleanly (see `frontend/package.json`).
 
 ---
 
@@ -346,7 +354,7 @@ Verified in the source, not aspirational:
   resource's existence for another user is never revealed.
 - **Database**: FK indexes on every foreign key that lacked one, an N+1
   query eliminated in semantic search (batched from the single already-
-  fetched embedding list instead of one query per FAISS hit), 19
+  fetched embedding list instead of one query per FAISS hit), 22
   sequential Alembic migrations with no branching.
 - **Migrations run automatically**: `docker compose up --build` on a
   clean database no longer requires anyone to know `alembic upgrade
@@ -400,7 +408,7 @@ AI-Video-Intelligence-Platform/
 │   │   ├── quiz_generation/ flashcards/ knowledge_graph/
 │   │   ├── llm/             # OllamaClient, shared by every LLM-backed stage
 │   │   └── evaluation/      # Offline metrics + fixtures + runner
-│   ├── alembic/             # 19 linear migrations
+│   ├── alembic/             # 22 linear migrations
 │   ├── app/
 │   │   ├── api/v1/endpoints/  auth/  config/  core/
 │   │   ├── models/ schemas/ repositories/ services/
@@ -408,7 +416,7 @@ AI-Video-Intelligence-Platform/
 │   │   ├── workers/         # Celery task + metrics
 │   │   └── storage/         # Local / S3 StorageBackend
 │   ├── scripts/             # rebuild_faiss_index.py, run_evaluation.py, docker-entrypoint.sh
-│   └── tests/                # 503 tests
+│   └── tests/                # 556 tests
 ├── frontend/src/
 │   ├── app/                 # Next.js App Router
 │   ├── components/          # workspace panels, ui/ design system
@@ -436,7 +444,13 @@ AI-Video-Intelligence-Platform/
   re-runs the whole pipeline, including re-transcription.
 - Exact (not approximate) FAISS search — would need re-architecting to
   scale past roughly a few million vectors.
-- No frontend automated test suite yet.
+- Frontend automated test coverage is thin — a Vitest suite exists
+  (31 tests) but covers only the video thumbnail component and two of
+  the nine Workspace panels; most hooks, services, and pages have no
+  dedicated test yet.
+- No end-to-end (E2E) test framework is set up yet — automated
+  coverage stops at backend pytest and frontend Vitest; there is no
+  browser-driven login→upload→processing→workspace flow test.
 - No published evaluation numbers — the framework and runner are real;
   no labeled dataset ships with the repo (see
   [Evaluation](#evaluation)).

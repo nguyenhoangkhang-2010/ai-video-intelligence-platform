@@ -22,14 +22,20 @@
  * - `statusBadges`: OverviewPanel, `visibleNodes` isolates the one
  *   `Badge_<state>` matching the real `video.status` (Overview has no
  *   other accent).
- * - `videoFrame`: FeaturedVideo (Library page) - `visibleNodes` keeps
- *   only the outer bezel (`BackPlate/Bezel/InnerLip/FrameBody`),
+ * - `videoFrame`: the real Workspace video player (`VideoFrameShell` in
+ *   app/(app)/videos/[id]/page.tsx), not the Library - `visibleNodes`
+ *   keeps only the outer bezel (`BackPlate/Bezel/InnerLip/FrameBody`),
  *   hiding every playback-control node (`Screen/Progress/Playhead/
  *   PlayKey/SkipBack/SkipForward/Track/ChapterTick_N/EvidencePin_N/
- *   Volume/Fullscreen/Dock/AIChip nodes`) - a decorative shell around the
- *   card's own already-abstract "no real thumbnail" surface, never a
- *   second video or a duplicate control. Library has no Nova/other
- *   accent, so this is the only Canvas on that page.
+ *   Volume/Fullscreen/Dock/AIChip nodes`) - a decorative shell around
+ *   the actual playing `<video>`, never a second video or a duplicate
+ *   control. Mutually exclusive with whichever mode panel's own accent
+ *   is active, via AccentSlotContext, so it never breaks the page's
+ *   2-canvas budget alongside Nova. The Library's video cards
+ *   (FeaturedVideo/VideoRow) show each video's real, ffmpeg-extracted
+ *   thumbnail (see components/video/VideoThumbnail.tsx) as a plain 2D
+ *   `<img>`, not this GLB - Library has no Workspace3D Canvas at all,
+ *   only Nova's.
  * - `chapterStrip`: ChaptersPanel's own `ProcessingState`/`EmptyState`
  *   only - i.e. exactly the moments there is no real chapter array yet
  *   to misrepresent. The real, arbitrary-length chapter timeline

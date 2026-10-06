@@ -2,6 +2,7 @@ import Link from "next/link";
 
 import { Icon } from "@/components/ui/Icon";
 import { VideoStatusBadge } from "@/components/ui/StatusBadge";
+import { VideoThumbnail } from "@/components/video/VideoThumbnail";
 import { ROUTES } from "@/lib/constants";
 import { formatRelativeTime, formatTimecode } from "@/lib/utils";
 import type { Video } from "@/types/video";
@@ -9,9 +10,10 @@ import type { Video } from "@/types/video";
 /**
  * The library's editorial lead — the most recent upload, given real
  * visual weight instead of sitting as one more tile in a uniform
- * grid. No thumbnail exists (the API has none), so the media surface
- * is an honestly abstract, generative-looking pattern — never dressed
- * up to look like a real video frame or waveform.
+ * grid. Shows this video's real, extracted frame when one exists (see
+ * VideoThumbnail); otherwise the media surface stays the same honest
+ * abstract pattern it's always used — never dressed up to look like a
+ * real video frame.
  */
 export function FeaturedVideo({ video }: { video: Video }) {
   return (
@@ -28,18 +30,11 @@ export function FeaturedVideo({ video }: { video: Video }) {
          * rs_video_frame.glb moved to the real Workspace video player
          * (see app/(app)/videos/[id]/page.tsx) - it now wraps the video
          * that's actually playing there, instead of decorating this
-         * card, which has no real footage to frame (see the module
-         * comment above: "no thumbnail exists... never dressed up to
-         * look like a real video frame").
+         * card. VideoThumbnail below renders this card's own real,
+         * extracted frame when one exists; it's a plain 2D image,
+         * never a WebGL surface.
          */}
-        <div
-          className="absolute inset-0 opacity-[0.07] transition-opacity duration-base group-hover:opacity-[0.12]"
-          style={{
-            backgroundImage:
-              "repeating-linear-gradient(115deg, rgb(var(--color-ai)) 0px, rgb(var(--color-ai)) 1px, transparent 1px, transparent 34px)",
-          }}
-          aria-hidden="true"
-        />
+        <VideoThumbnail video={video} patternSpacing={34} />
         <span className="absolute left-4 top-4 rounded-full bg-bg/60 backdrop-blur-[2px]">
           <VideoStatusBadge status={video.status} />
         </span>

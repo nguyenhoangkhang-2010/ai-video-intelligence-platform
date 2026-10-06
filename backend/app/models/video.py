@@ -10,7 +10,6 @@ from sqlalchemy.orm import mapped_column
 from sqlalchemy.orm import relationship
 
 from app.database.base import Base
-from app.database.base import TimestampMixin
 
 
 class Video(Base):
@@ -49,6 +48,27 @@ class Video(Base):
         default="uploaded",
         index=True,
     )
+
+    # Storage key for a real, ffmpeg-extracted representative frame
+    # (see app/utils/thumbnail.py), not a filesystem path - resolved
+    # through the same StorageBackend the uploaded file itself is
+    # served through (GET /videos/{id}/thumbnail). Nullable: existing
+    # videos have none until backfilled, and extraction is allowed to
+    # fail without failing the rest of the pipeline (see
+    # VideoPipelineService.metadata_stage).
+    thumbnail_key: Mapped[str | None] = mapped_column(
+        String(255),
+        nullable=True,
+    )
+
+    @property
+    def has_thumbnail(self) -> bool:
+        """
+        Exposed to the API (see VideoRead) instead of `thumbnail_key`
+        itself, so the frontend can decide whether to render
+        GET /videos/{id}/thumbnail without ever seeing the storage key.
+        """
+        return self.thumbnail_key is not None
 
     owner_id: Mapped[int] = mapped_column(
         ForeignKey(

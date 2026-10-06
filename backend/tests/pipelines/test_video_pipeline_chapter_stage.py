@@ -15,6 +15,7 @@ def _make_pipeline():
     quiz_service = MagicMock(name="quiz_service")
     chapter_service = MagicMock(name="chapter_service")
     flashcard_service = MagicMock(name="flashcard_service")
+    storage = MagicMock(name="storage")
 
     with (
         patch("app.pipelines.video_pipeline.TranscriptionWorker"),
@@ -35,6 +36,7 @@ def _make_pipeline():
             quiz_service=quiz_service,
             chapter_service=chapter_service,
             flashcard_service=flashcard_service,
+            storage=storage,
         )
 
     return pipeline, chapter_service
@@ -69,7 +71,9 @@ def test_chapter_stage_converts_segments_and_persists_new_chapters():
     assert run_kwargs["segments"][0].text == "hello"
     assert run_kwargs["segments"][0].speaker == "Speaker 1"
 
-    created = chapter_service.create_chapter.call_args.args[0]
+    call_args = chapter_service.replace_for_video.call_args.args
+    assert call_args[0] == 10
+    created = call_args[1][0]
     assert isinstance(created, ChapterCreate)
     assert created.video_id == 10
     assert created.title == "Intro"
@@ -80,7 +84,7 @@ def test_chapter_stage_converts_segments_and_persists_new_chapters():
     assert result == chapters
 
 
-def test_chapter_stage_replaces_old_chapters_before_persisting_new_ones():
+def test_chapter_stage_atomically_replaces_old_chapters_with_new_ones():
     pipeline, chapter_service = _make_pipeline()
 
     chapters = (
@@ -93,20 +97,21 @@ def test_chapter_stage_replaces_old_chapters_before_persisting_new_ones():
         video_id=10, chapters=chapters,
     )
 
-    manager = MagicMock()
-    manager.attach_mock(chapter_service.delete_by_video_id, "delete")
-    manager.attach_mock(chapter_service.create_chapter, "create")
-
     pipeline.chapter_stage(
         job_id=1, video_id=10,
         transcript_segments=[{"start": 0.0, "end": 1.0, "text": "x"}],
     )
 
-    assert [entry[0] for entry in manager.mock_calls] == ["delete", "create"]
-    chapter_service.delete_by_video_id.assert_called_once_with(10)
+    # Idempotent by atomic replacement, not delete-then-per-row-create:
+    # replace_for_video is called exactly once with the complete new
+    # artifact set (see ChapterRepository.replace_for_video).
+    chapter_service.replace_for_video.assert_called_once()
+    call_args = chapter_service.replace_for_video.call_args.args
+    assert call_args[0] == 10
+    assert len(call_args[1]) == 1
 
 
-def test_chapter_stage_persists_nothing_extra_when_no_chapters_detected():
+def test_chapter_stage_replaces_with_empty_set_when_no_chapters_detected():
     pipeline, chapter_service = _make_pipeline()
 
     pipeline.chapter_pipeline.run.return_value = ChapterResult(
@@ -117,8 +122,11 @@ def test_chapter_stage_persists_nothing_extra_when_no_chapters_detected():
         job_id=1, video_id=10, transcript_segments=[],
     )
 
-    chapter_service.delete_by_video_id.assert_called_once_with(10)
-    chapter_service.create_chapter.assert_not_called()
+    # Still calls replace_for_video (with an empty list) rather than a
+    # bare delete - this atomically clears any stale chapters from a
+    # previous attempt even when none were detected this time (a
+    # valid, non-error outcome - see this method's own docstring).
+    chapter_service.replace_for_video.assert_called_once_with(10, [])
     assert result == ()
 
 

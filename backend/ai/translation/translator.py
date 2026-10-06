@@ -1,6 +1,8 @@
 import logging
 
-from ai.llm.ollama_client import OllamaClient
+from ai.llm.factory import get_llm_provider
+from ai.llm.provider import LLMProvider
+from app.config.settings import settings
 
 logger = logging.getLogger(__name__)
 
@@ -15,11 +17,11 @@ class Translator:
 
     def __init__(
         self,
-        llm_client: OllamaClient | None = None,
+        llm_client: LLMProvider | None = None,
     ):
         self.llm_client = (
             llm_client
-            or OllamaClient()
+            or get_llm_provider()
         )
 
     def translate(
@@ -62,6 +64,9 @@ class Translator:
             target_language,
         )
 
+        max_chars = settings.translation.max_context_chars
+        source_text = text[:max_chars]
+
         prompt = f"""
             Translate the following transcript into the language with
             ISO 639-1 code "{target_language}".
@@ -75,7 +80,7 @@ class Translator:
               labels, or explanation.
 
             Transcript:
-            {text}
+            {source_text}
             """.strip()
 
         translation = self.llm_client.generate(

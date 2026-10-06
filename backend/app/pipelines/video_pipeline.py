@@ -1,6 +1,8 @@
 import logging
 
+from app.storage.base import StorageBackend
 from app.utils.ffprobe import extract_metadata
+from app.utils.thumbnail import extract_thumbnail
 from app.services.video import VideoService
 from app.services.processing_job import ProcessingJobService
 from app.services.transcript import TranscriptService
@@ -62,8 +64,10 @@ class VideoPipelineService:
         quiz_service: QuizService,
         chapter_service: ChapterService,
         flashcard_service: FlashcardService,
+        storage: StorageBackend,
     ):
         self.video_service = video_service
+        self.storage = storage
         self.transcript_service = transcript_service
         self.processing_job_service = processing_job_service
         self.summary_service = summary_service
@@ -144,7 +148,14 @@ class VideoPipelineService:
             current_step="Saving Transcript",
         )
         
-        transcript = self.transcript_service.create_transcript(
+        # save_transcript (upsert) rather than create_transcript: a
+        # reprocessed video must get its transcript genuinely
+        # regenerated, not silently keep whatever the first attempt
+        # produced. transcripts.video_id stays UNIQUE at the DB level
+        # regardless (see migration), so this is still exactly one
+        # row per video, just atomically replaced on reprocess instead
+        # of frozen on first write.
+        transcript = self.transcript_service.save_transcript(
             TranscriptCreate(
                 video_id=video_id,
                 language=result["language"],
@@ -176,7 +187,13 @@ class VideoPipelineService:
             transcript=transcript.text,
         )
 
-        summary = self.summary_service.create_summary(
+        # save_summary (upsert) rather than create_summary: a
+        # reprocessed video must get a genuinely regenerated summary,
+        # not silently keep a prior attempt's content. Uniqueness on
+        # (video_id, type) stays DB-enforced (see migration); this
+        # only changes what happens when a row for that key already
+        # exists - replace it, not skip it.
+        summary = self.summary_service.save_summary(
             SummaryCreate(
                 video_id=video_id,
                 type=result["type"],
@@ -362,7 +379,14 @@ class VideoPipelineService:
             source_language=transcript.language,
         )
 
-        translation = self.translation_service.create_translation(
+        # save_translation (upsert) rather than create_translation:
+        # a reprocessed video must get a genuinely regenerated
+        # translation for that language, not silently keep a prior
+        # attempt's text. Uniqueness on (video_id, language) stays
+        # DB-enforced (see migration); this only changes what happens
+        # when a row for that key already exists - replace it, not
+        # skip it.
+        translation = self.translation_service.save_translation(
             TranslationCreate(
                 video_id=video_id,
                 language=result["language"],
@@ -385,10 +409,16 @@ class VideoPipelineService:
         """
         Generate and persist quiz questions from the transcript.
 
-        Mirrors embedding_stage/chapter_stage's replace-on-reprocess
-        pattern: this video's existing quizzes are deleted before the
-        newly generated ones are inserted, so reprocessing a video
-        never accumulates duplicate quiz rows.
+        Idempotent by atomic replacement: this video's quiz set is
+        replaced in a single transaction (QuizRepository.
+        replace_for_video) rather than deleted then inserted row by
+        row, so a crash partway through can never leave this video
+        with a partial mix of old and new quizzes - either the old
+        set is still fully intact (on failure) or the new set is
+        fully present (on success). The LLM's output is not
+        deterministic across retries; that is expected and fine -
+        idempotency here means "one logical attempt, one complete
+        artifact set," not "identical text every time."
         """
 
         self.processing_job_service.update_progress(
@@ -407,13 +437,9 @@ class VideoPipelineService:
             transcript=transcript.text,
         )
 
-        self.quiz_service.delete_by_video_id(
+        self.quiz_service.replace_for_video(
             video_id,
-        )
-
-        for quiz in quizzes:
-
-            self.quiz_service.create_quiz(
+            [
                 QuizCreate(
                     video_id=video_id,
                     type=quiz["type"],
@@ -421,7 +447,9 @@ class VideoPipelineService:
                     answer=quiz["answer"],
                     options=quiz["options"],
                 )
-            )
+                for quiz in quizzes
+            ],
+        )
 
 
         logger.info(
@@ -478,12 +506,16 @@ class VideoPipelineService:
             video_id=video_id,
         )
 
-        self.chapter_service.delete_by_video_id(
+        # Idempotent by atomic replacement (see quiz_stage's docstring
+        # for the same rationale) - this video's chapter set is
+        # replaced in one transaction rather than deleted then
+        # inserted row by row, including the empty-list case (zero
+        # chapters is a valid outcome - see this method's own
+        # docstring - and must still atomically clear any stale
+        # chapters from a previous attempt).
+        self.chapter_service.replace_for_video(
             video_id,
-        )
-
-        for chapter in chapter_result.chapters:
-            self.chapter_service.create_chapter(
+            [
                 ChapterCreate(
                     video_id=video_id,
                     title=chapter.title,
@@ -491,7 +523,9 @@ class VideoPipelineService:
                     end_time=chapter.end,
                     summary=chapter.summary,
                 )
-            )
+                for chapter in chapter_result.chapters
+            ],
+        )
 
         logger.info(
             "Chapter detection completed for video %s. "
@@ -511,9 +545,10 @@ class VideoPipelineService:
         """
         Generate and persist study flashcards from the transcript.
 
-        Mirrors quiz_stage/chapter_stage's replace-on-reprocess
-        pattern: this video's existing flashcards are deleted before
-        the newly generated ones are inserted.
+        Idempotent by atomic replacement (see quiz_stage's docstring
+        for the same rationale) - this video's flashcard set is
+        replaced in one transaction rather than deleted then inserted
+        row by row.
         """
 
         self.processing_job_service.update_progress(
@@ -531,19 +566,18 @@ class VideoPipelineService:
             transcript=transcript.text,
         )
 
-        self.flashcard_service.delete_by_video_id(
+        self.flashcard_service.replace_for_video(
             video_id,
-        )
-
-        for flashcard in flashcards:
-            self.flashcard_service.create_flashcard(
+            [
                 FlashcardCreate(
                     video_id=video_id,
                     question=flashcard["question"],
                     answer=flashcard["answer"],
                     difficulty=flashcard["difficulty"],
                 )
-            )
+                for flashcard in flashcards
+            ],
+        )
 
         logger.info(
             "Flashcard generation completed for video %s. "
@@ -651,3 +685,46 @@ class VideoPipelineService:
             video_id=video_id,
             metadata=metadata,
         )
+
+        self._extract_and_save_thumbnail(
+            video_id=video_id,
+            file_path=file_path,
+            duration=metadata.duration,
+        )
+
+    def _extract_and_save_thumbnail(
+        self,
+        video_id: int,
+        file_path: str,
+        duration: int,
+    ) -> None:
+        """
+        Best-effort thumbnail extraction - deliberately isolated from
+        metadata_stage's own exception handling (the rest of that
+        stage, and the whole remaining pipeline, must run whether or
+        not this succeeds). A representative frame with no library-
+        page value is not worth failing a video's entire processing
+        run over.
+        """
+        try:
+            image_bytes = extract_thumbnail(file_path, duration)
+            if image_bytes is None:
+                return
+
+            key = f"thumbnails/{video_id}.jpg"
+            self.storage.save(key, image_bytes)
+            self.video_service.update_thumbnail(
+                video_id=video_id,
+                thumbnail_key=key,
+            )
+            logger.info(
+                "Thumbnail extracted and saved for video %s (key=%s)",
+                video_id,
+                key,
+            )
+        except Exception:
+            logger.exception(
+                "Thumbnail extraction/save failed for video %s - "
+                "continuing processing without a thumbnail.",
+                video_id,
+            )

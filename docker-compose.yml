@@ -73,13 +73,13 @@ services:
       # without this override the rate limiter's Redis client silently
       # fails to connect and fails open (see app/core/rate_limit.py).
       RATE_LIMIT_REDIS_URL: redis://redis:6379/0
-      # Deliberately under ./storage, NOT a separate named Docker
-      # volume - a fresh named volume mounts with root ownership by
-      # default, which the non-root `app` user (Dockerfile's `USER
-      # app`, applied before the entrypoint even runs, so nothing here
-      # can chown it) cannot write into - confirmed live: this broke
-      # every processing job with a PermissionError until switched to
-      # this already-correctly-permissioned bind mount.
+      # Deliberately under ./storage rather than a separate volume/
+      # path - it's already the one persistent, writable location this
+      # container has (docker-entrypoint.sh chowns it to the non-root
+      # "app" user at startup, both here and in docker-compose.prod.yml
+      # - see that script's own comment for the real mechanism), so
+      # reusing it for the HF model cache avoids declaring and
+      # permissioning a second volume for no reason.
       HF_HOME: /app/storage/.cache/huggingface
 
     volumes:

@@ -125,13 +125,14 @@ class RAGPipeline:
                 sources=[],
             )
 
-        context = self._build_context(
+        context, grounding_results = self._build_context(
             results,
         )
 
         logger.info(
-            "Calling LLM for video %s grounded in %s source chunk(s).",
+            "Calling LLM for video %s grounded in %s of %s retrieved chunk(s).",
             video_id,
+            len(grounding_results),
             len(results),
         )
 
@@ -153,7 +154,7 @@ class RAGPipeline:
                 "LLM generation failed for video %s after a "
                 "successful retrieval of %s chunk(s).",
                 video_id,
-                len(results),
+                len(grounding_results),
             )
             return RAGResult(
                 video_id=video_id,
@@ -169,7 +170,7 @@ class RAGPipeline:
             answer=answer,
             sources=[
                 self._to_search_result(result)
-                for result in results
+                for result in grounding_results
             ],
         )
 
@@ -196,15 +197,24 @@ class RAGPipeline:
     @staticmethod
     def _build_context(
         results: list[RetrievalResult],
-    ) -> str:
+    ) -> tuple[str, list[RetrievalResult]]:
         """
         Assemble retrieved chunks (already ordered most-relevant-first
         by RetrievalPipeline) into a bounded, numbered context block.
         Greedily includes chunks until MAX_CONTEXT_CHARS would be
         exceeded, always keeping at least the first one.
+
+        Also returns exactly the subset of `results` that survived
+        into the returned context string - real bug fixed here: this
+        used to be computed once and the *full*, untruncated `results`
+        list was separately used to build `RAGResult.sources`, so a
+        query whose retrieval exceeded MAX_CONTEXT_CHARS could report
+        a source the LLM was never actually shown. Callers must build
+        `sources` from this returned subset, not from `results`.
         """
 
         parts = []
+        included: list[RetrievalResult] = []
         total_chars = 0
 
         for position, result in enumerate(results, start=1):
@@ -222,6 +232,7 @@ class RAGPipeline:
                 break
 
             parts.append(block)
+            included.append(result)
             total_chars += len(block)
 
-        return "\n\n".join(parts)
+        return "\n\n".join(parts), included

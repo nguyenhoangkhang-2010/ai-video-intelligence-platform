@@ -176,6 +176,32 @@ class VideoService:
 
         return self.repository.update(video)
 
+    def update_thumbnail(
+        self,
+        video_id: int,
+        thumbnail_key: str,
+    ) -> Video:
+        """
+        Persist the storage key of a real, ffmpeg-extracted frame.
+
+        Looked up by id only (not owner-scoped) - called from inside
+        the processing pipeline, which already only ever operates on
+        a video it was dispatched for, the same convention every other
+        pipeline-stage update on this service already follows
+        (update_metadata/update_status/update_processing_result).
+        """
+        video = self.repository.get_by_id(video_id)
+
+        if video is None:
+            raise HTTPException(
+                status_code=http_status.HTTP_404_NOT_FOUND,
+                detail="Video not found",
+            )
+
+        video.thumbnail_key = thumbnail_key
+
+        return self.repository.update(video)
+
     def update_status(
         self,
         video_id: int,

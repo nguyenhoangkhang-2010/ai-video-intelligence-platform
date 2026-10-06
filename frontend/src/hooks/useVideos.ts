@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import * as videosService from "@/services/videos";
-import { TERMINAL_VIDEO_STATUSES, PROCESSING_POLL_INTERVAL_MS } from "@/lib/constants";
+import { isTerminalVideoStatus, PROCESSING_POLL_INTERVAL_MS } from "@/lib/constants";
 import type { Video } from "@/types/video";
 
 export const videoKeys = {
@@ -12,10 +12,24 @@ export const videoKeys = {
   jobs: (id: number) => [...videoKeys.all, "jobs", id] as const,
 };
 
+/**
+ * Polls while any video in the list hasn't reached a terminal status
+ * yet, stopping once every video has (processed or failed) - the same
+ * pattern useVideo below uses for a single video. Without this, a
+ * video that finishes processing (and gets its real thumbnail) while
+ * the person is sitting on /library would never visibly update until
+ * they navigated away and back.
+ */
 export function useVideos() {
   return useQuery({
     queryKey: videoKeys.list(),
     queryFn: videosService.listVideos,
+    refetchInterval: (query) => {
+      const videos = query.state.data;
+      if (!videos) return false;
+      const stillProcessing = videos.some((video) => !isTerminalVideoStatus(video.status));
+      return stillProcessing ? PROCESSING_POLL_INTERVAL_MS : false;
+    },
   });
 }
 
@@ -27,9 +41,7 @@ export function useVideo(videoId: number) {
     refetchInterval: (query) => {
       const status = query.state.data?.status;
       if (!status) return false;
-      return TERMINAL_VIDEO_STATUSES.includes(status as "processed" | "failed")
-        ? false
-        : PROCESSING_POLL_INTERVAL_MS;
+      return isTerminalVideoStatus(status) ? false : PROCESSING_POLL_INTERVAL_MS;
     },
   });
 }

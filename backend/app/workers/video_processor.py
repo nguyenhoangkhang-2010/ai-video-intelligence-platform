@@ -31,6 +31,8 @@ from app.services.chapter import ChapterService
 from app.repositories.flashcard import FlashcardRepository
 from app.services.flashcard import FlashcardService
 
+from app.storage.factory import get_storage_backend
+
 from app.config.settings import settings
 from app.core.retry import TRANSIENT_EXCEPTIONS
 from app.workers.celery_app import celery_app
@@ -119,6 +121,7 @@ def process_video(
             quiz_service=quiz_service,
             chapter_service=chapter_service,
             flashcard_service=flashcard_service,
+            storage=get_storage_backend(),
         )
 
         processing_pipeline = ProcessingPipeline(

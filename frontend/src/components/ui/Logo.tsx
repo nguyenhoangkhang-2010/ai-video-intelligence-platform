@@ -1,5 +1,3 @@
-import { cn } from "@/lib/utils";
-
 /**
  * Product mark: a frame notch (video) intersected by a signal line
  * (analysis/intelligence) — deliberately not a generic "AI sparkle"
@@ -24,16 +22,5 @@ export function Mark({ size = 22, className }: { size?: number; className?: stri
         strokeLinejoin="round"
       />
     </svg>
-  );
-}
-
-export function Logo({ className, markClassName }: { className?: string; markClassName?: string }) {
-  return (
-    <div className={cn("flex items-center gap-2 text-text-primary", className)}>
-      <Mark className={cn("text-accent", markClassName)} />
-      <span className="font-display text-heading-sm font-semibold tracking-tight">
-        Reel<span className="text-accent">Sense</span>
-      </span>
-    </div>
   );
 }

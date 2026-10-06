@@ -25,6 +25,7 @@ def _make_pipeline():
     quiz_service = MagicMock(name="quiz_service")
     chapter_service = MagicMock(name="chapter_service")
     flashcard_service = MagicMock(name="flashcard_service")
+    storage = MagicMock(name="storage")
 
     with (
         patch("app.pipelines.video_pipeline.TranscriptionWorker"),
@@ -45,6 +46,7 @@ def _make_pipeline():
             quiz_service=quiz_service,
             chapter_service=chapter_service,
             flashcard_service=flashcard_service,
+            storage=storage,
         )
 
     return pipeline, embedding_service

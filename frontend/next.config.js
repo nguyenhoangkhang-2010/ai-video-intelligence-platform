@@ -63,7 +63,14 @@ const CSP = [
   "default-src 'self'",
   `script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval'${isDev ? " 'unsafe-eval'" : ""}`,
   "style-src 'self' 'unsafe-inline'",
-  "img-src 'self' data: blob:",
+  // API_ORIGIN: real video thumbnails (GET /videos/{id}/thumbnail,
+  // see components/video/VideoThumbnail.tsx) are plain <img> tags
+  // pointing at the backend - this app's first real cross-origin
+  // <img> source. Without this, every thumbnail request is silently
+  // CSP-blocked (net::ERR_ABORTED, no img.onerror-distinguishable
+  // reason) and falls back to the "no thumbnail" pattern, same as a
+  // genuine extraction failure - found live via CDP network capture.
+  `img-src 'self' data: blob: ${API_ORIGIN}`,
   "font-src 'self' data:",
   `connect-src 'self' ${API_ORIGIN}`,
   `media-src 'self' ${API_ORIGIN}`,

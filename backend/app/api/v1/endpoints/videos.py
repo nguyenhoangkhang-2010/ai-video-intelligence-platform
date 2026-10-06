@@ -9,6 +9,7 @@ from fastapi import File
 from fastapi import status
 from fastapi.responses import FileResponse
 from fastapi.responses import RedirectResponse
+from starlette.concurrency import run_in_threadpool
 
 from app.auth.dependencies import get_current_user
 from app.auth.dependencies import get_current_user_for_media
@@ -171,6 +172,66 @@ def stream_video(
     )
 
 @router.get(
+    "/{video_id}/thumbnail",
+)
+def get_video_thumbnail(
+    video_id: int,
+    current_user: User = Depends(get_current_user_for_media),
+    service: VideoService = Depends(get_video_service),
+    storage: StorageBackend = Depends(get_storage_backend),
+):
+    """
+    Deliver this video's real, ffmpeg-extracted representative frame.
+
+    Same authentication (accepts a `token` query parameter, since a
+    browser <img> element cannot attach custom headers either) and
+    ownership pattern as stream_video above - one user's thumbnail is
+    never reachable via another user's session. 404s both when the
+    video isn't the caller's (ownership check, via get_video) and
+    when it is but no thumbnail exists yet - extraction runs early in
+    the processing pipeline (see VideoPipelineService.metadata_stage)
+    and is best-effort, so a video that's still processing, or one
+    whose extraction genuinely failed, correctly has none. The
+    frontend distinguishes those two real states from `video.status`,
+    not from this endpoint's response - see services/videos.ts.
+
+    Response carries a real Cache-Control (the underlying frame for a
+    given video never changes once extracted, so a long-lived
+    immutable cache is honest, not merely convenient) rather than the
+    framework's default of no caching at all.
+    """
+    video = service.get_video(
+        video_id=video_id,
+        user_id=current_user.id,
+    )
+
+    if not video.thumbnail_key:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Thumbnail not available",
+        )
+
+    url = storage.get_url(video.thumbnail_key)
+    if url is not None:
+        return RedirectResponse(
+            url,
+            status_code=status.HTTP_307_TEMPORARY_REDIRECT,
+        )
+
+    path = storage.get_local_path(video.thumbnail_key)
+    if path is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Thumbnail not available",
+        )
+
+    return FileResponse(
+        path,
+        media_type="image/jpeg",
+        headers={"Cache-Control": "private, max-age=31536000, immutable"},
+    )
+
+@router.get(
     "/{video_id}/processing-jobs",
     response_model=list[ProcessingJobRead],
 )
@@ -209,6 +270,16 @@ async def upload_video(
 ):
     """
     Upload a video file.
+
+    The chunked disk write and the ffprobe subprocess call are both
+    genuinely blocking (synchronous file I/O and `subprocess.run`
+    respectively) - run via `run_in_threadpool` rather than directly
+    in this `async def` body, so a large upload can no longer stall
+    the single event loop (and therefore every other concurrent
+    request) for its full duration. The AI processing pipeline itself
+    was already correctly backgrounded via Celery before this change;
+    this closes the one remaining synchronous-blocking gap in the
+    upload path itself.
     """
     VIDEO_UPLOAD_DIR.mkdir(
         parents=True,
@@ -224,13 +295,15 @@ async def upload_video(
 
     file_path = VIDEO_UPLOAD_DIR / unique_filename
 
-    save_upload_within_limit(
+    await run_in_threadpool(
+        save_upload_within_limit,
         file,
         file_path,
     )
 
-    metadata = extract_metadata(
-        str(file_path)
+    metadata = await run_in_threadpool(
+        extract_metadata,
+        str(file_path),
     )
     video = service.upload_video(
         owner_id=current_user.id,
@@ -279,6 +352,7 @@ def delete_video(
     )
 
     filename = video.filename
+    thumbnail_key = video.thumbnail_key
     vector_ids = {
         embedding.vector_id
         for embedding in embedding_service.get_by_video_id(video_id)
@@ -295,6 +369,16 @@ def delete_video(
     # the same "cleanup is best-effort, not transactional with the
     # DB" posture this project already takes in video_pipeline.py's
     # embedding_stage.
+    if thumbnail_key:
+        try:
+            storage.delete(thumbnail_key)
+        except Exception:
+            logger.exception(
+                "Failed to delete stored thumbnail for video %s (key=%s).",
+                video_id,
+                thumbnail_key,
+            )
+
     try:
         storage.delete(_video_storage_key(filename))
     except Exception:

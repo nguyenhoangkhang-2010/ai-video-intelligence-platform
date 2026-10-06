@@ -33,6 +33,13 @@ class VideoRead(VideoBase):
     id: int
     owner_id: int
     status: VideoStatus
+    # Whether a representative frame has been extracted for this
+    # video (see app/utils/thumbnail.py and
+    # VideoPipelineService.metadata_stage) - never the storage key
+    # itself. True means GET /videos/{id}/thumbnail will serve an
+    # image; false means it's still processing or extraction failed,
+    # which the frontend distinguishes via `status`.
+    has_thumbnail: bool
     created_at: datetime
     updated_at: datetime
     model_config = ConfigDict(
