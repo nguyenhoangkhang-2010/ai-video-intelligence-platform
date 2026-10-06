@@ -1,5 +1,6 @@
-from datetime import datetime, UTC
+from datetime import datetime, timedelta, UTC
 
+from sqlalchemy import and_, or_
 from sqlalchemy.orm import Session
 
 from app.models.processing_job import ProcessingJob
@@ -101,29 +102,55 @@ class ProcessingJobRepository(BaseRepository[ProcessingJob]):
     def claim_for_running(
         self,
         job_id: int,
+        stale_after_seconds: int | None = None,
     ) -> ProcessingJob | None:
         """
-        Atomically transition a job PENDING -> RUNNING and stamp
-        started_at, but only if it is still PENDING.
+        Atomically transition a job to RUNNING and stamp started_at,
+        but only if it is still PENDING, or (when `stale_after_seconds`
+        is given) if it is RUNNING but has been for longer than that
+        many seconds.
 
-        This is a conditional UPDATE ... WHERE status = 'PENDING'. If
-        two deliveries of the same Celery task race to claim the same
-        job, the database's row-level locking on the UPDATE ensures
-        only one of them can ever match the row and win; the other
-        sees 0 updated rows and gets None back, signalling "already
-        claimed elsewhere, skip".
+        This is a single conditional UPDATE - the PENDING branch
+        exactly as before, with an OR'd second branch added rather
+        than a separate SELECT-then-UPDATE. If multiple callers race
+        for the same job, the database's row-level locking on the
+        UPDATE ensures only one of them can ever match the row and
+        win; the others see 0 updated rows and get None back,
+        signalling "already claimed elsewhere, skip".
+
+        The stale-RUNNING branch exists for a real gap this closes: a
+        worker that crashes *after* claiming a job (status already
+        RUNNING) left that job permanently unclaimable before this -
+        Celery's own task_reject_on_worker_lost redelivery would
+        re-invoke this method, but the old PENDING-only WHERE clause
+        rejected it every time, since the job was RUNNING, not
+        PENDING, forever. See ProcessingJobService.start_if_pending
+        for why task_time_limit is the safe threshold to pass here.
         """
+
+        now = datetime.now(UTC)
+
+        conditions = [ProcessingJob.status == "PENDING"]
+
+        if stale_after_seconds is not None:
+            stale_cutoff = now - timedelta(seconds=stale_after_seconds)
+            conditions.append(
+                and_(
+                    ProcessingJob.status == "RUNNING",
+                    ProcessingJob.started_at < stale_cutoff,
+                )
+            )
 
         updated_rows = (
             self.db.query(ProcessingJob)
             .filter(
                 ProcessingJob.id == job_id,
-                ProcessingJob.status == "PENDING",
+                or_(*conditions),
             )
             .update(
                 {
                     ProcessingJob.status: "RUNNING",
-                    ProcessingJob.started_at: datetime.now(UTC),
+                    ProcessingJob.started_at: now,
                 },
                 synchronize_session=False,
             )

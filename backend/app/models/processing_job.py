@@ -96,3 +96,10 @@ class ProcessingJob(Base):
         "Video",
         back_populates="processing_jobs",
     )
+
+    stages = relationship(
+        "ProcessingStage",
+        back_populates="processing_job",
+        cascade="all, delete-orphan",
+        passive_deletes=True,
+    )

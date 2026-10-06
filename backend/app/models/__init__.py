@@ -8,6 +8,7 @@ from app.models.translation import Translation
 from app.models.flashcard import Flashcard
 from app.models.quiz import Quiz
 from app.models.processing_job import ProcessingJob
+from app.models.processing_stage import ProcessingStage
 from app.models.chat_history import ChatHistory
 
 __all__ = [
@@ -21,5 +22,6 @@ __all__ = [
     "Flashcard",
     "Quiz",
     "ProcessingJob",
+    "ProcessingStage",
     "ChatHistory",
 ]

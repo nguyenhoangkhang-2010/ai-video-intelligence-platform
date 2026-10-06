@@ -1,10 +1,24 @@
 import logging
 
+from app.core.retry import is_transient_error
+from app.pipelines.stage_definitions import (
+    CHAPTER,
+    EMBEDDING,
+    FLASHCARD,
+    METADATA,
+    QUIZ,
+    STAGE_DEPENDENCIES,
+    STAGE_ORDER,
+    SUMMARY,
+    TRANSCRIPTION,
+    TRANSLATION,
+)
 from app.storage.base import StorageBackend
 from app.utils.ffprobe import extract_metadata
 from app.utils.thumbnail import extract_thumbnail
 from app.services.video import VideoService
 from app.services.processing_job import ProcessingJobService
+from app.services.processing_stage import ProcessingStageService
 from app.services.transcript import TranscriptService
 from app.workers.transcription_worker import TranscriptionWorker
 
@@ -49,6 +63,19 @@ from ai.speech.speech_result import SpeechSegment
 logger = logging.getLogger(__name__)
 
 
+class ProcessingIncompleteError(Exception):
+    """
+    Raised by VideoPipelineService.process() when the stage loop
+    finishes with one or more stages not COMPLETED/SKIPPED, but no
+    single exception was collected this run to re-raise directly
+    (e.g. every eligible stage already exhausted its retry budget, or
+    every remaining incomplete stage was blocked by a dependency that
+    never succeeded). Never classified as transient - retrying the
+    task again would not change anything an exception was already
+    raised for.
+    """
+
+
 class VideoPipelineService:
     """
     AI processing pipeline for uploaded videos.
@@ -61,6 +88,7 @@ class VideoPipelineService:
         embedding_service: EmbeddingService,
         translation_service: TranslationService,
         processing_job_service: ProcessingJobService,
+        processing_stage_service: ProcessingStageService,
         quiz_service: QuizService,
         chapter_service: ChapterService,
         flashcard_service: FlashcardService,
@@ -70,6 +98,7 @@ class VideoPipelineService:
         self.storage = storage
         self.transcript_service = transcript_service
         self.processing_job_service = processing_job_service
+        self.processing_stage_service = processing_stage_service
         self.summary_service = summary_service
         self.embedding_service = embedding_service
         self.translation_service = translation_service
@@ -83,8 +112,8 @@ class VideoPipelineService:
         self.chapter_pipeline = ChapterTopicPipeline()
         self.flashcard_service = flashcard_service
         self.flashcard_worker = FlashcardWorker()
-        
-        
+
+
     def transcription_stage(
         self,
         job_id: int,
@@ -595,55 +624,127 @@ class VideoPipelineService:
         file_path: str,
     ):
         """
-        Execute the complete AI pipeline.
+        Execute the complete AI pipeline, stage by stage, resumably.
+
+        Each stage's ProcessingStage row is checked before running it:
+        COMPLETED is skipped (never re-executed - this is what makes
+        a redelivered/retried job cheap instead of starting over from
+        metadata every time); a stage whose dependency (see
+        app.pipelines.stage_definitions.STAGE_DEPENDENCIES) never
+        reached COMPLETED is left PENDING, never attempted (it was
+        never actually tried, so it is not FAILED); everything else
+        eligible is atomically claimed and run.
+
+        A failed stage does not stop its independent siblings from
+        still being attempted (summary/embedding/translation/quiz/
+        chapter/flashcard all depend only on transcription, never on
+        each other) - the loop continues. Only once every eligible
+        stage has been attempted does this method decide whether the
+        job succeeded or failed, by re-reading every stage's final
+        status.
         """
-        self.metadata_stage(
-            job_id=job_id,
-            video_id=video_id,
-            file_path=file_path,
+        self.processing_stage_service.ensure_seeded(
+            job_id,
+            STAGE_ORDER,
         )
 
-        transcript, transcript_segments = self.transcription_stage(
-            job_id=job_id,
-            video_id=video_id,
-            file_path=file_path,
-        )
+        # stage_name -> that stage's return value, FOR THIS RUN ONLY.
+        # A resumed stage that was already COMPLETED in a previous
+        # run never populates this dict this run - downstream stages
+        # that need its output fall back to re-fetching the persisted
+        # artifact (see _execute_stage) rather than assuming it is
+        # here.
+        results: dict[str, object] = {}
+        failures: list[BaseException] = []
 
-        self.summary_stage(
-            job_id=job_id,
-            video_id=video_id,
-            transcript=transcript,
-        )
+        for stage_name in STAGE_ORDER:
+            stage_row = self.processing_stage_service.get_by_job_id_and_name(
+                job_id, stage_name,
+            )
 
-        self.embedding_stage(
-            job_id=job_id,
-            video_id=video_id,
-            transcript=transcript,
-        )
+            if stage_row.status == "COMPLETED":
+                continue
 
-        self.translation_stage(
-            job_id=job_id,
-            video_id=video_id,
-            transcript=transcript,
-        )
+            dependency = STAGE_DEPENDENCIES[stage_name]
 
-        self.quiz_stage(
-            job_id=job_id,
-            video_id=video_id,
-            transcript=transcript,
-        )
+            if dependency is not None:
+                dependency_row = self.processing_stage_service.get_by_job_id_and_name(
+                    job_id, dependency,
+                )
+                if dependency_row.status != "COMPLETED":
+                    # Blocked, not failed: this stage was never
+                    # actually attempted, so it must stay PENDING.
+                    continue
 
-        self.chapter_stage(
-            job_id=job_id,
-            video_id=video_id,
-            transcript_segments=transcript_segments,
-        )
+            if (
+                stage_row.status == "FAILED"
+                and self.processing_stage_service.has_exhausted_retries(stage_row)
+            ):
+                logger.warning(
+                    "Stage %s for job %s has exhausted its retry "
+                    "budget (%s attempts); leaving it FAILED without "
+                    "another attempt.",
+                    stage_name, job_id, stage_row.attempt_count,
+                )
+                continue
 
-        self.flashcard_stage(
-            job_id=job_id,
-            video_id=video_id,
-            transcript=transcript,
+            claimed = self.processing_stage_service.try_claim(
+                job_id, stage_name,
+            )
+
+            if claimed is None:
+                # Lost a race, or genuinely still RUNNING under a
+                # still-alive attempt (not stale) - skip this pass.
+                continue
+
+            try:
+                results[stage_name] = self._execute_stage(
+                    stage_name=stage_name,
+                    job_id=job_id,
+                    video_id=video_id,
+                    file_path=file_path,
+                    results=results,
+                )
+            except Exception as exc:
+                logger.exception(
+                    "Stage %s failed for video %s (job %s).",
+                    stage_name, video_id, job_id,
+                )
+                self.processing_stage_service.mark_failed(
+                    claimed, str(exc),
+                )
+                failures.append(exc)
+            else:
+                self.processing_stage_service.mark_completed(
+                    claimed,
+                )
+
+        final_stages = self.processing_stage_service.get_by_job_id(
+            job_id,
         )
+        incomplete = [
+            stage.stage_name
+            for stage in final_stages
+            if stage.status not in ("COMPLETED", "SKIPPED")
+        ]
+
+        if incomplete:
+            transient = next(
+                (exc for exc in failures if is_transient_error(exc)),
+                None,
+            )
+            if transient is not None:
+                # Re-raising the original transient exception (not a
+                # wrapper) so Celery's autoretry_for still recognizes
+                # its type and redelivers the task - the redelivery
+                # will resume at exactly the stages still incomplete.
+                raise transient
+            if failures:
+                raise failures[0]
+            raise ProcessingIncompleteError(
+                f"Processing incomplete for video {video_id}: "
+                f"stage(s) {incomplete} did not complete."
+            )
 
         self.video_service.update_status(
             video_id=video_id,
@@ -655,7 +756,108 @@ class VideoPipelineService:
             progress=100,
             current_step="Completed",
         )
-        
+
+    def _execute_stage(
+        self,
+        stage_name: str,
+        job_id: int,
+        video_id: int,
+        file_path: str,
+        results: dict[str, object],
+    ):
+        """
+        Dispatch to the real stage method, resolving each stage's
+        real input - using this run's in-memory result when the
+        dependency actually ran this run, falling back to the
+        persisted artifact when it was skipped because it was already
+        COMPLETED from a previous run.
+        """
+        if stage_name == METADATA:
+            return self.metadata_stage(
+                job_id=job_id, video_id=video_id, file_path=file_path,
+            )
+
+        if stage_name == TRANSCRIPTION:
+            transcript, segments = self.transcription_stage(
+                job_id=job_id, video_id=video_id, file_path=file_path,
+            )
+            results["_transcript_segments"] = segments
+            return transcript
+
+        if stage_name == CHAPTER:
+            segments = results.get("_transcript_segments")
+
+            if segments is None:
+                # Resume case: transcription_stage was already
+                # COMPLETED from a prior attempt, so it was skipped
+                # this run and never produced segments in memory.
+                # transcript_segments is the one piece of
+                # transcription's output that is NOT persisted
+                # anywhere (Transcript only stores flattened text -
+                # see transcription_stage's own docstring), so the
+                # only correct way to recover real, timestamped
+                # segments is to re-run the Whisper call. Accepted
+                # here as a bounded, explicit cost specific to
+                # resuming chapter detection alone - it does not
+                # re-run metadata/summary/embedding/translation/quiz/
+                # flashcard, and save_transcript's upsert (Phase 2)
+                # makes re-persisting the (should be near-identical)
+                # transcript text safe either way.
+                logger.warning(
+                    "Re-running transcription to recover segments "
+                    "for chapter detection on video %s - "
+                    "transcription was already COMPLETED from a "
+                    "prior attempt, so its segment output is not "
+                    "available in memory this run.",
+                    video_id,
+                )
+                rerun_result = self.transcription_worker.process(
+                    video_path=file_path,
+                )
+                segments = rerun_result.get("segments", [])
+
+            return self.chapter_stage(
+                job_id=job_id,
+                video_id=video_id,
+                transcript_segments=segments,
+            )
+
+        # Every remaining stage (summary/embedding/translation/quiz/
+        # flashcard) depends only on transcription's persisted
+        # Transcript - reuse it from this run's results if
+        # transcription actually ran this run, otherwise re-fetch the
+        # persisted row (transcription was already COMPLETED earlier).
+        transcript = results.get(TRANSCRIPTION)
+        if transcript is None:
+            transcript = self.transcript_service.get_by_video_id(
+                video_id,
+            )
+
+        if stage_name == SUMMARY:
+            return self.summary_stage(
+                job_id=job_id, video_id=video_id, transcript=transcript,
+            )
+        if stage_name == EMBEDDING:
+            return self.embedding_stage(
+                job_id=job_id, video_id=video_id, transcript=transcript,
+            )
+        if stage_name == TRANSLATION:
+            return self.translation_stage(
+                job_id=job_id, video_id=video_id, transcript=transcript,
+            )
+        if stage_name == QUIZ:
+            return self.quiz_stage(
+                job_id=job_id, video_id=video_id, transcript=transcript,
+            )
+        if stage_name == FLASHCARD:
+            return self.flashcard_stage(
+                job_id=job_id, video_id=video_id, transcript=transcript,
+            )
+
+        raise ValueError(
+            f"Unknown processing stage: {stage_name!r}"
+        )
+
     def metadata_stage(
         self,
         job_id: int,

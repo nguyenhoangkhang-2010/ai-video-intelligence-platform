@@ -22,6 +22,7 @@ def _make_pipeline():
     embedding_service = MagicMock(name="embedding_service")
     translation_service = MagicMock(name="translation_service")
     processing_job_service = MagicMock(name="processing_job_service")
+    processing_stage_service = MagicMock(name="processing_stage_service")
     quiz_service = MagicMock(name="quiz_service")
     chapter_service = MagicMock(name="chapter_service")
     flashcard_service = MagicMock(name="flashcard_service")
@@ -43,6 +44,7 @@ def _make_pipeline():
             embedding_service=embedding_service,
             translation_service=translation_service,
             processing_job_service=processing_job_service,
+            processing_stage_service=processing_stage_service,
             quiz_service=quiz_service,
             chapter_service=chapter_service,
             flashcard_service=flashcard_service,

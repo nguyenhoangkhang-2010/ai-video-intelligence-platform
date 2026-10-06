@@ -1,3 +1,4 @@
+from app.config.settings import settings
 from app.core.exceptions import InvalidJobStatusTransitionError
 from app.models.processing_job import ProcessingJob
 from app.repositories.processing_job import ProcessingJobRepository
@@ -178,17 +179,33 @@ class ProcessingJobService:
         job_id: int,
     ) -> ProcessingJob | None:
         """
-        Atomically claim a PENDING job for processing. Returns None
-        if the job could not be claimed (not found, or already
-        running/completed/failed) - the caller should treat that as
-        "already handled by a concurrent delivery" and skip re-running
-        the pipeline, rather than an error. Unlike other methods on
-        this service, this intentionally does not raise 404 on a
-        miss, since that outcome is expected under Celery task
-        redelivery/retry.
+        Atomically claim a job for processing: PENDING (the normal
+        case), or RUNNING for longer than settings.celery.
+        task_time_limit (presumed abandoned by a crashed worker).
+        Returns None if the job could not be claimed (not found, or
+        genuinely still running/already completed/failed) - the
+        caller should treat that as "already handled by a concurrent
+        delivery" and skip re-running the pipeline, rather than an
+        error. Unlike other methods on this service, this
+        intentionally does not raise 404 on a miss, since that
+        outcome is expected under Celery task redelivery/retry.
+
+        task_time_limit is the safe threshold: Celery itself kills the
+        worker process if a single process_video execution runs
+        longer than that, so no legitimately-still-running attempt
+        can ever be mistaken for abandoned by this check - by the
+        time a job is older than task_time_limit, Celery has already
+        guaranteed the attempt that set it RUNNING is no longer alive.
+        broker_visibility_timeout (1800s, below task_time_limit's
+        3600s) is what makes Celery redeliver the task message early
+        enough for this check to actually get re-evaluated instead of
+        the job sitting unobserved - see CelerySettings' own
+        docstring for that reasoning, already in place before this
+        change.
         """
         return self.repository.claim_for_running(
             job_id,
+            stale_after_seconds=settings.celery.task_time_limit,
         )
 
     def start_job(

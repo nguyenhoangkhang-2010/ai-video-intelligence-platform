@@ -1,4 +1,5 @@
 import threading
+from datetime import datetime, timedelta, UTC
 
 import pytest
 from sqlalchemy import create_engine
@@ -275,3 +276,73 @@ def test_concurrent_claim_only_one_worker_wins(tmp_path):
     assert final.status == "RUNNING"
     verify_session.close()
     verify_engine.dispose()
+
+
+def test_claim_for_running_with_stale_after_seconds_still_claims_pending(db_session):
+    """
+    Passing stale_after_seconds must not change the existing PENDING
+    claim behavior at all - it only adds a second, OR'd branch.
+    """
+    job = _create_job(db_session, status="PENDING")
+    repository = ProcessingJobRepository(db_session)
+
+    claimed = repository.claim_for_running(job.id, stale_after_seconds=3600)
+
+    assert claimed is not None
+    assert claimed.status == "RUNNING"
+
+
+def test_claim_for_running_reclaims_a_stale_running_job(db_session):
+    """
+    Phase B fix: a job left RUNNING by a crashed worker (started
+    longer ago than stale_after_seconds) must be reclaimable - before
+    this, claim_for_running's WHERE clause only ever matched PENDING,
+    so a crashed job was stuck RUNNING forever with no automatic
+    recovery path.
+    """
+    job = _create_job(db_session, status="RUNNING")
+    job.started_at = datetime.now(UTC) - timedelta(seconds=7200)
+    db_session.commit()
+    repository = ProcessingJobRepository(db_session)
+
+    claimed = repository.claim_for_running(job.id, stale_after_seconds=3600)
+
+    assert claimed is not None
+    assert claimed.status == "RUNNING"
+    assert claimed.started_at is not None
+
+
+def test_claim_for_running_does_not_reclaim_a_genuinely_recent_running_job(db_session):
+    """
+    Safety-critical counterpart: a RUNNING job that started recently
+    (well within stale_after_seconds) must never be reclaimed - it
+    may still be genuinely, legitimately executing. Reclaiming it
+    would risk two concurrent executions of the same job.
+    """
+    job = _create_job(db_session, status="RUNNING")
+    job.started_at = datetime.now(UTC) - timedelta(seconds=5)
+    db_session.commit()
+    repository = ProcessingJobRepository(db_session)
+
+    claimed = repository.claim_for_running(job.id, stale_after_seconds=3600)
+
+    assert claimed is None
+
+    reloaded = repository.get_by_id(job.id)
+    assert reloaded.status == "RUNNING"
+
+
+def test_claim_for_running_without_stale_after_seconds_never_reclaims_running(db_session):
+    """
+    Backward-compatibility check: omitting stale_after_seconds
+    (the default, None) preserves the exact original behavior -
+    PENDING-only, no RUNNING job is ever reclaimed regardless of age.
+    """
+    job = _create_job(db_session, status="RUNNING")
+    job.started_at = datetime.now(UTC) - timedelta(days=1)
+    db_session.commit()
+    repository = ProcessingJobRepository(db_session)
+
+    claimed = repository.claim_for_running(job.id)
+
+    assert claimed is None
