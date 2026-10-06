@@ -22,7 +22,14 @@ add/replace happening at the same time - but you should still stop
 the worker (or at least pause processing) before running this, since
 a rebuild started mid-reprocessing would only see whatever rows exist
 in Postgres at that moment.
+
+Run with --check-only to report drift between FAISS and Postgres
+WITHOUT rebuilding anything (read-only, safe to run anytime, no lock
+held) - use this to decide whether a rebuild is actually needed:
+
+    python scripts/rebuild_faiss_index.py --check-only
 """
+import argparse
 import logging
 
 import numpy as np
@@ -31,6 +38,7 @@ from ai.embedding.embedder import Embedder
 from ai.embedding.faiss_lock import FileLock
 from ai.embedding.index_builder import IndexBuilder
 from ai.embedding.index_metadata import IndexMetadata
+from ai.embedding.vector_store import VectorStore
 from app.database.session import SessionLocal
 from app.repositories.embedding import EmbeddingRepository
 
@@ -46,6 +54,47 @@ def _load_embedding_rows():
         return EmbeddingRepository(db).get_all()
     finally:
         db.close()
+
+
+def check() -> bool:
+    """
+    Report FAISS/Postgres drift without modifying anything.
+    Returns True if consistent, False if drift was found.
+    """
+    rows = _load_embedding_rows()
+    db_vector_ids = {row.vector_id for row in rows}
+
+    store = VectorStore(dimension=DIMENSION)
+    report = store.check_consistency(db_vector_ids)
+
+    if not report["faiss_only"] and not report["db_only"]:
+        logger.info(
+            "Consistent: %s vector(s) in FAISS, %s row(s) in "
+            "Postgres, fully matched.",
+            report["faiss_total"],
+            report["db_total"],
+        )
+        return True
+
+    if report["faiss_only"]:
+        logger.warning(
+            "%s vector(s) exist in FAISS with no matching Postgres "
+            "row (harmless for search correctness, but dead weight "
+            "in the index): %s",
+            len(report["faiss_only"]),
+            report["faiss_only"][:10],
+        )
+
+    if report["db_only"]:
+        logger.error(
+            "%s Postgres row(s) reference a vector_id FAISS does "
+            "not have - their videos are unsearchable until "
+            "reprocessed: %s",
+            len(report["db_only"]),
+            report["db_only"][:10],
+        )
+
+    return False
 
 
 def rebuild() -> None:
@@ -91,4 +140,17 @@ def rebuild() -> None:
 
 
 if __name__ == "__main__":
-    rebuild()
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument(
+        "--check-only",
+        action="store_true",
+        help="Report FAISS/Postgres drift without rebuilding anything.",
+    )
+    args = parser.parse_args()
+
+    if args.check_only:
+        import sys
+
+        sys.exit(0 if check() else 1)
+    else:
+        rebuild()

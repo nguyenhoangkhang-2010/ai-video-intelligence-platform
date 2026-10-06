@@ -10,6 +10,13 @@ RAGStatus = Literal[
     "empty_query",
     "no_embeddings",
     "no_relevant_chunks",
+    # Retrieval succeeded (there was real grounding context) but the
+    # LLM call itself failed - connection refused, timed out, returned
+    # a non-2xx status, an empty body, or a malformed body. Kept as
+    # one status rather than exposing ai.llm.errors' specific subtypes
+    # over the API: the frontend only needs "try again", the specific
+    # cause is in the server logs (RAGPipeline.ask()).
+    "generation_failed",
 ]
 
 

@@ -225,3 +225,39 @@ class VectorStore:
         """
 
         return self.index.ntotal
+
+    def check_consistency(
+        self,
+        db_vector_ids: set[str],
+    ) -> dict:
+        """
+        Compare this FAISS index's metadata against the full set of
+        vector_ids currently recorded in the `embeddings` table
+        (across every video - callers pass the complete set, not one
+        video's). A healthy system returns empty lists on both sides.
+
+        A non-empty `db_only` means some Postgres rows point at
+        vectors FAISS no longer has - those rows' videos are
+        unsearchable until reprocessed (see the embedding_stage
+        docstring in video_pipeline.py for exactly how that state can
+        arise and why it self-heals on retry).
+
+        A non-empty `faiss_only` means FAISS holds vectors no DB row
+        references - harmless for correctness (SemanticSearchService
+        filters by DB-owned vector_ids, so these are never returned),
+        but they're dead weight in the index. Run
+        scripts/rebuild_faiss_index.py to rebuild FAISS from Postgres
+        and clear them out.
+
+        Read-only: reloads metadata from disk but never mutates it.
+        """
+        self.metadata.reload()
+
+        faiss_vector_ids = set(self.metadata.reverse.keys())
+
+        return {
+            "faiss_only": sorted(faiss_vector_ids - db_vector_ids),
+            "db_only": sorted(db_vector_ids - faiss_vector_ids),
+            "faiss_total": len(faiss_vector_ids),
+            "db_total": len(db_vector_ids),
+        }

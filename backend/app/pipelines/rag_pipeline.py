@@ -1,5 +1,6 @@
 import logging
 
+from ai.llm.errors import LLMError
 from ai.llm.rag_answerer import RagAnswerer
 from ai.reranking.reranker import Reranker
 from ai.retrieval.dense_retriever import DenseRetriever
@@ -134,10 +135,32 @@ class RAGPipeline:
             len(results),
         )
 
-        answer = self.answerer.answer(
-            query=query,
-            context=context,
-        )
+        try:
+            answer = self.answerer.answer(
+                query=query,
+                context=context,
+            )
+        except LLMError:
+            # Retrieval genuinely succeeded (there was real grounding
+            # context) but the LLM call itself failed - connection
+            # refused, timed out, bad status, empty/malformed body
+            # (see ai/llm/ollama_client.py). Log the real exception
+            # type/message server-side for diagnosis (never secrets -
+            # these errors carry only connection/status details, no
+            # prompt content), and degrade to a clean API status
+            # instead of letting this become an unhandled 500.
+            logger.exception(
+                "LLM generation failed for video %s after a "
+                "successful retrieval of %s chunk(s).",
+                video_id,
+                len(results),
+            )
+            return RAGResult(
+                video_id=video_id,
+                query=query,
+                status="generation_failed",
+                sources=[],
+            )
 
         return RAGResult(
             video_id=video_id,

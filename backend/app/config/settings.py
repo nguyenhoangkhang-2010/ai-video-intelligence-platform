@@ -199,6 +199,11 @@ class LLMSettings(BaseConfig):
         alias="DEFAULT_LLM",
     )
 
+    request_timeout_seconds: int = Field(
+        default=300,
+        alias="OLLAMA_TIMEOUT_SECONDS",
+    )
+
 # =============================================================================
 # Speech Intelligence
 # =============================================================================

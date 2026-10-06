@@ -253,10 +253,16 @@ class VideoPipelineService:
             len(embeddings),
         )
 
-        self.embedding_service.delete_by_video_id(
-            video_id,
-        )
-
+        # FAISS is written FIRST, before anything in Postgres changes.
+        # This is deliberate: if this raises, no database row for this
+        # video has been touched yet, so the old embeddings stay fully
+        # valid and searchable - the failure is a clean no-op instead
+        # of leaving the DB emptied out from under a FAISS index that
+        # was never actually updated (the previous ordering's failure
+        # mode). VectorStore.replace() is itself atomic at the file
+        # level (temp-write + rename for both the index and its
+        # metadata sidecar), so a crash mid-replace can never leave a
+        # half-written index on disk either.
         vector_store = VectorStore(
             dimension=1024,
         )
@@ -269,21 +275,35 @@ class VideoPipelineService:
             )
         except Exception:
             logger.exception(
-                "FAISS replacement failed for video %s after its "
-                "%s old embedding row(s) were already deleted from "
-                "the database. %s newly generated chunk(s) were not "
-                "persisted to FAISS or the database. Leaving this "
-                "as a failed processing job for the existing "
+                "FAISS replacement failed for video %s. No database "
+                "rows were touched - this video's existing "
+                "embeddings remain valid and searchable. Leaving "
+                "this as a failed processing job for the existing "
                 "retry mechanism to reprocess from scratch.",
                 video_id,
-                len(old_vector_ids),
-                len(embeddings),
             )
             raise
 
+        # Only after FAISS holds the new vectors do we touch Postgres,
+        # and the delete-old+insert-new happens in a single transaction
+        # (EmbeddingRepository.replace_for_video) rather than a delete
+        # followed by a per-row insert loop: a failure here can now
+        # only land as "every old row still present" (rollback) or
+        # "every new row present" (commit) - never a partial mix.
+        #
+        # If this raises, Postgres rolls back to the OLD rows, which
+        # point at vector_ids FAISS no longer has (already replaced
+        # above) - this video is unsearchable until the job is
+        # retried. That retry is self-healing: Embedder's vector_ids
+        # are deterministic (see ai.embedding.embedder), so
+        # re-running this stage regenerates the identical vector_ids,
+        # VectorStore.replace() treats them as already-present
+        # duplicates (no-op for FAISS), and only the Postgres write is
+        # actually retried.
         try:
-            for embedding in embeddings:
-                self.embedding_service.create_embedding(
+            self.embedding_service.replace_for_video(
+                video_id,
+                [
                     EmbeddingCreate(
                         video_id=video_id,
                         chunk_index=embedding["chunk_index"],
@@ -291,15 +311,17 @@ class VideoPipelineService:
                         embedding_model=embedding["embedding_model"],
                         vector_id=embedding["vector_id"],
                     )
-                )
+                    for embedding in embeddings
+                ],
+            )
         except Exception:
             logger.exception(
                 "FAISS replacement for video %s completed "
                 "successfully (%s vector(s) persisted), but "
                 "persisting the corresponding embedding rows to the "
-                "database failed. FAISS and the database are now "
-                "inconsistent for this video until the processing "
-                "job is retried.",
+                "database failed and was rolled back. FAISS and the "
+                "database are now inconsistent for this video until "
+                "the processing job is retried.",
                 video_id,
                 len(embeddings),
             )

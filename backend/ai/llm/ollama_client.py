@@ -10,6 +10,14 @@ from tenacity import (
 
 from app.config.settings import settings
 
+from ai.llm.errors import (
+    LLMConnectionError,
+    LLMEmptyResponseError,
+    LLMMalformedResponseError,
+    LLMTimeoutError,
+    LLMUnavailableError,
+)
+
 
 logger = logging.getLogger(__name__)
 
@@ -60,30 +68,74 @@ class OllamaClient:
         )
 
     @_retry_ollama_call
-    def generate(
+    def _post(
         self,
         prompt: str,
-    ) -> str:
-        """Generate text using Ollama."""
-
-        response = requests.post(
+    ) -> requests.Response:
+        """
+        Raw, retried network call only - kept separate from `generate`
+        so the bounded-retry decorator (ConnectionError only, see
+        module docstring) never sees the translated LLMError types
+        below and so a caller catching those never has to also catch
+        a raw `requests`/`ValueError` leaking from this layer.
+        """
+        return requests.post(
             f"{self.base_url}/api/generate",
             json={
                 "model": self.model,
                 "prompt": prompt,
                 "stream": False,
             },
-            timeout=300,
+            timeout=settings.llm.request_timeout_seconds,
         )
 
-        response.raise_for_status()
+    def generate(
+        self,
+        prompt: str,
+    ) -> str:
+        """
+        Generate text using Ollama.
 
-        data = response.json()
+        Raises one of ai.llm.errors.LLMError's subtypes for every
+        failure mode this has actually hit in practice - never a raw
+        requests/ValueError - so a caller (RAGPipeline.ask()) can
+        catch one base type and degrade gracefully instead of letting
+        an LLM hiccup become an unhandled 500.
+        """
+        try:
+            response = self._post(prompt)
+        except requests.exceptions.ConnectionError as exc:
+            # tenacity already retried this up to 3 times (reraise=True
+            # re-raises the final attempt's exception unchanged) -
+            # reaching here means every attempt failed.
+            raise LLMConnectionError(
+                f"Could not reach Ollama at {self.base_url} after retrying."
+            ) from exc
+        except requests.exceptions.Timeout as exc:
+            # Deliberately not retried - see module docstring.
+            raise LLMTimeoutError(
+                f"Ollama did not respond within "
+                f"{settings.llm.request_timeout_seconds}s."
+            ) from exc
+
+        try:
+            response.raise_for_status()
+        except requests.exceptions.HTTPError as exc:
+            raise LLMUnavailableError(
+                f"Ollama returned HTTP {response.status_code}."
+            ) from exc
+
+        try:
+            data = response.json()
+        except ValueError as exc:
+            raise LLMMalformedResponseError(
+                "Ollama response body was not valid JSON."
+            ) from exc
 
         result = data.get("response", "").strip()
 
         if not result:
-            raise ValueError(
+            raise LLMEmptyResponseError(
                 "Ollama returned an empty response."
             )
 

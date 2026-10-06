@@ -1,5 +1,6 @@
 from unittest.mock import MagicMock
 
+from ai.llm.errors import LLMConnectionError
 from app.pipelines.rag_pipeline import RAGPipeline
 
 
@@ -139,3 +140,34 @@ def test_ask_successful_retrieval_returns_answered_status_with_sources():
     assert call_kwargs["query"] == "what is this video about?"
     assert "chunk one text" in call_kwargs["context"]
     assert "chunk two text" in call_kwargs["context"]
+
+
+def test_ask_returns_generation_failed_status_when_llm_raises():
+    """
+    Retrieval succeeded (there was real grounding context) but the
+    LLM call itself failed. This must degrade to a clean RAGResult
+    status, not propagate as an unhandled exception out of `ask()`.
+    """
+    pipeline, semantic_search_service, embedding_service, answerer = (
+        _make_pipeline()
+    )
+
+    embedding_service.get_by_video_id.return_value = [MagicMock()]
+    semantic_search_service.search.return_value = [
+        {
+            "vector_id": "v1",
+            "video_id": 10,
+            "chunk_index": 0,
+            "chunk_text": "chunk one text",
+            "distance": 0.1,
+        },
+    ]
+    answerer.answer.side_effect = LLMConnectionError("Ollama unreachable")
+
+    result = pipeline.ask(video_id=10, query="what happened?", top_k=5)
+
+    assert result.status == "generation_failed"
+    assert result.video_id == 10
+    assert result.query == "what happened?"
+    assert result.answer is None
+    assert result.sources == []
