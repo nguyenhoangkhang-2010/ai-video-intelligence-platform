@@ -18,7 +18,6 @@ chain end to end (only get_video_service/get_storage_backend are
 mocked - the "what bytes to serve" layer, not auth) against a real
 in-memory SQLite User row and a real create_media_token()-issued JWT.
 """
-from datetime import datetime, timezone
 from unittest.mock import MagicMock
 
 import pytest

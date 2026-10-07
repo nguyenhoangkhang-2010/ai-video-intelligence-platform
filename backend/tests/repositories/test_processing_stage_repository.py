@@ -70,7 +70,7 @@ def test_claim_for_running_claims_pending_stage(db_session):
 def test_claim_for_running_cannot_claim_a_genuinely_running_stage(db_session):
     job = _create_job(db_session)
     repository = ProcessingStageRepository(db_session)
-    stage = repository.create_if_absent(job.id, "summary")
+    repository.create_if_absent(job.id, "summary")
     repository.claim_for_running(job.id, "summary", stale_after_seconds=3600)
 
     second_claim = repository.claim_for_running(job.id, "summary", stale_after_seconds=3600)

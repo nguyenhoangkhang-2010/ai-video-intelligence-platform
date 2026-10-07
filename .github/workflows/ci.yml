@@ -62,9 +62,14 @@ jobs:
             echo "::notice::No \"lint\" script defined - skipping."
           fi
 
-      - name: Build
+      # A dedicated step, ahead of Build/Test, so a real type error
+      # fails fast with its own clear label instead of only surfacing
+      # later as a (slower) production-build failure. `next build`
+      # would also catch this on its own - this just makes the
+      # specific failure reason obvious sooner.
+      - name: Typecheck
         if: steps.detect.outputs.ready == 'true'
-        run: npm run build
+        run: npx tsc --noEmit
 
       - name: Test
         if: steps.detect.outputs.ready == 'true'
@@ -74,3 +79,7 @@ jobs:
           else
             echo "::notice::No \"test\" script defined - skipping."
           fi
+
+      - name: Build
+        if: steps.detect.outputs.ready == 'true'
+        run: npm run build

@@ -1,0 +1,32 @@
+# Real, adopted lint gate - see .github/workflows/lint.yml, which
+# runs `ruff check backend` from the repo root and is now BLOCKING.
+#
+# Deliberately selects only `F` (Pyflakes - unused imports/variables,
+# undefined names, genuinely bug-adjacent issues) rather than ruff's
+# full default rule set. Checked first: running with no config at all
+# (ruff's raw defaults) produced 786 findings, the overwhelming
+# majority of which are pure style ruff enables by default that this
+# project never adopted (e.g. EXE002 demanding a shebang on every
+# non-executable test file, E501's 88-character line length - this
+# codebase's existing style runs meaningfully longer). Even E+F
+# together was 147, almost entirely E501 on a line-length limit never
+# agreed to. `F` alone found 13 real issues (dead imports, one unused
+# local variable, one `__all__` entry that referenced a renamed
+# symbol and would have raised AttributeError on `from app.auth import
+# *`) - all fixed as of this config's introduction. Widen this
+# selection deliberately, not by accident, if a real need for more
+# rule categories shows up.
+[lint]
+select = ["F"]
+
+[lint.per-file-ignores]
+# alembic/env.py's `from app.models import *` is the standard,
+# intentional Alembic pattern so autogenerate can see every model -
+# not an accidental wildcard import.
+"alembic/env.py" = ["F403"]
+# Generated, applied migration files are a frozen historical record -
+# editing them (even to drop an unused `import sqlalchemy as sa`
+# autogenerate left in a migration with no column-type change) is a
+# worse practice than leaving a handful of harmless unused imports in
+# code that is never meant to be touched again.
+"alembic/versions/*.py" = ["F401"]
