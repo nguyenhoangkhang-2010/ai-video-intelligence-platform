@@ -34,3 +34,9 @@ export interface VideoUpdatePayload {
   language?: string;
   status?: VideoStatus;
 }
+
+/** Short-lived, video-scoped token for <video>/<img> playback URLs. */
+export interface MediaTokenResponse {
+  token: string;
+  expires_in: number;
+}

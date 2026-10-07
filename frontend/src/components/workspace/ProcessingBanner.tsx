@@ -6,6 +6,7 @@ import { useAccentSlotClaim } from "@/components/3d/workspace3d/AccentSlotContex
 import { Workspace3DObject } from "@/components/3d/workspace3d/Workspace3DObject";
 import { PIPELINE_STEP_TO_STAGE } from "@/components/3d/workspace3d/registry";
 import { useVideoProcessingJobs } from "@/hooks/useVideos";
+import { toApiError } from "@/lib/axios";
 import type { Video } from "@/types/video";
 
 /**
@@ -17,13 +18,14 @@ import type { Video } from "@/types/video";
  * error_message rather than a generic message.
  */
 export function ProcessingBanner({ video }: { video: Video }) {
-  const { data: jobs } = useVideoProcessingJobs(video.id, video.status !== "processed");
+  const jobsQuery = useVideoProcessingJobs(video.id, video.status !== "processed");
+  const jobs = jobsQuery.data;
   const job = jobs?.[jobs.length - 1];
   // Claims the shared Workspace accent slot only for the pipeline
   // scrub accent's own real render condition (see
-  // AccentSlotContext.tsx) - the "failed" branch below shows no
-  // Workspace3DObject, so it doesn't claim.
-  useAccentSlotClaim(video.status !== "processed" && video.status !== "failed");
+  // AccentSlotContext.tsx) - the "failed"/error branches below show no
+  // Workspace3DObject, so they don't claim.
+  useAccentSlotClaim(video.status !== "processed" && video.status !== "failed" && !jobsQuery.isError);
 
   if (video.status === "processed") return null;
 
@@ -37,6 +39,32 @@ export function ProcessingBanner({ video }: { video: Video }) {
             {job?.error_message ?? "The video couldn't be processed. Try uploading it again."}
           </p>
         </div>
+      </div>
+    );
+  }
+
+  // A genuine fetch failure here must never look like silent, stalled
+  // progress (the same job/undefined -> "Processing video… 0%" every
+  // other branch below would otherwise render forever) - this is the
+  // one signal telling the person something actually went wrong, not
+  // that the pipeline is just slow.
+  if (jobsQuery.isError) {
+    return (
+      <div className="flex items-start gap-3 border-b border-error/25 bg-error-muted px-4 py-3 sm:px-5">
+        <Icon name="alert" size={17} className="mt-0.5 shrink-0 text-error" />
+        <div className="min-w-0 flex-1">
+          <p className="text-body-sm font-medium text-error">Couldn&apos;t load processing status</p>
+          <p className="mt-0.5 text-caption text-text-secondary">{toApiError(jobsQuery.error).message}</p>
+        </div>
+        <button
+          type="button"
+          onClick={() => jobsQuery.refetch()}
+          aria-label="Retry"
+          className="flex shrink-0 items-center gap-1.5 rounded border border-error/30 px-2 py-1 text-caption font-medium text-error transition-colors duration-fast hover:bg-error-muted"
+        >
+          <Icon name="refresh" size={12} />
+          Retry
+        </button>
       </div>
     );
   }

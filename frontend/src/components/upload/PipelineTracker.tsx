@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { useNovaAttention } from "@/components/3d/NovaAttentionContext";
 import { Icon } from "@/components/ui/Icon";
 import { useVideo, useVideoProcessingJobs } from "@/hooks/useVideos";
+import { toApiError } from "@/lib/axios";
 import { ROUTES } from "@/lib/constants";
 import { cn } from "@/lib/utils";
 
@@ -46,7 +47,8 @@ function stageIndexFor(currentStep: string | null | undefined, progress: number)
 export function PipelineTracker({ videoId }: { videoId: number }) {
   const router = useRouter();
   const video = useVideo(videoId);
-  const { data: jobs } = useVideoProcessingJobs(videoId, true);
+  const jobsQuery = useVideoProcessingJobs(videoId, true);
+  const jobs = jobsQuery.data;
   const { notice } = useNovaAttention();
   const job = jobs?.[jobs.length - 1];
   const progress = job?.progress ?? 0;
@@ -78,6 +80,37 @@ export function PipelineTracker({ videoId }: { videoId: number }) {
             {job?.error_message ?? "The pipeline couldn't finish processing this video."}
           </p>
         </div>
+      </div>
+    );
+  }
+
+  // Same reasoning as ProcessingBanner: a genuine fetch failure here
+  // must never render as "Starting…" stuck at stage 0 forever - the
+  // one real signal on this screen that something actually broke,
+  // not that the pipeline is just taking a while.
+  if (video.isError || jobsQuery.isError) {
+    return (
+      <div className="flex flex-col items-center gap-3 text-center">
+        <span className="flex h-12 w-12 items-center justify-center rounded-full bg-error-muted text-error">
+          <Icon name="alert" size={22} />
+        </span>
+        <div>
+          <p className="text-body font-medium text-text-primary">Couldn&apos;t check processing status</p>
+          <p className="mt-1 max-w-sm text-body-sm text-text-muted">
+            {toApiError(video.error ?? jobsQuery.error).message}
+          </p>
+        </div>
+        <button
+          type="button"
+          onClick={() => {
+            if (video.isError) void video.refetch();
+            if (jobsQuery.isError) void jobsQuery.refetch();
+          }}
+          className="flex items-center gap-1.5 rounded border border-border-strong px-2.5 py-1.5 text-caption font-medium text-text-secondary transition-colors duration-fast hover:border-accent hover:text-accent"
+        >
+          <Icon name="refresh" size={12} />
+          Retry
+        </button>
       </div>
     );
   }

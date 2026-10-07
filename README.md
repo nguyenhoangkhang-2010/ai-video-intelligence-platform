@@ -181,7 +181,7 @@ feature (code exists, deliberately unexposed).
 | Global search / global chat | ⛔ | Every search and chat call is scoped to one video by design. |
 | Quiz scoring / attempt persistence | ⛔ | No such table or endpoint. |
 | S3/MinIO storage | 🔧 | `StorageBackend` is S3-capable for reads/streaming; uploads still always write to local disk (see [Trade-offs](#engineering-decisions--trade-offs)). |
-| Kubernetes | ⛔ | Manifests under `deployment/kubernetes/` are placeholders — not a working deployment target. |
+| Kubernetes | ⛔ | Not used. Docker Compose is the only deployment target (see [ADR 0002](docs/adr/0002-no-kafka-k8s-otel.md)); an earlier placeholder `deployment/kubernetes/` directory (never implemented) was removed rather than backfilled. |
 
 ---
 
@@ -421,7 +421,7 @@ AI-Video-Intelligence-Platform/
 │   ├── app/                 # Next.js App Router
 │   ├── components/          # workspace panels, ui/ design system
 │   ├── hooks/ services/ types/ lib/
-├── deployment/               # docker/ (prod compose + hardened images), nginx/, kubernetes/ (placeholder)
+├── deployment/               # docker/ (prod compose + hardened images), nginx/
 ├── monitoring/                # Prometheus + Grafana provisioning
 └── docs/
     ├── api/rest_api.md        # Full API contract
@@ -454,7 +454,7 @@ AI-Video-Intelligence-Platform/
 - No published evaluation numbers — the framework and runner are real;
   no labeled dataset ships with the repo (see
   [Evaluation](#evaluation)).
-- Kubernetes manifests are placeholders, not a working deployment target.
+- No Kubernetes deployment exists or is planned at this scale (see [ADR 0002](docs/adr/0002-no-kafka-k8s-otel.md)); Docker Compose is the only deployment target.
 
 ---
 

@@ -31,13 +31,13 @@ jobs:
         with:
           node-version: "20"
 
-      # frontend/ is currently an empty scaffold (no name/dependencies/
-      # scripts in package.json, no lockfile) - there is nothing to
-      # install/build yet. Detect that and skip gracefully instead of
-      # failing CI on a pre-existing repository condition that this
-      # workflow did not create. Once real application code and a
-      # package-lock.json exist, the steps below activate
-      # automatically - nothing here needs to change.
+      # frontend/ is a real Next.js app with a committed package-lock.json
+      # and build/lint/test scripts, so this always evaluates to
+      # ready=true today. The guard itself is kept (rather than running
+      # the steps below unconditionally) as a defensive fallback: if
+      # package.json/package-lock.json are ever removed or a script is
+      # dropped, this skips gracefully with a notice instead of failing
+      # CI on a condition this workflow didn't create.
       - name: Detect buildable frontend
         id: detect
         run: |
@@ -70,7 +70,7 @@ jobs:
         if: steps.detect.outputs.ready == 'true'
         run: |
           if node -e "process.exit(require('./package.json').scripts && require('./package.json').scripts.test ? 0 : 1)"; then
-            npm test -- --ci
+            npm test
           else
             echo "::notice::No \"test\" script defined - skipping."
           fi

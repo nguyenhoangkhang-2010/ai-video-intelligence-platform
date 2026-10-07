@@ -1,12 +1,24 @@
-import { fireEvent, render, screen } from "@testing-library/react";
-import { describe, expect, it, vi } from "vitest";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import type { ReactElement } from "react";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { VideoThumbnail } from "@/components/video/VideoThumbnail";
+import * as videosService from "@/services/videos";
 import type { Video } from "@/types/video";
 
 vi.mock("@/services/videos", () => ({
-  getVideoThumbnailUrl: (videoId: number) => `http://api.test/videos/${videoId}/thumbnail?token=t`,
+  getVideoThumbnailUrl: (videoId: number, mediaToken: string) =>
+    `http://api.test/videos/${videoId}/thumbnail?token=${mediaToken}`,
+  getMediaToken: vi.fn(),
 }));
+
+function renderWithQueryClient(ui: ReactElement) {
+  const queryClient = new QueryClient({
+    defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
+  });
+  return render(<QueryClientProvider client={queryClient}>{ui}</QueryClientProvider>);
+}
 
 function makeVideo(overrides: Partial<Video>): Video {
   return {
@@ -25,17 +37,30 @@ function makeVideo(overrides: Partial<Video>): Video {
 }
 
 describe("VideoThumbnail", () => {
-  it("renders the real extracted frame when has_thumbnail is true", () => {
-    const video = makeVideo({ id: 7, title: "clip.mp4", status: "processed", has_thumbnail: true });
-    render(<VideoThumbnail video={video} />);
+  beforeEach(() => {
+    vi.mocked(videosService.getMediaToken).mockReset();
+    vi.mocked(videosService.getMediaToken).mockResolvedValue({ token: "t", expires_in: 300 });
+  });
 
-    const img = screen.getByRole("img", { name: /representative frame from "clip.mp4"/i });
+  it("renders the real extracted frame when has_thumbnail is true", async () => {
+    const video = makeVideo({ id: 7, title: "clip.mp4", status: "processed", has_thumbnail: true });
+    renderWithQueryClient(<VideoThumbnail video={video} />);
+
+    const img = await screen.findByRole("img", { name: /representative frame from "clip.mp4"/i });
     expect(img).toHaveAttribute("src", "http://api.test/videos/7/thumbnail?token=t");
     expect(img).toHaveAttribute("loading", "lazy");
   });
 
+  it("shows a skeleton while the media token for a real frame is still loading", () => {
+    const video = makeVideo({ id: 7, status: "processed", has_thumbnail: true });
+    const { container } = renderWithQueryClient(<VideoThumbnail video={video} />);
+
+    expect(screen.queryByRole("img")).not.toBeInTheDocument();
+    expect(container.querySelector(".skeleton")).toBeInTheDocument();
+  });
+
   it("shows a skeleton, never a fabricated frame, while still processing", () => {
-    const { container } = render(
+    const { container } = renderWithQueryClient(
       <VideoThumbnail video={makeVideo({ status: "processing", has_thumbnail: false })} />,
     );
 
@@ -44,7 +69,7 @@ describe("VideoThumbnail", () => {
   });
 
   it("shows the neutral abstract surface, not a skeleton, when there's no thumbnail and processing is done", () => {
-    const { container } = render(
+    const { container } = renderWithQueryClient(
       <VideoThumbnail video={makeVideo({ status: "failed", has_thumbnail: false })} />,
     );
 
@@ -52,13 +77,24 @@ describe("VideoThumbnail", () => {
     expect(container.querySelector(".skeleton")).not.toBeInTheDocument();
   });
 
-  it("falls back to the abstract surface instead of a broken image if the real frame fails to load", () => {
+  it("falls back to the abstract surface instead of a broken image if the real frame fails to load", async () => {
     const video = makeVideo({ id: 9, status: "processed", has_thumbnail: true });
-    render(<VideoThumbnail video={video} />);
+    renderWithQueryClient(<VideoThumbnail video={video} />);
 
-    const img = screen.getByRole("img");
+    const img = await screen.findByRole("img");
     fireEvent.error(img);
 
+    expect(screen.queryByRole("img")).not.toBeInTheDocument();
+  });
+
+  it("falls back to the abstract surface, not an infinite skeleton, when the media token request fails", async () => {
+    vi.mocked(videosService.getMediaToken).mockRejectedValue(new Error("network down"));
+    const video = makeVideo({ id: 9, status: "processed", has_thumbnail: true });
+    const { container } = renderWithQueryClient(<VideoThumbnail video={video} />);
+
+    await waitFor(() => {
+      expect(container.querySelector(".skeleton")).not.toBeInTheDocument();
+    });
     expect(screen.queryByRole("img")).not.toBeInTheDocument();
   });
 });

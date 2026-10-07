@@ -10,6 +10,7 @@ export const videoKeys = {
   detail: (id: number) => [...videoKeys.all, "detail", id] as const,
   status: (id: number) => [...videoKeys.all, "status", id] as const,
   jobs: (id: number) => [...videoKeys.all, "jobs", id] as const,
+  mediaToken: (id: number) => [...videoKeys.all, "media-token", id] as const,
 };
 
 /**
@@ -57,6 +58,24 @@ export function useVideoProcessingJobs(videoId: number, enabled = true) {
       const stillActive = jobs.some((job) => job.status === "PENDING" || job.status === "RUNNING");
       return stillActive ? PROCESSING_POLL_INTERVAL_MS : false;
     },
+  });
+}
+
+/**
+ * Short-lived media token for this video's stream/thumbnail URLs (see
+ * services/videos.ts::getMediaToken). `staleTime` is kept comfortably
+ * under the backend's 300s default expiry (settings.security.
+ * media_token_expire_seconds) so a cached token is always refetched
+ * well before the server would reject it as expired, without
+ * refetching on every render.
+ */
+export function useMediaToken(videoId: number, enabled = true) {
+  return useQuery({
+    queryKey: videoKeys.mediaToken(videoId),
+    queryFn: () => videosService.getMediaToken(videoId),
+    enabled,
+    staleTime: 120_000,
+    select: (data) => data.token,
   });
 }
 

@@ -85,6 +85,58 @@
           "legendFormat": "active jobs"
         }
       ]
+    },
+    {
+      "id": 7,
+      "title": "Pipeline stage execution rate, by result",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 24 },
+      "datasource": { "type": "prometheus", "uid": "Prometheus" },
+      "targets": [
+        {
+          "expr": "sum(rate(video_pipeline_stage_executions_total[5m])) by (stage, result)",
+          "legendFormat": "{{stage}} - {{result}}"
+        }
+      ]
+    },
+    {
+      "id": 8,
+      "title": "Pipeline stage duration, p95 (s)",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 24 },
+      "datasource": { "type": "prometheus", "uid": "Prometheus" },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.95, sum(rate(video_pipeline_stage_duration_seconds_bucket[15m])) by (le, stage))",
+          "legendFormat": "{{stage}}"
+        }
+      ]
+    },
+    {
+      "id": 9,
+      "title": "Pipeline run outcome rate",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 32 },
+      "datasource": { "type": "prometheus", "uid": "Prometheus" },
+      "targets": [
+        {
+          "expr": "sum(rate(video_pipeline_completed_total[15m])) by (result)",
+          "legendFormat": "{{result}}"
+        }
+      ]
+    },
+    {
+      "id": 10,
+      "title": "Active pipeline stages",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 32 },
+      "datasource": { "type": "prometheus", "uid": "Prometheus" },
+      "targets": [
+        {
+          "expr": "video_pipeline_active_stages",
+          "legendFormat": "{{stage}}"
+        }
+      ]
     }
   ]
 }

@@ -20,6 +20,10 @@ from app.services.video import VideoService
 from app.services.processing_job import ProcessingJobService
 from app.services.processing_stage import ProcessingStageService
 from app.services.transcript import TranscriptService
+from app.workers.pipeline_metrics import (
+    observe_stage,
+    record_pipeline_outcome,
+)
 from app.workers.transcription_worker import TranscriptionWorker
 
 from app.schemas.transcript import TranscriptCreate
@@ -681,10 +685,9 @@ class VideoPipelineService:
                 and self.processing_stage_service.has_exhausted_retries(stage_row)
             ):
                 logger.warning(
-                    "Stage %s for job %s has exhausted its retry "
-                    "budget (%s attempts); leaving it FAILED without "
-                    "another attempt.",
-                    stage_name, job_id, stage_row.attempt_count,
+                    "stage_skipped job_id=%s stage=%s attempt=%s "
+                    "reason=retry_budget_exhausted",
+                    job_id, stage_name, stage_row.attempt_count,
                 )
                 continue
 
@@ -697,18 +700,25 @@ class VideoPipelineService:
                 # still-alive attempt (not stale) - skip this pass.
                 continue
 
+            logger.info(
+                "stage_started job_id=%s stage=%s attempt=%s",
+                job_id, stage_name, claimed.attempt_count,
+            )
+
             try:
-                results[stage_name] = self._execute_stage(
-                    stage_name=stage_name,
-                    job_id=job_id,
-                    video_id=video_id,
-                    file_path=file_path,
-                    results=results,
-                )
+                with observe_stage(stage_name):
+                    results[stage_name] = self._execute_stage(
+                        stage_name=stage_name,
+                        job_id=job_id,
+                        video_id=video_id,
+                        file_path=file_path,
+                        results=results,
+                    )
             except Exception as exc:
                 logger.exception(
-                    "Stage %s failed for video %s (job %s).",
-                    stage_name, video_id, job_id,
+                    "stage_failed job_id=%s stage=%s attempt=%s "
+                    "video_id=%s",
+                    job_id, stage_name, claimed.attempt_count, video_id,
                 )
                 self.processing_stage_service.mark_failed(
                     claimed, str(exc),
@@ -717,6 +727,10 @@ class VideoPipelineService:
             else:
                 self.processing_stage_service.mark_completed(
                     claimed,
+                )
+                logger.info(
+                    "stage_completed job_id=%s stage=%s attempt=%s",
+                    job_id, stage_name, claimed.attempt_count,
                 )
 
         final_stages = self.processing_stage_service.get_by_job_id(
@@ -738,13 +752,18 @@ class VideoPipelineService:
                 # wrapper) so Celery's autoretry_for still recognizes
                 # its type and redelivers the task - the redelivery
                 # will resume at exactly the stages still incomplete.
+                record_pipeline_outcome("failure")
                 raise transient
             if failures:
+                record_pipeline_outcome("failure")
                 raise failures[0]
+            record_pipeline_outcome("incomplete")
             raise ProcessingIncompleteError(
                 f"Processing incomplete for video {video_id}: "
                 f"stage(s) {incomplete} did not complete."
             )
+
+        record_pipeline_outcome("success")
 
         self.video_service.update_status(
             video_id=video_id,

@@ -92,6 +92,7 @@ def test_get_current_user_for_media_prefers_authorization_header():
         mock_repo_cls.return_value.get_by_id.return_value = _make_user(7)
 
         user = get_current_user_for_media(
+            video_id=1,
             token="ignored-when-header-present",
             credentials=_credentials("header-token"),
             db=MagicMock(),
@@ -102,12 +103,16 @@ def test_get_current_user_for_media_prefers_authorization_header():
 
 def test_get_current_user_for_media_falls_back_to_query_token():
     with (
-        patch("app.auth.dependencies.decode_token", return_value={"sub": "7"}),
+        patch(
+            "app.auth.dependencies.decode_token",
+            return_value={"sub": "7", "scope": "media", "video_id": 1},
+        ),
         patch("app.auth.dependencies.UserRepository") as mock_repo_cls,
     ):
         mock_repo_cls.return_value.get_by_id.return_value = _make_user(7)
 
         user = get_current_user_for_media(
+            video_id=1,
             token="query-token",
             credentials=None,
             db=MagicMock(),
@@ -118,6 +123,89 @@ def test_get_current_user_for_media_falls_back_to_query_token():
 
 def test_get_current_user_for_media_raises_401_when_neither_provided():
     with pytest.raises(HTTPException) as exc_info:
-        get_current_user_for_media(token=None, credentials=None, db=MagicMock())
+        get_current_user_for_media(
+            video_id=1,
+            token=None,
+            credentials=None,
+            db=MagicMock(),
+        )
 
     assert exc_info.value.status_code == 401
+
+
+# ---- get_current_user_for_media: media token scope/resource checks ----
+
+
+def test_get_current_user_for_media_rejects_main_access_token_in_query():
+    """
+    The main access token (no `scope` claim) must never be accepted
+    via the query-token fallback - only a dedicated media token.
+    """
+    with patch(
+        "app.auth.dependencies.decode_token",
+        return_value={"sub": "7"},
+    ):
+        with pytest.raises(HTTPException) as exc_info:
+            get_current_user_for_media(
+                video_id=1,
+                token="main-access-token",
+                credentials=None,
+                db=MagicMock(),
+            )
+
+    assert exc_info.value.status_code == 401
+
+
+def test_get_current_user_for_media_rejects_wrong_video_id():
+    """A media token issued for video 1 must not authorize video 2."""
+    with patch(
+        "app.auth.dependencies.decode_token",
+        return_value={"sub": "7", "scope": "media", "video_id": 1},
+    ):
+        with pytest.raises(HTTPException) as exc_info:
+            get_current_user_for_media(
+                video_id=2,
+                token="media-token-for-video-1",
+                credentials=None,
+                db=MagicMock(),
+            )
+
+    assert exc_info.value.status_code == 403
+
+
+def test_get_current_user_for_media_raises_401_for_expired_or_malformed_token():
+    """decode_token raises JWTError for both expired and malformed tokens."""
+    with patch(
+        "app.auth.dependencies.decode_token",
+        side_effect=JWTError("token is expired"),
+    ):
+        with pytest.raises(HTTPException) as exc_info:
+            get_current_user_for_media(
+                video_id=1,
+                token="expired-or-malformed",
+                credentials=None,
+                db=MagicMock(),
+            )
+
+    assert exc_info.value.status_code == 401
+
+
+def test_get_current_user_for_media_rejects_deactivated_account():
+    with (
+        patch(
+            "app.auth.dependencies.decode_token",
+            return_value={"sub": "7", "scope": "media", "video_id": 1},
+        ),
+        patch("app.auth.dependencies.UserRepository") as mock_repo_cls,
+    ):
+        mock_repo_cls.return_value.get_by_id.return_value = _make_user(
+            7, is_active=False,
+        )
+
+        with pytest.raises(InactiveUserError):
+            get_current_user_for_media(
+                video_id=1,
+                token="media-token",
+                credentials=None,
+                db=MagicMock(),
+            )

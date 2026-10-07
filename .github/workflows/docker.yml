@@ -47,9 +47,10 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # Same rationale as .github/workflows/ci.yml: frontend/ is
-      # currently an empty scaffold, so this build is skipped (not
-      # failed) until real application code + a lockfile exist.
+      # Same rationale as .github/workflows/ci.yml: frontend/ now has a
+      # real package.json/package-lock.json, so this always builds
+      # today. The guard is kept as a defensive fallback - if either
+      # file is ever missing, this skips gracefully instead of failing.
       - name: Detect buildable frontend
         id: detect
         working-directory: frontend

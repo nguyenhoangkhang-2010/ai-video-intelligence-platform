@@ -1,14 +1,21 @@
 import type { SearchResult } from "@/types/search";
 
 /**
- * Matches backend app/schemas/rag.py::RAGResult exactly — these are
- * the only four states that exist. Retrieval/generation itself stays
- * stateless (no prior turn is fed back into a later call); only a
- * genuinely `answered` turn is additionally recorded server-side to
- * `ChatHistory` for later replay (see useChat.ts and
- * docs/api/rest_api.md, Search & RAG section).
+ * Matches backend app/schemas/rag.py::RAGStatus exactly — these are
+ * the only five states that exist, including `generation_failed`
+ * (retrieval succeeded but the LLM call itself failed — set by
+ * app/pipelines/rag_pipeline.py when it catches an LLMError).
+ * Retrieval/generation itself stays stateless (no prior turn is fed
+ * back into a later call); only a genuinely `answered` turn is
+ * additionally recorded server-side to `ChatHistory` for later replay
+ * (see useChat.ts and docs/api/rest_api.md, Search & RAG section).
  */
-export type RagStatus = "answered" | "empty_query" | "no_embeddings" | "no_relevant_chunks";
+export type RagStatus =
+  | "answered"
+  | "empty_query"
+  | "no_embeddings"
+  | "no_relevant_chunks"
+  | "generation_failed";
 
 export interface RagResult {
   video_id: number;

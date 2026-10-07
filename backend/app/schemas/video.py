@@ -55,3 +55,15 @@ class VideoStatusResponse(BaseModel):
     model_config = ConfigDict(
         from_attributes=True,
     )
+
+class MediaTokenResponse(BaseModel):
+    """
+    Short-lived, resource-scoped token for media delivery endpoints
+    (see app.auth.jwt.create_media_token) - never the caller's main
+    access token. `expires_in` is seconds from issuance, so the
+    frontend can schedule a refetch before it actually expires
+    rather than reacting to a 401.
+    """
+
+    token: str
+    expires_in: int

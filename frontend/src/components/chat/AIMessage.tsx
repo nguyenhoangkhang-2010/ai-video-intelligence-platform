@@ -29,6 +29,8 @@ function statusCopy(status: ChatMessage["status"]): { icon: "info" | "alert"; te
       return { icon: "alert", text: "Nothing in this video's transcript closely matches that question." };
     case "empty_query":
       return { icon: "alert", text: "Ask a question to get started." };
+    case "generation_failed":
+      return { icon: "alert", text: "Something went wrong generating an answer. Please try asking again." };
     default:
       return null;
   }

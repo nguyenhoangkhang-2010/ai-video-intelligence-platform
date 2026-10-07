@@ -13,6 +13,16 @@
 #   docker compose -f deployment/docker/docker-compose.prod.yml \
 #     --env-file .env.production up -d --build
 #
+# Found live: redeploying with --build recreates api/frontend with new
+# container IPs, but nginx (below) resolves their hostnames once at
+# its own startup and does not re-resolve on its own - a redeploy that
+# recreates api/frontend without also restarting nginx leaves nginx
+# proxying to addresses that no longer exist (502 Bad Gateway) even
+# though the new containers are themselves healthy. Restart nginx
+# after any redeploy that recreates api or frontend:
+#   docker compose -f deployment/docker/docker-compose.prod.yml \
+#     --env-file .env.production restart nginx
+#
 # .env.production is never committed - see .env.example for the
 # variables it must define (this compose file reads the same names).
 #

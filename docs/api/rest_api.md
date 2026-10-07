@@ -28,7 +28,9 @@ A deactivated account (`User.is_active = false`) gets `403` on both `POST /auth/
 | POST | `/videos/upload` | Yes | Multipart upload (`file`). Creates the `Video` (status `uploaded`) and a `ProcessingJob` (status `PENDING`), dispatches async processing, and returns immediately. |
 | PUT | `/videos/{video_id}` | Yes | Update `title`/`language`/`status`. |
 | DELETE | `/videos/{video_id}` | Yes | Deletes the video and everything derived from it. See "Deletion cleanup" below. |
+| GET | `/videos/{video_id}/media-token` | Yes | Issues a short-lived (default 300s), video-scoped token for the two endpoints below. See below. |
 | GET | `/videos/{video_id}/stream` | Yes\* | **Video delivery/playback.** See below. |
+| GET | `/videos/{video_id}/thumbnail` | Yes\* | This video's extracted representative frame, if one exists (`404` otherwise). Same auth as `/stream`. |
 | GET | `/videos/{video_id}/processing-jobs` | Yes | All processing jobs for this video. |
 
 `Video.status`: `uploaded` -> `processing` -> `processed` \| `failed`. `PUT`'s `status` field is validated against exactly these four values (`422` otherwise) - a client can no longer self-assign an arbitrary status string.
@@ -41,9 +43,11 @@ Before a byte is written to disk: the filename is reduced to a safe basename (`a
 
 Database rows (transcript, summaries, translations, chapters, quizzes, flashcards, embeddings, processing jobs) are removed via `ON DELETE CASCADE`, as before. This also now removes the two things that live outside the database: the uploaded source file (via the same `StorageBackend` the stream endpoint reads through) and this video's vectors in the shared FAISS index (via the same `VectorStore.replace()` mechanism used to swap embeddings on reprocessing - never a full rebuild, never touching another video's vectors). This cleanup is best-effort: it runs after the database deletion has already succeeded, so a storage/FAISS failure is logged, not turned into an error response - the video is still gone from the product's perspective either way.
 
-### Video delivery (`GET /videos/{video_id}/stream`)
+### Video delivery (`GET /videos/{video_id}/stream`, `GET /videos/{video_id}/thumbnail`)
 
-\* Accepts the token via the standard `Authorization` header **or** a `?token=` query parameter - a browser `<video>` element cannot attach custom headers, so the query-parameter form exists specifically for that case. Never accepted on any other endpoint.
+\* Accepts the main `Authorization` header token, **or**, via a `?token=` query parameter, a dedicated **media token** - never the caller's main access token. A browser `<video>`/`<img>` element cannot attach custom headers, so the query-parameter form exists specifically for that case; placing the long-lived main access token itself in a URL (logs, browser history, `Referer` headers) was the previous behavior and is no longer accepted there.
+
+Call `GET /videos/{video_id}/media-token` (normal `Authorization`-header auth, ownership-checked) to obtain `{token, expires_in}` first, then build the stream/thumbnail URL with that `token`. The token (`app/auth/jwt.py::create_media_token`) carries `scope=media` and the exact `video_id` it was issued for; `app/auth/dependencies.py::get_current_user_for_media` rejects it on any other endpoint, for any other video, or once `expires_in` seconds have passed (`401`/`403`).
 
 Goes through the storage abstraction (`app/storage/`, local filesystem by default, optional S3/MinIO - see `docs/deployment.md`), not a hardcoded path:
 

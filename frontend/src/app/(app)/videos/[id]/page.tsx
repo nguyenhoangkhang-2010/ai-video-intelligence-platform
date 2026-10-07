@@ -28,8 +28,9 @@ import { TranslationPanel } from "@/components/workspace/panels/TranslationPanel
 import { VideoPlayer } from "@/components/video/VideoPlayer";
 import { VideoPlayerProvider } from "@/hooks/useVideoPlayer";
 import { useChapters } from "@/hooks/useChapters";
-import { useVideo } from "@/hooks/useVideos";
+import { useMediaToken, useVideo } from "@/hooks/useVideos";
 import { toApiError } from "@/lib/axios";
+import { cn } from "@/lib/utils";
 import { getVideoStreamUrl } from "@/services/videos";
 
 /**
@@ -50,6 +51,17 @@ export default function VideoWorkspacePage() {
   const [activeSection, setActiveSection] = useState<WorkspaceSection>("overview");
   const [navCompact, setNavCompact] = useState(false);
   const { state: novaState } = useNovaAttention();
+  // Quiz/Flashcards own real session progress (which questions were
+  // answered, which cards were flipped) in local component state -
+  // every other panel remounts on tab switch (see the key={activeSection}
+  // below) with no such state to lose. Once a person has opened one of
+  // these two, it stays mounted (hidden via CSS, not unmounted) for the
+  // rest of this page visit so that progress survives switching away
+  // and back - never persisted beyond this visit, and never affecting
+  // any other panel's existing remount-on-switch behavior.
+  const [keepAliveSections, setKeepAliveSections] = useState<ReadonlySet<WorkspaceSection>>(
+    () => new Set(),
+  );
 
   function handleContentScroll(event: UIEvent<HTMLDivElement>) {
     setNavCompact(event.currentTarget.scrollTop > 24);
@@ -61,11 +73,18 @@ export default function VideoWorkspacePage() {
   function handleSelectSection(section: WorkspaceSection) {
     setActiveSection(section);
     setNavCompact(false);
+    if (section === "quiz" || section === "flashcards") {
+      setKeepAliveSections((current) => (current.has(section) ? current : new Set(current).add(section)));
+    }
   }
 
   const video = useVideo(videoId);
   const chapters = useChapters(videoId, video.data?.status);
-  const streamUrl = useMemo(() => getVideoStreamUrl(videoId), [videoId]);
+  const mediaToken = useMediaToken(videoId);
+  const streamUrl = useMemo(
+    () => (mediaToken.data ? getVideoStreamUrl(videoId, mediaToken.data) : null),
+    [videoId, mediaToken.data],
+  );
 
   if (video.isLoading) {
     return (
@@ -138,7 +157,15 @@ export default function VideoWorkspacePage() {
             />
             <div className="relative mx-auto flex w-full max-w-5xl flex-col gap-3 lg:max-w-none">
               <VideoFrameShell>
-                <VideoPlayer src={streamUrl} title={video.data.title} chapters={chapterList} />
+                {streamUrl ? (
+                  <VideoPlayer src={streamUrl} title={video.data.title} chapters={chapterList} />
+                ) : mediaToken.isError ? (
+                  <div className="flex aspect-video w-full items-center justify-center">
+                    <ErrorState error={toApiError(mediaToken.error)} onRetry={() => mediaToken.refetch()} />
+                  </div>
+                ) : (
+                  <Skeleton className="aspect-video w-full" />
+                )}
               </VideoFrameShell>
               {chapterList.length > 0 && <ChapterStrip chapters={chapterList} />}
             </div>
@@ -199,14 +226,35 @@ export default function VideoWorkspacePage() {
               )}
 
               <div className="relative z-10 mx-auto h-full w-full max-w-5xl px-1">
-                <div key={activeSection} className="h-full animate-rise">
-                  <ActivePanel
-                    section={activeSection}
-                    videoId={videoId}
-                    onNavigate={handleSelectSection}
-                    video={video.data}
-                  />
-                </div>
+                {activeSection !== "quiz" && activeSection !== "flashcards" && (
+                  <div key={activeSection} className="h-full animate-rise">
+                    <ActivePanel
+                      section={activeSection}
+                      videoId={videoId}
+                      onNavigate={handleSelectSection}
+                      video={video.data}
+                    />
+                  </div>
+                )}
+                {/*
+                 * Quiz/Flashcards stay mounted (hidden via CSS, not
+                 * unmounted/remounted) once first visited, unlike every
+                 * other panel above - see the keepAliveSections comment
+                 * near the top of this component for why: their session
+                 * progress (answered questions, flipped cards) lives in
+                 * local component state that a remount would silently
+                 * reset the moment someone switched tabs and back.
+                 */}
+                {keepAliveSections.has("quiz") && (
+                  <div className={cn("h-full", activeSection === "quiz" ? "animate-rise" : "hidden")}>
+                    <QuizPanel videoId={videoId} videoStatus={video.data.status} />
+                  </div>
+                )}
+                {keepAliveSections.has("flashcards") && (
+                  <div className={cn("h-full", activeSection === "flashcards" ? "animate-rise" : "hidden")}>
+                    <FlashcardsPanel videoId={videoId} videoStatus={video.data.status} />
+                  </div>
+                )}
               </div>
             </div>
           </div>
@@ -290,12 +338,10 @@ function ActivePanel({
       return <SearchPanel videoId={videoId} />;
     case "chat":
       return <ChatPanel videoId={videoId} videoTitle={video.title} />;
-    case "quiz":
-      return <QuizPanel videoId={videoId} videoStatus={video.status} />;
     case "chapters":
       return <ChaptersPanel videoId={videoId} videoStatus={video.status} />;
-    case "flashcards":
-      return <FlashcardsPanel videoId={videoId} videoStatus={video.status} />;
+    // "quiz"/"flashcards" are rendered outside ActivePanel - see the
+    // keepAliveSections blocks in VideoWorkspacePage above.
     default:
       return null;
   }

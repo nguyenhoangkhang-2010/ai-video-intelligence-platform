@@ -22,3 +22,22 @@ if (typeof ResizeObserver === "undefined") {
   }
   globalThis.ResizeObserver = ResizeObserverStub;
 }
+
+// jsdom doesn't implement window.matchMedia (used by useReducedMotion
+// to read prefers-reduced-motion) - any component under its root,
+// including WorkspaceNav, throws on mount without this stub. Always
+// reports "no preference" (matches: false), which is enough since
+// tests only need mounting not to crash, never real media-query
+// change notifications.
+if (typeof window !== "undefined" && !window.matchMedia) {
+  window.matchMedia = (query: string) => ({
+    matches: false,
+    media: query,
+    onchange: null,
+    addListener: () => {},
+    removeListener: () => {},
+    addEventListener: () => {},
+    removeEventListener: () => {},
+    dispatchEvent: () => false,
+  }) as MediaQueryList;
+}

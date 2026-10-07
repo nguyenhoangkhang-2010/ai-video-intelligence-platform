@@ -13,6 +13,7 @@ from starlette.concurrency import run_in_threadpool
 
 from app.auth.dependencies import get_current_user
 from app.auth.dependencies import get_current_user_for_media
+from app.auth.jwt import create_media_token
 from app.models.user import User
 
 from app.utils.ffprobe import extract_metadata
@@ -30,6 +31,7 @@ from app.services.embedding import EmbeddingService
 from app.schemas.video import VideoRead
 from app.schemas.video import VideoUpdate
 from app.schemas.video import VideoStatusResponse
+from app.schemas.video import MediaTokenResponse
 
 from app.schemas.processing_job import ProcessingJobRead
 
@@ -116,6 +118,43 @@ def get_video_status(
     )
 
     return video
+
+@router.get(
+    "/{video_id}/media-token",
+    response_model=MediaTokenResponse,
+)
+def get_media_token(
+    video_id: int,
+    current_user: User = Depends(get_current_user),
+    service: VideoService = Depends(get_video_service),
+):
+    """
+    Issue a short-lived, resource-scoped token for this video's
+    stream/thumbnail endpoints (see app.auth.jwt.create_media_token
+    and get_current_user_for_media).
+
+    Authenticated with the normal Authorization-header flow
+    (get_current_user) and ownership-checked exactly like every other
+    /videos/{video_id}/... endpoint - a caller can only ever mint a
+    media token for a video they own. The returned token is scoped to
+    this video_id alone and expires in `expires_in` seconds; it is
+    never the caller's own long-lived access token, so the frontend
+    can safely place it in a <video>/<img> URL instead.
+    """
+    service.get_video(
+        video_id=video_id,
+        user_id=current_user.id,
+    )
+
+    token = create_media_token(
+        user_id=current_user.id,
+        video_id=video_id,
+    )
+
+    return MediaTokenResponse(
+        token=token,
+        expires_in=settings.security.media_token_expire_seconds,
+    )
 
 @router.get(
     "/{video_id}/stream",

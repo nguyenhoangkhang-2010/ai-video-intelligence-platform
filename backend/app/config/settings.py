@@ -125,6 +125,22 @@ class SecuritySettings(BaseConfig):
     )
     algorithm: str = "HS256"
     access_token_expire_minutes: int = 60
+
+    # Short-lived, resource-scoped media token (see
+    # app.auth.jwt.create_media_token) - issued per-video via
+    # GET /videos/{id}/media-token and used ONLY as the ?token=
+    # query param on <video>/<img> element URLs, so the user's
+    # long-lived main access token never has to appear in a URL
+    # (browser history, server/proxy access logs, Referer headers).
+    # Short enough that a leaked media URL is worthless within
+    # minutes; long enough to cover a page load plus normal playback
+    # start (React Query refetches a new one before this expires -
+    # see frontend hooks/useMediaToken.ts).
+    media_token_expire_seconds: int = Field(
+        default=300,
+        alias="MEDIA_TOKEN_EXPIRE_SECONDS",
+    )
+
     cors_origins: list[str] = Field(
         default=[
             "http://localhost:3000",

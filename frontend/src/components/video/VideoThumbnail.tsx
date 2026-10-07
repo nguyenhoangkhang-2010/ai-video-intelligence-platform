@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 
+import { useMediaToken } from "@/hooks/useVideos";
 import { getVideoThumbnailUrl } from "@/services/videos";
 import type { Video } from "@/types/video";
 
@@ -42,8 +43,13 @@ interface VideoThumbnailProps {
 export function VideoThumbnail({ video, patternSpacing = 18 }: VideoThumbnailProps) {
   const [imageFailed, setImageFailed] = useState(false);
   const isProcessing = video.status === "uploaded" || video.status === "processing";
+  const mediaToken = useMediaToken(video.id, video.has_thumbnail && !imageFailed);
 
-  if (video.has_thumbnail && !imageFailed) {
+  if (video.has_thumbnail && !imageFailed && !mediaToken.isError) {
+    if (!mediaToken.data) {
+      return <div className="skeleton absolute inset-0" aria-hidden="true" />;
+    }
+
     return (
       // Deliberate, not an oversight: this URL carries a short-lived auth
       // token as a query param (see getVideoThumbnailUrl), which
@@ -51,7 +57,7 @@ export function VideoThumbnail({ video, patternSpacing = 18 }: VideoThumbnailPro
       // docstring above for the full reasoning).
       // eslint-disable-next-line @next/next/no-img-element
       <img
-        src={getVideoThumbnailUrl(video.id)}
+        src={getVideoThumbnailUrl(video.id, mediaToken.data)}
         alt={`Representative frame from "${video.title}"`}
         loading="lazy"
         decoding="async"
