@@ -6,9 +6,13 @@ flowchart LR
         Browser["Browser<br/>(Next.js app, localhost:3000)"]
     end
 
-    subgraph API["FastAPI (backend/app)"]
-        Auth["Auth<br/>(JWT, ownership checks)"]
-        Routes["/api/v1/* routes"]
+    subgraph Edge["Edge (production compose only)"]
+        Nginx["nginx<br/>TLS termination, reverse proxy<br/>(dev: browser hits FastAPI directly on :8001)"]
+    end
+
+    subgraph API["FastAPI (backend/app) - authorization boundary"]
+        Auth["Auth<br/>main JWT (session) OR a short-lived,<br/>video-scoped media token - never both accepted<br/>on the same route (see ADR 0006)"]
+        Routes["/api/v1/* routes<br/>every video-scoped route 404s (never 403)<br/>on a resource you don't own"]
         Services["Services / Repositories"]
     end
 
@@ -31,7 +35,10 @@ flowchart LR
         FS[("Local filesystem<br/>storage/videos/<br/>(StorageBackend: local default, S3-capable)")]
     end
 
-    Browser -->|"HTTP + JWT Bearer"| Routes
+    Browser -->|"HTTP + JWT Bearer (API calls)"| Nginx
+    Browser -->|"<video>/<img> src + ?token= media token<br/>(can't attach headers)"| Nginx
+    Nginx --> Routes
+    Browser -.->|"dev only"| Routes
     Routes --> Auth
     Routes --> Services
     Services --> PG
@@ -51,6 +58,7 @@ flowchart LR
     Routes -->|"POST /upload"| FS
 
     style Client fill:#1a1a1a,stroke:#c88a4a,color:#eee
+    style Edge fill:#1a1a1a,stroke:#c88a4a,color:#eee
     style API fill:#1a1a1a,stroke:#c88a4a,color:#eee
     style Async fill:#1a1a1a,stroke:#c88a4a,color:#eee
     style AI fill:#1a1a1a,stroke:#c88a4a,color:#eee

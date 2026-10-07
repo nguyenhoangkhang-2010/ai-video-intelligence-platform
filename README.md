@@ -25,12 +25,14 @@ that is stated explicitly rather than implied.
 - [Feature reference](#feature-reference)
 - [Engineering decisions & trade-offs](#engineering-decisions--trade-offs)
 - [Evaluation](#evaluation)
+- [Performance](#performance)
 - [Testing](#testing)
 - [Production hardening](#production-hardening)
 - [Running locally](#running-locally)
 - [Project structure](#project-structure)
 - [Documentation](#documentation)
 - [Known limitations](#known-limitations)
+- [Future improvements](#future-improvements)
 
 ---
 
@@ -267,8 +269,16 @@ offline, not run against live traffic.
 - **RAG quality** — deterministic (no-LLM-call, always-available) lexical
   faithfulness/answer-relevance/context-relevance proxies, plus optional
   LLM-judge variants that reuse the same `OllamaClient`
-  (`ai/evaluation/rag_eval.py`), plus optional ROUGE/BERTScore/RAGAS
-  wrappers (`ai/evaluation/rouge.py`, `bertscore.py`, `ragas_eval.py`).
+  (`ai/evaluation/rag_eval.py`), plus an optional ROUGE wrapper
+  (`ai/evaluation/rouge.py`) and an optional, lazily-imported BERTScore
+  wrapper (`bertscore.py`). `ragas` was evaluated and deliberately
+  removed, not kept: its installed release imports a
+  `langchain_community` submodule that no longer exists in the version
+  this project's unpinned dependencies resolve to, and pinning it to a
+  compatible older release cascades into breaking `pyannote.audio` and
+  the rest of the langchain/numpy stack — verified by actually
+  attempting it. The two metrics it would have added are already
+  covered by the `LLMJudge*` variants above.
 - **Generation** — candidate-vs-reference metrics for any free-text
   output (summary, translation, chapter titles).
 - **System performance** — a latency/throughput harness
@@ -292,30 +302,78 @@ against whatever this deployment's live config actually is (hybrid +
 reranking, if enabled) — the same `BenchmarkRunner.compare()` mechanism
 that would compare any two retrieval configurations.
 
-**No benchmark numbers are published here.** Retrieval evaluation needs a
-set of `(query, relevant_chunk_ids)` judgments a human who has actually
-watched the target video authored by hand
+**One small, real benchmark is published**:
+[`docs/benchmarks/rag-evaluation.md`](docs/benchmarks/rag-evaluation.md)
+runs the real, unmodified dense/sparse/hybrid/reranking stack against
+10 hand-authored queries over 6 real transcript chunks pulled from
+this deployment's own dev database — explicitly flagged as too small
+to generalize from, but real, not fabricated (one genuine finding: the
+configured English-tuned reranker measurably *hurt* ranking quality on
+this deployment's real Vietnamese content). Beyond that one dataset,
+**no larger benchmark numbers are published** — scoring a specific
+*other* video still needs a `(query, relevant_chunk_ids)` judgment set
+a human who actually watched that video authors by hand
 (`ai/evaluation/fixtures/example_retrieval_queries.json` is the schema,
 explicitly marked as an example, not a dataset) — fabricating those
-judgments would produce a number that looks like evidence and isn't. Run
-it yourself against a video and a query set you can actually judge to get
-a number that means something.
+judgments would produce a number that looks like evidence and isn't.
+Run `scripts/run_evaluation.py` yourself against a video and a query
+set you can actually judge to get a number that means something for
+that video.
+
+---
+
+## Performance
+
+No endpoint is benchmarked speculatively — two representative ones are
+measured, methodology and all, in
+[`docs/benchmarks/performance.md`](docs/benchmarks/performance.md):
+
+- **Media-token issuance and video-metadata reads**: 100 requests at
+  20-way concurrency, 0 errors, p99 under 325ms — the API/DB layer is
+  not a bottleneck at this scale.
+- **A real RAG query** (real retrieval + a real `qwen3:8b` generation
+  call via Ollama, confirmed running on CPU, no GPU acceleration):
+  60-210 seconds per query, and 3-way concurrency failed entirely
+  within a 120-second budget. This is the actual bottleneck, not
+  retrieval — see
+  [`docs/adr/0010-faiss-index-lifecycle.md`](docs/adr/0010-faiss-index-lifecycle.md)
+  for the measured comparison (FAISS overhead: under 0.3% of one real
+  request's total latency, even at a synthetic 100,000-vector scale
+  this deployment is nowhere near).
+
+A real bug was found and fixed while producing these numbers (a JWT
+signed with the wrong `SECRET_KEY`, giving a false 100%-error reading)
+— documented in the benchmark doc itself rather than silently
+corrected, since that's exactly the kind of mistake that can fabricate
+a misleading "it works" result if not caught.
 
 ---
 
 ## Testing
 
-**Backend**: 556 tests (pytest), covering auth/ownership (every
-video-scoped endpoint has an explicit "not owned → 404" test), upload
-validation, deletion cleanup (file + FAISS vectors), processing job
-lifecycle/status-transition validation, translation, hybrid retrieval
-wiring (with reranker-unavailable fallback), semantic search, and the AI
+**Backend**: 660 tests (pytest), covering auth/ownership (every
+video-scoped endpoint has an explicit "not owned → 404" test, verified
+live across every resource type, not just unit-tested), media-token
+scoping (expiry/wrong-video/wrong-scope/main-token-rejected, including
+a real-dependency-chain integration test that does NOT mock
+authentication — see `tests/api/v1/endpoints/test_video_stream_media_token_integration.py`
+— and a genuine HTTP `206 Partial Content` Range-request response),
+upload validation, deletion cleanup (file + FAISS vectors), processing
+job/stage lifecycle (resumability, idempotency, stale-job/stage
+reclaim, two real multi-connection concurrency tests proving only one
+worker ever wins a claim, and a dedicated failure-recovery integration
+test combining a crashed job + a crashed stage through the real Celery
+entry point), translation, hybrid retrieval wiring (with
+reranker-unavailable fallback), semantic search, deterministic AI
+evaluation (a CI-safe golden-dataset regression suite), and the AI
 modules' own unit tests (chapter detection, quiz/flashcard generation,
-diarization, evaluation metrics, retrieval, reranking). Rate-limited
-endpoints run with `RATE_LIMIT_ENABLED=false` in the test process only
-(set in `tests/conftest.py`, before any app import) so repeated local
-runs stay deterministic — production's own rate limiting is untouched.
-Run with:
+diarization, retrieval, reranking) — including summarization, which
+previously had none. `ruff check backend` (`backend/ruff.toml`,
+Pyflakes) is blocking. Rate-limited endpoints run with
+`RATE_LIMIT_ENABLED=false` in the test process only (set in
+`tests/conftest.py`, before any app import) so repeated local runs
+stay deterministic — production's own rate limiting is untouched. Run
+with:
 
 ```bash
 cd backend
@@ -325,12 +383,23 @@ pytest tests/ -q
 **Frontend**: TypeScript strict mode (`noUncheckedIndexedAccess`), typed
 end-to-end against the backend's actual Pydantic response shapes (every
 `types/*.ts` file cross-references the schema it mirrors). A Vitest +
-Testing Library suite (31 tests across 5 files) covers the video
-thumbnail component and the Search/Chat workspace panels; most other
-components, hooks, and services have no dedicated test yet.
+Testing Library suite (57 tests across 11 files) covers login, upload,
+the video-player/media-token error-and-retry states, quiz/flashcard
+progress surviving a tab switch, and the Search/Chat workspace panels;
+most other components/hooks/services still have no dedicated test.
 `npx tsc --noEmit`, `npm run lint` (ESLint, `next/core-web-vitals` +
 `next/typescript`), `npm run test`, and `npm run build` are all
 non-interactive and pass cleanly (see `frontend/package.json`).
+
+**End-to-end**: one real, browser-driven Playwright suite
+(`frontend/e2e/critical-path.spec.ts`) — register → authenticated
+library → a real video's media-token fetch → real HTTP streaming into
+an actual `<video>` element → a second, independent login. Needs the
+real dev stack + Docker reachable, so it's run locally, not in CI —
+see [`docs/testing/e2e.md`](docs/testing/e2e.md) for exactly what it
+does and doesn't cover, and
+[`docs/testing/ci-strategy.md`](docs/testing/ci-strategy.md) for which
+checks are CI-blocking vs. deliberately manual.
 
 ---
 
@@ -349,12 +418,21 @@ Verified in the source, not aspirational:
   for an already-issued token (a deactivated account stops working
   immediately, not just at next login); 401 for missing/invalid
   credentials never distinguishes "wrong password" from "unknown email."
+- **Media delivery**: video streaming/thumbnails never accept the
+  main, long-lived session JWT via a URL query parameter — a separate,
+  short-lived (5-minute), video-scoped media token (`scope=media` +
+  `video_id` claims, independently verified) is required instead, so a
+  leaked/logged media URL exposes a credential that's worthless after
+  5 minutes and useless for anything but viewing one specific video —
+  see [ADR 0006](docs/adr/0006-media-token-scoping.md). Supports real
+  HTTP Range/`206 Partial Content` streaming (via `FileResponse`, not
+  custom byte-serving code).
 - **Ownership**: every video-scoped route resolves through
   `owner_id`/ownership-checked repository methods — 404, never 403, so a
   resource's existence for another user is never revealed.
 - **Database**: FK indexes on every foreign key that lacked one, an N+1
   query eliminated in semantic search (batched from the single already-
-  fetched embedding list instead of one query per FAISS hit), 22
+  fetched embedding list instead of one query per FAISS hit), 24
   sequential Alembic migrations with no branching.
 - **Migrations run automatically**: `docker compose up --build` on a
   clean database no longer requires anyone to know `alembic upgrade
@@ -370,7 +448,13 @@ Verified in the source, not aspirational:
   exporter, both real `prometheus_client` instrumentation consumed by a
   provisioned Grafana dashboard (`monitoring/`) and Prometheus alert
   rules (`APIDown`, `HighAPIErrorRate`, `HighCeleryTaskFailureRate`,
-  `ProcessingJobBacklogGrowing`).
+  `ProcessingJobBacklogGrowing`). Stage-level pipeline metrics
+  (`video_pipeline_stage_executions_total`, `_duration_seconds`,
+  `_completed_total`, `_active_stages` — `backend/app/workers/
+  pipeline_metrics.py`) use only low-cardinality labels (`stage`,
+  `result` — never a `video_id`/`job_id`/`user_id`), and a metrics-
+  client failure is caught and logged, never allowed to fail a real
+  processing stage (tested with an injected exception).
 
 ## Running locally
 
@@ -408,7 +492,7 @@ AI-Video-Intelligence-Platform/
 │   │   ├── quiz_generation/ flashcards/ knowledge_graph/
 │   │   ├── llm/             # OllamaClient, shared by every LLM-backed stage
 │   │   └── evaluation/      # Offline metrics + fixtures + runner
-│   ├── alembic/             # 22 linear migrations
+│   ├── alembic/             # 24 linear migrations
 │   ├── app/
 │   │   ├── api/v1/endpoints/  auth/  config/  core/
 │   │   ├── models/ schemas/ repositories/ services/
@@ -416,7 +500,7 @@ AI-Video-Intelligence-Platform/
 │   │   ├── workers/         # Celery task + metrics
 │   │   └── storage/         # Local / S3 StorageBackend
 │   ├── scripts/             # rebuild_faiss_index.py, run_evaluation.py, docker-entrypoint.sh
-│   └── tests/                # 556 tests
+│   └── tests/                # 660 tests
 ├── frontend/src/
 │   ├── app/                 # Next.js App Router
 │   ├── components/          # workspace panels, ui/ design system
@@ -431,30 +515,74 @@ AI-Video-Intelligence-Platform/
 
 ## Documentation
 
+- [`docs/system_design.md`](docs/system_design.md) — architecture
+  overview and the jumping-off point for everything below.
 - [`docs/api/rest_api.md`](docs/api/rest_api.md) — the full, current API
   contract (every endpoint, auth rule, status code, response shape).
 - [`docs/deployment.md`](docs/deployment.md) — infrastructure deep-dive:
   health/readiness, storage backends, retry semantics, metrics, backup.
 - [`docs/diagrams/`](docs/diagrams/) — the four Mermaid diagrams linked
   above.
+- [`docs/adr/`](docs/adr/) — 10 Architecture Decision Records: why
+  Celery not a workflow engine, why no Kafka/Kubernetes/OpenTelemetry,
+  stage resumability, the AI provider abstraction, local-first AI,
+  media-token scoping, the AI evaluation strategy, the vector-retrieval
+  architecture, why knowledge-graph extraction stays standalone, and
+  the FAISS index lifecycle decision (measured, not assumed).
+- [`docs/benchmarks/`](docs/benchmarks/) — real, measured RAG retrieval
+  quality and performance numbers, with explicit methodology and
+  limitations.
+- [`docs/testing/`](docs/testing/) — the E2E suite and the three-tier
+  CI strategy (required/blocking vs. optional-manual vs. benchmark).
 
 ## Known limitations
 
-- Single monolithic Celery task per video — a late-pipeline failure
-  re-runs the whole pipeline, including re-transcription.
-- Exact (not approximate) FAISS search — would need re-architecting to
-  scale past roughly a few million vectors.
-- Frontend automated test coverage is thin — a Vitest suite exists
-  (31 tests) but covers only the video thumbnail component and two of
-  the nine Workspace panels; most hooks, services, and pages have no
-  dedicated test yet.
-- No end-to-end (E2E) test framework is set up yet — automated
-  coverage stops at backend pytest and frontend Vitest; there is no
-  browser-driven login→upload→processing→workspace flow test.
-- No published evaluation numbers — the framework and runner are real;
-  no labeled dataset ships with the repo (see
-  [Evaluation](#evaluation)).
+- Exact (not approximate) FAISS search, reloaded from disk on every
+  request — measured, not assumed, to be negligible overhead at every
+  realistic scale relative to local LLM generation time; see
+  [ADR 0010](docs/adr/0010-faiss-index-lifecycle.md) for the actual
+  numbers and when this would need revisiting.
+- Local LLM inference (Ollama, CPU-only in this environment) is slow —
+  a single real RAG query measured 60-210 seconds end to end (see
+  [`docs/benchmarks/performance.md`](docs/benchmarks/performance.md));
+  3-way concurrent RAG requests exceeded a 120-second budget entirely
+  on this hardware. This is the real bottleneck, not the retrieval
+  layer.
+- Frontend automated test coverage is still thin relative to ~50
+  components — 57 tests across 11 files cover the critical journeys
+  (login, upload, playback/media-token error states, quiz/flashcard
+  persistence) but most hooks/services/pages have no dedicated test.
+- The one published RAG-evaluation benchmark uses a small, real but
+  short-form dataset (6 documents, 10 queries) — see
+  [Evaluation](#evaluation) and
+  [`docs/benchmarks/rag-evaluation.md`](docs/benchmarks/rag-evaluation.md)
+  for why, and its explicit limitations.
 - No Kubernetes deployment exists or is planned at this scale (see [ADR 0002](docs/adr/0002-no-kafka-k8s-otel.md)); Docker Compose is the only deployment target.
+- No real production traffic has ever been measured — every number in
+  `docs/benchmarks/` is a controlled local/containerized measurement,
+  stated as such, not a production SLA.
+
+---
+
+## Future improvements
+
+Prioritized by evidence, not by what sounds impressive — see each
+item's linked doc for the reasoning:
+
+- **High-value**: hand-author a larger, real ground-truth dataset
+  (beyond the current 6-document/10-query one) to get a more
+  statistically meaningful RAG-quality number; investigate GPU
+  acceleration for Ollama, since local LLM generation (60-210s/query
+  on CPU), not retrieval, is this deployment's actual performance
+  bottleneck ([benchmarks](docs/benchmarks/performance.md)).
+- **Medium**: migrate the upload *write* path to actually support S3
+  end-to-end (today `STORAGE_BACKEND=s3` only makes reads/streaming
+  S3-capable); add more frontend component/hook test coverage.
+- **Optional**: enable speaker diarization by default in a demo
+  environment (implemented, off by default — `SPEECH_DIARIZATION_ENABLED=false`);
+  prove out the `LLMProvider`/`EmbeddingProvider` abstraction
+  ([ADR 0004](docs/adr/0004-ai-provider-abstraction.md)) with a second
+  real implementation, if a real reason to ever comes up.
 
 ---
 
