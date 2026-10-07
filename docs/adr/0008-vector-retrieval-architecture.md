@@ -1,7 +1,10 @@
 # 0008 - A single shared FAISS flat index with hybrid search/reranking layered on top, not a dedicated vector DB
 
 ## Status
-Accepted; one known scaling risk noted below (not yet acted on).
+Accepted. The reload-per-request lifecycle question flagged below has
+since been measured and resolved in
+[ADR 0010](0010-faiss-index-lifecycle.md) - keep reading there for the
+actual numbers before assuming it still needs fixing.
 
 ## Context
 Semantic search over video transcripts needs nearest-neighbor lookup

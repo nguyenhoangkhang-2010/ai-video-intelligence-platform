@@ -22,3 +22,4 @@ the pipeline?".
 | [0007](0007-ai-evaluation-strategy.md) | Deterministic-first AI evaluation, model-based metrics opt-in, no hardcoded domain data |
 | [0008](0008-vector-retrieval-architecture.md) | A single shared FAISS flat index with hybrid search/reranking layered on top, not a dedicated vector DB |
 | [0009](0009-knowledge-graph-standalone.md) | Knowledge graph extraction kept standalone, not wired into the mandatory pipeline |
+| [0010](0010-faiss-index-lifecycle.md) | FAISS index lifecycle: measured, and kept as per-request reload rather than cached - LLM generation is ~450x the bottleneck |
