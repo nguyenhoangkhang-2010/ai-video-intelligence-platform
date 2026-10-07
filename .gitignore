@@ -79,6 +79,9 @@ frontend/.next/
 frontend/out/
 frontend/.turbo/
 frontend/.vercel/
+frontend/test-results/
+frontend/playwright-report/
+frontend/playwright/.cache/
 ############################
 # Package Managers
 ############################
