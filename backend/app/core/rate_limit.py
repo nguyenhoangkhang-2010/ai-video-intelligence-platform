@@ -45,6 +45,39 @@ def _get_client() -> redis.Redis | None:
     return _client
 
 
+def _resolve_client_ip(request: Request) -> str:
+    """
+    The real TCP peer (request.client.host) unless that peer is
+    explicitly configured as a trusted reverse proxy
+    (settings.rate_limit.trusted_proxy_ips), in which case the
+    client's own X-Forwarded-For (as set by that proxy) is used
+    instead.
+
+    Deliberately NOT "trust X-Forwarded-For whenever present": that
+    header is attacker-controlled on any request that didn't actually
+    go through a trusted proxy, and blindly honoring it would let
+    anyone bypass rate limiting by sending a fabricated value. Only
+    checking it after confirming the DIRECT peer is a configured
+    trusted proxy closes that off while still fixing the real gap -
+    see the setting's own docstring for the production topology
+    (nginx in front of uvicorn without --proxy-headers) this
+    addresses.
+    """
+    direct_ip = request.client.host if request.client else "unknown"
+
+    if direct_ip not in settings.rate_limit.trusted_proxy_ips:
+        return direct_ip
+
+    forwarded = request.headers.get("x-forwarded-for")
+    if not forwarded:
+        return direct_ip
+
+    # nginx's $proxy_add_x_forwarded_for preserves any existing value
+    # and appends $remote_addr, so for a single trusted hop the FIRST
+    # entry is the original client as that hop saw it.
+    return forwarded.split(",")[0].strip() or direct_ip
+
+
 def rate_limit(category: str, limit: int, window_seconds: int):
     """
     FastAPI dependency factory. Use as `Depends(rate_limit("login", settings.rate_limit.login_limit, 60))`.
@@ -58,7 +91,7 @@ def rate_limit(category: str, limit: int, window_seconds: int):
         if client is None:
             return
 
-        client_ip = request.client.host if request.client else "unknown"
+        client_ip = _resolve_client_ip(request)
         key = f"ratelimit:{category}:{client_ip}"
 
         try:

@@ -346,3 +346,222 @@ def test_claim_for_running_without_stale_after_seconds_never_reclaims_running(db
     claimed = repository.claim_for_running(job.id)
 
     assert claimed is None
+
+
+# --- Orphaned-dispatch reconciliation (dual-write gap fix) ---------------
+#
+# Regression coverage for the exact defect that left jobs 5/13
+# orphaned PENDING forever: UploadPipeline.process commits a
+# ProcessingJob row, then calls process_video.delay() with no guard.
+# If that call never arrives, the row is PENDING with started_at
+# still NULL, indistinguishable from "dispatch just happened a moment
+# ago" without a created_at column to measure its age against.
+
+
+def test_get_orphaned_pending_finds_old_unstarted_job(db_session):
+    job = _create_job(db_session, status="PENDING")
+    job.created_at = datetime.now(UTC) - timedelta(seconds=600)
+    db_session.commit()
+    repository = ProcessingJobRepository(db_session)
+
+    found = repository.get_orphaned_pending(
+        video_id=job.video_id, older_than_seconds=300,
+    )
+
+    assert [j.id for j in found] == [job.id]
+
+
+def test_get_orphaned_pending_ignores_a_recently_created_pending_job(db_session):
+    """
+    A PENDING job created moments ago is NOT orphaned - its dispatch
+    may simply still be in flight. created_at defaults to "now", so
+    no manipulation is needed here.
+    """
+    job = _create_job(db_session, status="PENDING")
+    repository = ProcessingJobRepository(db_session)
+
+    found = repository.get_orphaned_pending(
+        video_id=job.video_id, older_than_seconds=300,
+    )
+
+    assert found == []
+
+
+def test_get_orphaned_pending_ignores_a_job_that_was_actually_started(db_session):
+    """
+    started_at being set at all means some worker DID pick it up -
+    even if it's since gone stale/RUNNING-crashed, that's
+    claim_for_running's stale-RUNNING reclaim's job, not this one's.
+    A PENDING job with started_at set is not a state this repository
+    method should ever see in practice, but must not be misidentified
+    as orphaned if it somehow is.
+    """
+    job = _create_job(db_session, status="PENDING")
+    job.created_at = datetime.now(UTC) - timedelta(seconds=600)
+    job.started_at = datetime.now(UTC) - timedelta(seconds=600)
+    db_session.commit()
+    repository = ProcessingJobRepository(db_session)
+
+    found = repository.get_orphaned_pending(
+        video_id=job.video_id, older_than_seconds=300,
+    )
+
+    assert found == []
+
+
+def test_get_orphaned_pending_ignores_other_videos(db_session):
+    owner = _create_user(db_session)
+    job_a = _create_job_for_owner(db_session, owner, status="PENDING", filename="a.mp4")
+    job_a.created_at = datetime.now(UTC) - timedelta(seconds=600)
+    job_b = _create_job_for_owner(db_session, owner, status="PENDING", filename="b.mp4")
+    job_b.created_at = datetime.now(UTC) - timedelta(seconds=600)
+    db_session.commit()
+    repository = ProcessingJobRepository(db_session)
+
+    found = repository.get_orphaned_pending(
+        video_id=job_a.video_id, older_than_seconds=300,
+    )
+
+    assert [j.id for j in found] == [job_a.id]
+
+
+def test_get_all_orphaned_pending_finds_jobs_across_every_video(db_session):
+    owner = _create_user(db_session)
+    job_a = _create_job_for_owner(db_session, owner, status="PENDING", filename="a.mp4")
+    job_a.created_at = datetime.now(UTC) - timedelta(seconds=600)
+    job_b = _create_job_for_owner(db_session, owner, status="PENDING", filename="b.mp4")
+    job_b.created_at = datetime.now(UTC) - timedelta(seconds=600)
+    db_session.commit()
+    repository = ProcessingJobRepository(db_session)
+
+    found = repository.get_all_orphaned_pending(older_than_seconds=300, limit=50)
+
+    assert {j.id for j in found} == {job_a.id, job_b.id}
+
+
+def test_get_all_orphaned_pending_respects_limit(db_session):
+    owner = _create_user(db_session)
+    for i in range(3):
+        job = _create_job_for_owner(
+            db_session, owner, status="PENDING", filename=f"limit-{i}.mp4",
+        )
+        job.created_at = datetime.now(UTC) - timedelta(seconds=600)
+    db_session.commit()
+    repository = ProcessingJobRepository(db_session)
+
+    found = repository.get_all_orphaned_pending(older_than_seconds=300, limit=2)
+
+    assert len(found) == 2
+
+
+def test_claim_for_dispatch_retry_increments_attempts_on_eligible_job(db_session):
+    job = _create_job(db_session, status="PENDING")
+    assert job.dispatch_attempts == 1
+    repository = ProcessingJobRepository(db_session)
+
+    claimed = repository.claim_for_dispatch_retry(job.id)
+
+    assert claimed is not None
+    assert claimed.dispatch_attempts == 2
+    # Still PENDING - this only tracks attempts, the actual claim to
+    # RUNNING is claim_for_running's job once a dispatched task runs.
+    assert claimed.status == "PENDING"
+
+
+def test_claim_for_dispatch_retry_returns_none_once_job_has_started(db_session):
+    """
+    If the job was claimed (started_at set) between the caller
+    reading it as orphaned and calling this - e.g. a redelivered
+    original task message finally arrived - this must not re-dispatch
+    a second time.
+    """
+    job = _create_job(db_session, status="RUNNING")
+    job.started_at = datetime.now(UTC)
+    db_session.commit()
+    repository = ProcessingJobRepository(db_session)
+
+    claimed = repository.claim_for_dispatch_retry(job.id)
+
+    assert claimed is None
+
+
+# --- Manual retry (FAILED -> PENDING) ------------------------------------
+
+
+def test_claim_for_retry_transitions_failed_job_to_pending(db_session):
+    job = _create_job(db_session, status="FAILED")
+    job.started_at = datetime.now(UTC) - timedelta(minutes=10)
+    job.finished_at = datetime.now(UTC) - timedelta(minutes=9)
+    job.error_message = "something went wrong"
+    job.progress = 100
+    job.current_step = "Failed"
+    job.dispatch_attempts = 2
+    db_session.commit()
+    repository = ProcessingJobRepository(db_session)
+
+    claimed = repository.claim_for_retry(job.id)
+
+    assert claimed is not None
+    assert claimed.status == "PENDING"
+    # Looks exactly like a freshly-created job - no stale data from
+    # the previous failed attempt leaks through.
+    assert claimed.started_at is None
+    assert claimed.finished_at is None
+    assert claimed.error_message is None
+    assert claimed.progress == 0
+    assert claimed.current_step is None
+    assert claimed.dispatch_attempts == 1
+
+
+def test_claim_for_retry_does_not_claim_a_non_failed_job(db_session):
+    job = _create_job(db_session, status="RUNNING")
+    repository = ProcessingJobRepository(db_session)
+
+    claimed = repository.claim_for_retry(job.id)
+
+    assert claimed is None
+    reloaded = repository.get_by_id(job.id)
+    assert reloaded.status == "RUNNING"
+
+
+def test_claim_for_retry_two_concurrent_requests_only_one_wins(db_session):
+    """
+    Same atomic-UPDATE guarantee as claim_for_running: a double click
+    on "retry" must never dispatch the same job twice.
+    """
+    job = _create_job(db_session, status="FAILED")
+    repository = ProcessingJobRepository(db_session)
+
+    first = repository.claim_for_retry(job.id)
+    second = repository.claim_for_retry(job.id)
+
+    assert first is not None
+    assert second is None
+
+
+def test_claim_for_dispatch_retry_stops_once_a_real_claim_wins(db_session):
+    """
+    Unlike claim_for_running's PENDING->RUNNING transition, this
+    method deliberately does not change status - two reconciliation
+    calls in a row both legitimately increment the counter (bounding
+    retries is ProcessingJobService.reconcile_orphaned_dispatch's
+    job, via settings.celery.max_dispatch_attempts, not this
+    method's). What this method must guarantee is narrower: once the
+    job is actually claimed by a real task execution (started_at
+    set, exactly what claim_for_running's own atomic UPDATE already
+    protects with its own concurrent-caller test), this method stops
+    matching it at all - a job already being genuinely processed is
+    never treated as still orphaned.
+    """
+    job = _create_job(db_session, status="PENDING")
+    repository = ProcessingJobRepository(db_session)
+
+    first = repository.claim_for_dispatch_retry(job.id)
+    assert first is not None
+    assert first.dispatch_attempts == 2
+
+    # A real task execution now claims the job for real.
+    repository.claim_for_running(job.id)
+
+    second = repository.claim_for_dispatch_retry(job.id)
+    assert second is None

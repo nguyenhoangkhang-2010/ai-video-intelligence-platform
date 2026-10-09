@@ -48,7 +48,20 @@ class VideoService:
             )
 
         return video
-    
+
+    def get_video_by_id(
+        self,
+        video_id: int,
+    ) -> Video | None:
+        """
+        Internal, unscoped lookup by id only - no ownership check,
+        returns None (never raises) on a miss. For system-internal
+        callers only (e.g. UploadPipeline.reconcile_orphaned_jobs,
+        which has no requesting user to scope against); every
+        user-facing route must use get_video instead.
+        """
+        return self.repository.get_by_id(video_id)
+
     def upload_video(
         self,
         owner_id: int,

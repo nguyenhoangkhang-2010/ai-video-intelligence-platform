@@ -8,6 +8,7 @@ from app.utils.uploads import (
     sanitize_filename,
     save_upload_within_limit,
     validate_upload_extension,
+    validate_upload_signature,
 )
 
 
@@ -59,6 +60,86 @@ def test_validate_upload_extension_rejects_missing_extension():
         validate_upload_extension("noextension")
 
     assert exc_info.value.status_code == 415
+
+
+# ---- validate_upload_signature ----
+#
+# Regression coverage for a real gap the security audit identified:
+# upload validation was extension-only (client-controlled filename),
+# so any file could reach the ffmpeg/ffprobe subprocess calls that
+# run right after upload just by being renamed to an allowed
+# extension. These exercise the actual container-format signatures,
+# not just "any 16 bytes".
+
+_REAL_MP4_HEADER = b"\x00\x00\x00\x18ftypisom\x00\x00\x02\x00"
+_REAL_MKV_HEADER = b"\x1a\x45\xdf\xa3\x01\x00\x00\x00\x00\x00\x00\x23"
+_REAL_AVI_HEADER = b"RIFF\x24\x08\x00\x00AVI LIST"
+
+
+def test_validate_upload_signature_accepts_a_real_mp4_header():
+    validate_upload_signature("clip.mp4", _REAL_MP4_HEADER)  # does not raise
+
+
+def test_validate_upload_signature_accepts_a_real_mov_header():
+    validate_upload_signature("clip.mov", _REAL_MP4_HEADER)  # does not raise
+
+
+def test_validate_upload_signature_accepts_a_real_m4v_header():
+    validate_upload_signature("clip.m4v", _REAL_MP4_HEADER)  # does not raise
+
+
+def test_validate_upload_signature_accepts_a_real_mkv_header():
+    validate_upload_signature("clip.mkv", _REAL_MKV_HEADER)  # does not raise
+
+
+def test_validate_upload_signature_accepts_a_real_webm_header():
+    # WebM is an EBML/Matroska profile - same container-level signature.
+    validate_upload_signature("clip.webm", _REAL_MKV_HEADER)  # does not raise
+
+
+def test_validate_upload_signature_accepts_a_real_avi_header():
+    validate_upload_signature("clip.avi", _REAL_AVI_HEADER)  # does not raise
+
+
+def test_validate_upload_signature_rejects_a_text_file_renamed_to_mp4():
+    """
+    The exact attack this closes: a non-video file renamed to an
+    allowed extension so it reaches the ffmpeg/ffprobe calls that
+    run right after upload.
+    """
+    with pytest.raises(HTTPException) as exc_info:
+        validate_upload_signature("not_a_video.mp4", b"just some plain text")
+
+    assert exc_info.value.status_code == 415
+
+
+def test_validate_upload_signature_rejects_mismatched_real_container():
+    """
+    A genuine MKV file renamed to .mp4 must still be rejected - the
+    check is against the claimed extension's expected signature, not
+    "is this some known video format at all".
+    """
+    with pytest.raises(HTTPException) as exc_info:
+        validate_upload_signature("disguised.mp4", _REAL_MKV_HEADER)
+
+    assert exc_info.value.status_code == 415
+
+
+def test_validate_upload_signature_rejects_an_empty_header():
+    with pytest.raises(HTTPException) as exc_info:
+        validate_upload_signature("clip.mp4", b"")
+
+    assert exc_info.value.status_code == 415
+
+
+def test_validate_upload_signature_skips_an_unrecognized_extension():
+    """
+    validate_upload_extension (called first, at the route level)
+    already rejects any extension outside the allowlist - this must
+    not raise a second, different error for one it doesn't recognize
+    itself.
+    """
+    validate_upload_signature("payload.exe", b"MZ\x90\x00")  # does not raise
 
 
 # ---- save_upload_within_limit ----

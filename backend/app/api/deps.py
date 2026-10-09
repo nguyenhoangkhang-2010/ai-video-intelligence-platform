@@ -190,9 +190,11 @@ def get_upload_pipeline(
     """
     repository = ProcessingJobRepository(db)
     processing_job_service = ProcessingJobService(repository)
+    video_service = VideoService(VideoRepository(db))
 
     return UploadPipeline(
         processing_job_service=processing_job_service,
+        video_service=video_service,
     )
 
 def get_chapter_service(

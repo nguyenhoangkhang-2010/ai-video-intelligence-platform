@@ -72,6 +72,29 @@ class ProcessingJob(Base):
         default=0,
     )
 
+    # Set once at creation (BaseRepository.create commits+refreshes,
+    # so the DB's CURRENT_TIMESTAMP default round-trips onto this
+    # column immediately). Distinguishes "this PENDING job is a few
+    # seconds old, dispatch is probably still in flight" from "this
+    # PENDING job is minutes/hours old with no started_at - dispatch
+    # likely never happened" - see
+    # ProcessingJobService.reconcile_orphaned_dispatch.
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=datetime.utcnow,
+    )
+
+    # Bounds reconcile_orphaned_dispatch's re-dispatch retries so a
+    # permanently-undispatchable job (e.g. the broker is down) reaches
+    # a clean terminal FAILED state instead of being retried forever.
+    # Starts at 1: UploadPipeline.process's own initial .delay() call
+    # already counts as the first attempt.
+    dispatch_attempts: Mapped[int] = mapped_column(
+        Integer,
+        nullable=False,
+        default=1,
+    )
+
     current_step: Mapped[str | None] = mapped_column(
         String(255),
         nullable=True,

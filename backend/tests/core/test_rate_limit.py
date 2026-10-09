@@ -90,6 +90,108 @@ def test_fails_open_when_redis_raises_during_incr():
         assert client.get("/ping").status_code == 200
 
 
+# --- Trusted-proxy-aware client IP resolution ----------------------------
+#
+# Regression coverage for the real gap identified in the security
+# audit: in the documented production topology (nginx in front of
+# uvicorn, uvicorn started without --proxy-headers), request.client.
+# host is nginx's own container IP for every request, collapsing the
+# per-IP rate limit into one shared bucket for the entire site. These
+# tests exercise _resolve_client_ip directly against a raw Request-
+# like object rather than through a full TestClient, since
+# TestClient's own synthetic client host is harder to control
+# per-request.
+
+
+def _request(client_host: str, forwarded_for: str | None = None):
+    request = MagicMock()
+    request.client.host = client_host
+    request.headers = {"x-forwarded-for": forwarded_for} if forwarded_for else {}
+    return request
+
+
+def test_resolve_client_ip_uses_direct_peer_when_not_trusted():
+    from app.core.rate_limit import _resolve_client_ip
+
+    with patch("app.core.rate_limit.settings.rate_limit.trusted_proxy_ips", []):
+        request = _request("203.0.113.9", forwarded_for="198.51.100.1")
+
+        assert _resolve_client_ip(request) == "203.0.113.9"
+
+
+def test_resolve_client_ip_ignores_forwarded_header_from_an_untrusted_peer():
+    """
+    Safety-critical: an attacker who is NOT behind a trusted proxy
+    must not be able to bypass their own IP's rate limit just by
+    sending a fabricated X-Forwarded-For header.
+    """
+    from app.core.rate_limit import _resolve_client_ip
+
+    with patch("app.core.rate_limit.settings.rate_limit.trusted_proxy_ips", ["10.0.0.5"]):
+        request = _request("203.0.113.9", forwarded_for="198.51.100.1")
+
+        assert _resolve_client_ip(request) == "203.0.113.9"
+
+
+def test_resolve_client_ip_uses_forwarded_header_from_a_trusted_proxy():
+    from app.core.rate_limit import _resolve_client_ip
+
+    with patch("app.core.rate_limit.settings.rate_limit.trusted_proxy_ips", ["10.0.0.5"]):
+        request = _request("10.0.0.5", forwarded_for="198.51.100.1")
+
+        assert _resolve_client_ip(request) == "198.51.100.1"
+
+
+def test_resolve_client_ip_takes_the_first_hop_of_a_forwarded_chain():
+    from app.core.rate_limit import _resolve_client_ip
+
+    with patch("app.core.rate_limit.settings.rate_limit.trusted_proxy_ips", ["10.0.0.5"]):
+        request = _request("10.0.0.5", forwarded_for="198.51.100.1, 10.0.0.5")
+
+        assert _resolve_client_ip(request) == "198.51.100.1"
+
+
+def test_resolve_client_ip_falls_back_to_direct_peer_when_trusted_but_header_missing():
+    from app.core.rate_limit import _resolve_client_ip
+
+    with patch("app.core.rate_limit.settings.rate_limit.trusted_proxy_ips", ["10.0.0.5"]):
+        request = _request("10.0.0.5", forwarded_for=None)
+
+        assert _resolve_client_ip(request) == "10.0.0.5"
+
+
+def test_two_distinct_clients_behind_a_trusted_proxy_get_separate_limits():
+    """
+    End-to-end through the real rate_limit dependency (not just
+    _resolve_client_ip in isolation): once the direct peer is
+    trusted, two different X-Forwarded-For clients must be counted
+    separately, not pooled into nginx's single container IP.
+    """
+    fake_redis = MagicMock()
+    fake_redis.incr.side_effect = [1, 1]
+
+    app = FastAPI()
+
+    @app.get("/ping", dependencies=[Depends(rate_limit("test", 1, 60))])
+    def ping():
+        return {"ok": True}
+
+    with patch("app.core.rate_limit._get_client", return_value=fake_redis), \
+         patch("app.core.rate_limit.settings.rate_limit.enabled", True), \
+         patch("app.core.rate_limit.settings.rate_limit.trusted_proxy_ips", ["testclient"]):
+        client = TestClient(app)
+        r1 = client.get("/ping", headers={"X-Forwarded-For": "198.51.100.1"})
+        r2 = client.get("/ping", headers={"X-Forwarded-For": "198.51.100.2"})
+
+    assert r1.status_code == 200
+    assert r2.status_code == 200
+    keys_used = {call.args[0] for call in fake_redis.incr.call_args_list}
+    assert keys_used == {
+        "ratelimit:test:198.51.100.1",
+        "ratelimit:test:198.51.100.2",
+    }
+
+
 def test_disabled_via_settings_never_limits():
     fake_redis = MagicMock()
     fake_redis.incr.return_value = 999

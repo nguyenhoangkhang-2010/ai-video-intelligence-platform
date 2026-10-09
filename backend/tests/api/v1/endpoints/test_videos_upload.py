@@ -12,6 +12,12 @@ from app.models.user import User
 from app.models.video import Video
 from app.types.video_metadata import VideoMetadata
 
+# A real ISOBMFF "ftyp" box header - every fake upload body below
+# needs this prefix now that the upload endpoint checks the file's
+# actual leading bytes (validate_upload_signature), not just its
+# claimed extension.
+_REAL_MP4_HEADER = b"\x00\x00\x00\x18ftypisom\x00\x00\x02\x00"
+
 
 @pytest.fixture
 def client():
@@ -69,7 +75,7 @@ def test_upload_video_authenticated_dispatches_via_upload_pipeline(client, tmp_p
     ):
         response = client.post(
             "/api/v1/videos/upload",
-            files={"file": ("clip.mp4", b"fake-video-bytes", "video/mp4")},
+            files={"file": ("clip.mp4", _REAL_MP4_HEADER + b"fake-video-bytes", "video/mp4")},
         )
 
     # Existing response contract: the created video, as VideoRead.
@@ -104,7 +110,7 @@ def test_upload_video_authenticated_dispatches_via_upload_pipeline(client, tmp_p
     written_files = list(tmp_path.iterdir())
     assert len(written_files) == 1
     assert written_files[0].name == generated_filename
-    assert written_files[0].read_bytes() == b"fake-video-bytes"
+    assert written_files[0].read_bytes() == _REAL_MP4_HEADER + b"fake-video-bytes"
 
 
 def test_upload_video_pipeline_dispatch_failure_is_not_swallowed(client, tmp_path):
@@ -134,7 +140,7 @@ def test_upload_video_pipeline_dispatch_failure_is_not_swallowed(client, tmp_pat
         with pytest.raises(RuntimeError, match="dispatch failed"):
             client.post(
                 "/api/v1/videos/upload",
-                files={"file": ("clip2.mp4", b"more-bytes", "video/mp4")},
+                files={"file": ("clip2.mp4", _REAL_MP4_HEADER + b"more-bytes", "video/mp4")},
             )
 
     # The video row is created (and metadata extracted) before
@@ -197,7 +203,7 @@ def test_upload_video_sanitizes_a_path_traversal_filename(client, tmp_path):
     ):
         response = client.post(
             "/api/v1/videos/upload",
-            files={"file": ("../../../evil.mp4", b"bytes", "video/mp4")},
+            files={"file": ("../../../evil.mp4", _REAL_MP4_HEADER + b"bytes", "video/mp4")},
         )
 
     assert response.status_code == 200
@@ -208,6 +214,33 @@ def test_upload_video_sanitizes_a_path_traversal_filename(client, tmp_path):
     assert "/" not in written_files[0].name
     assert ".." not in written_files[0].name
     assert written_files[0].name.endswith("_evil.mp4")
+
+
+def test_upload_video_rejects_a_file_whose_content_does_not_match_its_extension(client, tmp_path):
+    """
+    Regression test for the real gap closed here: a non-video file
+    renamed to an allowed extension used to sail through on the
+    filename check alone, reaching the ffmpeg/ffprobe subprocess
+    calls that run right after upload with attacker-controlled bytes.
+    """
+    current_user = _make_user(user_id=99)
+    video_service = MagicMock(name="video_service")
+    upload_pipeline = MagicMock(name="upload_pipeline")
+
+    app.dependency_overrides[get_current_user] = lambda: current_user
+    app.dependency_overrides[get_video_service] = lambda: video_service
+    app.dependency_overrides[get_upload_pipeline] = lambda: upload_pipeline
+
+    with patch("app.api.v1.endpoints.videos.VIDEO_UPLOAD_DIR", tmp_path):
+        response = client.post(
+            "/api/v1/videos/upload",
+            files={"file": ("disguised.mp4", b"not actually a video file", "video/mp4")},
+        )
+
+    assert response.status_code == 415
+    assert list(tmp_path.iterdir()) == []
+    video_service.upload_video.assert_not_called()
+    upload_pipeline.process.assert_not_called()
 
 
 def test_upload_video_rejects_oversized_file_and_removes_partial_write(client, tmp_path):
@@ -228,7 +261,7 @@ def test_upload_video_rejects_oversized_file_and_removes_partial_write(client, t
     ):
         response = client.post(
             "/api/v1/videos/upload",
-            files={"file": ("clip3.mp4", b"x" * 10_000, "video/mp4")},
+            files={"file": ("clip3.mp4", _REAL_MP4_HEADER + b"x" * 10_000, "video/mp4")},
         )
 
     assert response.status_code == 413

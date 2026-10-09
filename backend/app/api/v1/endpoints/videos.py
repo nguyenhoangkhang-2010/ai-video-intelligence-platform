@@ -43,9 +43,11 @@ from app.core.rate_limit import rate_limit
 from ai.embedding.vector_store import VectorStore
 
 from app.utils.uploads import (
+    SIGNATURE_PEEK_BYTES,
     sanitize_filename,
     save_upload_within_limit,
     validate_upload_extension,
+    validate_upload_signature,
 )
 
 import uuid
@@ -281,13 +283,28 @@ def get_processing_jobs(
     processing_service: ProcessingJobService = Depends(
         get_processing_job_service,
     ),
+    upload_pipeline: UploadPipeline = Depends(
+        get_upload_pipeline,
+    ),
 ):
     """
     Get all processing jobs of a video.
+
+    Opportunistically self-heals UploadPipeline.process's dual-write
+    gap before returning: this is the exact endpoint the frontend
+    already polls while a video is processing (PipelineTracker/
+    ProcessingBanner), so it's the natural place to notice and
+    re-dispatch a job whose original Celery task never arrived,
+    rather than leaving it silently PENDING forever - see
+    UploadPipeline.reconcile_orphaned_jobs.
     """
     video = service.get_video(
         video_id=video_id,
         user_id=current_user.id,
+    )
+
+    upload_pipeline.reconcile_orphaned_jobs(
+        video_id=video.id,
     )
 
     return processing_service.get_jobs_by_video(
@@ -327,6 +344,14 @@ async def upload_video(
 
     safe_filename = sanitize_filename(file.filename or "")
     validate_upload_extension(safe_filename)
+
+    def _peek_header() -> bytes:
+        header = file.file.read(SIGNATURE_PEEK_BYTES)
+        file.file.seek(0)
+        return header
+
+    header = await run_in_threadpool(_peek_header)
+    validate_upload_signature(safe_filename, header)
 
     unique_filename = (
         f"{uuid.uuid4()}_{safe_filename}"

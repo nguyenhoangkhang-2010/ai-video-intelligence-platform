@@ -1,3 +1,5 @@
+from typing import Callable
+
 from app.config.settings import settings
 from app.core.exceptions import InvalidJobStatusTransitionError
 from app.models.processing_job import ProcessingJob
@@ -207,6 +209,107 @@ class ProcessingJobService:
             job_id,
             stale_after_seconds=settings.celery.task_time_limit,
         )
+
+    def get_orphaned_pending_jobs(
+        self,
+        video_id: int,
+    ) -> list[ProcessingJob]:
+        """
+        PENDING jobs for this video whose original Celery dispatch
+        likely never arrived - see ProcessingJobRepository.
+        get_orphaned_pending for the exact eligibility criteria.
+        """
+        return self.repository.get_orphaned_pending(
+            video_id=video_id,
+            older_than_seconds=(
+                settings.celery.dispatch_grace_period_seconds
+            ),
+        )
+
+    def claim_for_retry(
+        self,
+        job_id: int,
+    ) -> ProcessingJob | None:
+        """
+        Atomically claim a FAILED job for a manual retry - see
+        ProcessingJobRepository.claim_for_retry for the exact
+        transition and why it's safe under concurrent requests.
+        Returns None if the job was not in a retryable (FAILED)
+        state by the time this runs; the caller (the retry endpoint)
+        should surface that as a 409, not silently succeed.
+        """
+        return self.repository.claim_for_retry(job_id)
+
+    def get_all_orphaned_pending_jobs(
+        self,
+        limit: int = 100,
+    ) -> list[ProcessingJob]:
+        """
+        Same eligibility as get_orphaned_pending_jobs, across every
+        video - for scripts/reconcile_processing_jobs.py's
+        operator-triggered sweep only. Not used by any API route.
+        """
+        return self.repository.get_all_orphaned_pending(
+            older_than_seconds=(
+                settings.celery.dispatch_grace_period_seconds
+            ),
+            limit=limit,
+        )
+
+    def reconcile_orphaned_dispatch(
+        self,
+        job: ProcessingJob,
+        dispatch: Callable[[], None],
+    ) -> ProcessingJob:
+        """
+        Re-attempt dispatch for a job that get_orphaned_pending_jobs
+        identified as orphaned (committed, but no task ever appears
+        to have run). This is UploadPipeline.process's dual-write gap
+        self-healing on next read, not a scheduled sweep - see
+        app.api.v1.endpoints.videos.get_processing_jobs, the one
+        place this is currently called from.
+
+        `dispatch` is a zero-arg callable the caller supplies (e.g.
+        `lambda: process_video.delay(job.id, job.video_id,
+        video_path)`) so this service layer never has to import the
+        Celery task directly - that import already lives in
+        UploadPipeline, which owns the original dispatch call too.
+
+        Bounded by settings.celery.max_dispatch_attempts: once
+        exhausted, the job is marked FAILED with a distinctly-worded
+        error ("could not be started", not "processing failed") so
+        it is never left silently PENDING, and is clearly
+        distinguishable in error_message from a job that failed
+        after its pipeline actually ran (see fail_job, called by
+        ProcessingPipeline.run on a real processing error instead).
+        """
+        if job.dispatch_attempts >= settings.celery.max_dispatch_attempts:
+            return self.fail_job(
+                job.id,
+                error=(
+                    f"Processing could not be started after "
+                    f"{job.dispatch_attempts} attempt(s). The "
+                    f"processing task was never picked up."
+                ),
+            )
+
+        claimed = self.repository.claim_for_dispatch_retry(job.id)
+
+        if claimed is None:
+            # Already reconciled/claimed/started by a concurrent
+            # request between the caller's read and this call -
+            # nothing left for this call to do.
+            return job
+
+        try:
+            dispatch()
+        except Exception as error:
+            return self.fail_job(
+                claimed.id,
+                error=f"Processing could not be started: {error}",
+            )
+
+        return claimed
 
     def start_job(
         self,

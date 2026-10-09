@@ -12,7 +12,7 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 # =============================================================================
@@ -116,6 +116,27 @@ class ServerSettings(BaseConfig):
 # =============================================================================
 # Security
 # =============================================================================
+# Substrings of SECRET_KEY that mark it as a copy-pasted example
+# value rather than a real secret - case-insensitive. min_length=32
+# below only proves the value is *long enough*; it does not and
+# cannot prove it is actually secret (`.env.example`'s own
+# "CHANGE_ME_TO_A_LONG_RANDOM_VALUE" happens to be exactly 32
+# characters, so it passes that check while being a publicly-known
+# value in this very repo). Settings.reject_placeholder_secret_key
+# below is the actual guard against shipping one of these to
+# production.
+_PLACEHOLDER_SECRET_KEY_MARKERS = (
+    "change_me",
+    "changeme",
+    "example",
+    "insecure",
+    "replace_me",
+    "your_secret",
+    "secret_key_here",
+    "todo",
+)
+
+
 class SecuritySettings(BaseConfig):
     """Security configuration."""
     secret_key: str = Field(
@@ -590,6 +611,28 @@ class CelerySettings(BaseConfig):
         alias="CELERY_BROKER_VISIBILITY_TIMEOUT",
     )
 
+    # How old a PENDING job with no started_at must be before it's
+    # treated as orphaned (its original .delay() call likely never
+    # arrived - see UploadPipeline.process's dual-write gap) rather
+    # than merely a normal dispatch still in flight. 5 minutes is
+    # generous relative to how fast a Celery .delay() call actually
+    # returns (milliseconds) - this only exists to rule out false
+    # positives from ordinary request latency, not to detect genuine
+    # delay.
+    dispatch_grace_period_seconds: int = Field(
+        default=300,
+        alias="CELERY_DISPATCH_GRACE_PERIOD_SECONDS",
+    )
+
+    # Bounds ProcessingJobService.reconcile_orphaned_dispatch's
+    # re-dispatch retries, so a permanently-undispatchable job (e.g.
+    # the broker itself is down) reaches a clean terminal FAILED
+    # state instead of being retried forever.
+    max_dispatch_attempts: int = Field(
+        default=3,
+        alias="CELERY_MAX_DISPATCH_ATTEMPTS",
+    )
+
 # =============================================================================
 # Metrics
 # =============================================================================
@@ -678,6 +721,29 @@ class RateLimitSettings(BaseConfig):
     upload_limit: int = Field(default=20, alias="RATE_LIMIT_UPLOAD_PER_HOUR")
     search_limit: int = Field(default=30, alias="RATE_LIMIT_SEARCH_PER_MINUTE")
     export_limit: int = Field(default=20, alias="RATE_LIMIT_EXPORT_PER_MINUTE")
+    retry_limit: int = Field(default=20, alias="RATE_LIMIT_RETRY_PER_HOUR")
+
+    # Direct-peer IPs allowed to supply a trustworthy X-Forwarded-For.
+    # Empty by default - request.client.host (the real TCP peer) is
+    # always used unless a hop is explicitly trusted. In the
+    # documented production topology (nginx in front of uvicorn,
+    # deployment/nginx/nginx.conf), uvicorn is started WITHOUT
+    # --proxy-headers, so request.client.host there is nginx's own
+    # container IP for every request - the rate limiter would
+    # otherwise be keying every real client behind the proxy under
+    # one shared bucket (a trivial way for one user to lock out
+    # everyone else's login attempts). Set this to nginx's container
+    # IP or the Compose network's CIDR to restore real per-client
+    # limiting in that deployment - find it with `docker network
+    # inspect <project>_default` or by pinning nginx a static IP in
+    # the Compose network config. Deliberately NOT set by default
+    # here: guessing wrong would silently trust an untrusted peer's
+    # self-reported header, which is worse than today's "one shared
+    # bucket" behavior.
+    trusted_proxy_ips: list[str] = Field(
+        default=[],
+        alias="RATE_LIMIT_TRUSTED_PROXIES",
+    )
 
 # =============================================================================
 # Global Settings Instance
@@ -707,6 +773,44 @@ class Settings(BaseModel):
     metrics: MetricsSettings = Field(default_factory=MetricsSettings)
     storage: StorageSettings = Field(default_factory=StorageSettings)
     rate_limit: RateLimitSettings = Field(default_factory=RateLimitSettings)
+
+    @model_validator(mode="after")
+    def reject_placeholder_secret_key_in_production(self) -> "Settings":
+        """
+        SecuritySettings.secret_key's min_length=32 only proves the
+        value is long enough - it cannot prove it is actually secret.
+        `.env.example`'s own "CHANGE_ME_TO_A_LONG_RANDOM_VALUE" is
+        exactly 32 characters, so it passes that check while being a
+        publicly-known value in this repo's own history: an operator
+        who copies .env.example to .env/.env.production without
+        changing SECRET_KEY would otherwise deploy a production
+        instance signing every JWT (including media tokens) with a
+        secret anyone can read on GitHub.
+
+        Only enforced when ENVIRONMENT=production - development/
+        testing keep working with any placeholder, since that is
+        exactly what local development uses .env.example's defaults
+        for.
+        """
+        if self.app.environment != "production":
+            return self
+
+        lowered = self.security.secret_key.lower()
+
+        if any(
+            marker in lowered
+            for marker in _PLACEHOLDER_SECRET_KEY_MARKERS
+        ):
+            raise ValueError(
+                "SECRET_KEY looks like a placeholder/example value "
+                "(matches a known marker such as 'CHANGE_ME' or "
+                "'example'). Refusing to start with ENVIRONMENT="
+                "production and an unchanged example secret - "
+                "generate a real random value (e.g. `openssl rand "
+                "-hex 32`) and set it as SECRET_KEY before deploying."
+            )
+
+        return self
 
 @lru_cache
 def get_settings() -> Settings:
