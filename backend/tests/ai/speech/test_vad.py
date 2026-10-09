@@ -1,4 +1,7 @@
+import wave
 from unittest.mock import patch
+
+from faster_whisper import decode_audio
 
 from ai.speech.vad import VoiceActivityDetector
 
@@ -51,3 +54,28 @@ def test_constructor_uses_explicit_options_over_settings_defaults():
     mock_vad_options.assert_called_once_with(
         threshold=0.9, min_silence_duration_ms=500,
     )
+
+
+def test_decode_audio_accepts_a_real_file_without_mocking_av(tmp_path):
+    """
+    Regression test for the faster-whisper/PyAV compatibility break:
+    faster_whisper.audio.decode_audio() calls
+    av.open(file, mode="r", metadata_errors="ignore"), a keyword PyAV
+    19.0.0 removed. Every test above mocks decode_audio itself, so
+    none of them would ever catch a real av.open() signature mismatch
+    (confirmed live: PyAV 19.0.1 crashed every production transcription
+    here with `TypeError: open() got an unexpected keyword argument
+    'metadata_errors'`). This calls the real, unmocked decode_audio()
+    against a real WAV file so an incompatible av/faster-whisper pair
+    fails this test instead of only failing in production.
+    """
+    wav_path = tmp_path / "silence.wav"
+    with wave.open(str(wav_path), "wb") as wav_file:
+        wav_file.setnchannels(1)
+        wav_file.setsampwidth(2)
+        wav_file.setframerate(16000)
+        wav_file.writeframes(b"\x00\x00" * 16000)  # 1s of silence
+
+    audio = decode_audio(str(wav_path), sampling_rate=16000)
+
+    assert len(audio) > 0
