@@ -82,30 +82,54 @@ export function ChaptersPanel({ videoId, videoStatus }: { videoId: number; video
 
       <div className="flex-1 overflow-y-auto p-5 sm:p-6">
         {/* Full-width proportional timeline - the primary object. */}
+        {/* Segments grow in proportion to their duration (flex-grow, not
+            % widths, so gaps and the minimum width never overflow the
+            row). Hover details open below the bar: above it they were
+            clipped by this scroll container under the panel header. */}
         {spanEnd > 0 && (
-          <div className="flex w-full gap-[3px]">
+          <div className="flex w-full gap-1">
             {chapters.data.map((chapter, index) => {
               const isActive = index === activeIndex;
-              const width = ((chapter.end_time - chapter.start_time) / spanEnd) * 100;
+              const duration = Math.max(0, chapter.end_time - chapter.start_time);
+              const progress = isActive && duration > 0 ? ((player.currentTime - chapter.start_time) / duration) * 100 : 0;
               return (
                 <button
                   key={chapter.id}
                   type="button"
                   onClick={() => player.seek(chapter.start_time)}
-                  style={{ width: `${Math.max(width, 2)}%` }}
-                  className="group/marker relative shrink-0"
+                  aria-label={`${chapter.title}, ${formatTimecode(chapter.start_time)}`}
+                  aria-current={isActive ? "true" : undefined}
+                  style={{ flexGrow: Math.max(duration, spanEnd * 0.01), flexBasis: 0 }}
+                  className="group/marker relative min-w-[14px]"
                 >
                   <span
                     className={cn(
-                      "block h-12 rounded-md transition-[background-color,transform] duration-fast",
+                      "relative flex h-14 flex-col justify-between overflow-hidden rounded-md border px-2 py-1.5 text-left transition-colors duration-fast",
                       isActive
-                        ? "bg-accent"
-                        : "bg-surface-elevated group-hover/marker:scale-y-105 group-hover/marker:bg-border-strong",
+                        ? "border-accent bg-accent-muted"
+                        : "border-border bg-surface-sunken group-hover/marker:border-border-strong group-hover/marker:bg-surface-hover",
                     )}
-                  />
-                  <span className="pointer-events-none absolute -top-2 left-1/2 z-dropdown hidden w-max max-w-[220px] -translate-x-1/2 -translate-y-full rounded-md border border-border-strong bg-surface-elevated px-2.5 py-1.5 text-left shadow-md group-hover/marker:block">
+                  >
+                    {isActive && (
+                      <span aria-hidden className="absolute inset-y-0 left-0 bg-accent/20" style={{ width: `${Math.min(100, Math.max(0, progress))}%` }} />
+                    )}
+                    <span className={cn("relative font-mono text-[10px] leading-none", isActive ? "text-accent" : "text-text-muted")}>
+                      {String(index + 1).padStart(2, "0")}
+                    </span>
+                    <span className="relative truncate font-mono text-[10px] leading-none text-text-secondary">
+                      {formatTimecode(chapter.start_time)}
+                    </span>
+                  </span>
+                  <span
+                    className={cn(
+                      "pointer-events-none absolute top-full z-dropdown mt-2 hidden w-max max-w-[240px] rounded-md border border-border-strong bg-surface-elevated px-2.5 py-1.5 text-left shadow-md group-hover/marker:block",
+                      index === 0 ? "left-0" : index === chapters.data.length - 1 ? "right-0" : "left-1/2 -translate-x-1/2",
+                    )}
+                  >
                     <span className="block truncate text-caption font-medium text-text-primary">{chapter.title}</span>
-                    <span className="block font-mono text-[10px] text-text-muted">{formatTimecode(chapter.start_time)}</span>
+                    <span className="block font-mono text-[10px] text-text-muted">
+                      {formatTimecode(chapter.start_time)} – {formatTimecode(chapter.end_time)}
+                    </span>
                   </span>
                 </button>
               );
