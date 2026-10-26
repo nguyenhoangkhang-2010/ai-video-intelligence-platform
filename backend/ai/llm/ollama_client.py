@@ -1,4 +1,6 @@
+import json
 import logging
+from collections.abc import Iterator
 
 import requests
 from tenacity import (
@@ -140,3 +142,105 @@ class OllamaClient:
             )
 
         return result
+
+    @_retry_ollama_call
+    def _post_stream(
+        self,
+        prompt: str,
+    ) -> requests.Response:
+        """
+        Streaming counterpart of `_post`: same bounded retry on
+        ConnectionError, but `stream=True` on both the Ollama request
+        and the HTTP response. The (connect, read) timeout makes the
+        read timeout apply *between* chunks, so a long answer that
+        keeps producing tokens never times out - only a stalled one.
+        """
+        return requests.post(
+            f"{self.base_url}/api/generate",
+            json={
+                "model": self.model,
+                "prompt": prompt,
+                "stream": True,
+            },
+            timeout=(10, settings.llm.request_timeout_seconds),
+            stream=True,
+        )
+
+    def generate_stream(
+        self,
+        prompt: str,
+    ) -> Iterator[str]:
+        """
+        Generate text using Ollama, yielding the answer piece by piece
+        as the model produces it (Ollama's newline-delimited JSON
+        stream). Only the visible `response` text is yielded; a
+        reasoning model's separate `thinking` field is ignored, the
+        same as `generate` does.
+
+        Raises the same ai.llm.errors.LLMError subtypes as `generate`
+        - before the first piece (connection, timeout, HTTP status)
+        or in the middle of the stream (a stalled or dropped
+        connection, a malformed line, an error object from Ollama).
+        """
+        try:
+            response = self._post_stream(prompt)
+        except requests.exceptions.ConnectionError as exc:
+            raise LLMConnectionError(
+                f"Could not reach Ollama at {self.base_url} after retrying."
+            ) from exc
+        except requests.exceptions.Timeout as exc:
+            raise LLMTimeoutError(
+                f"Ollama did not respond within "
+                f"{settings.llm.request_timeout_seconds}s."
+            ) from exc
+
+        with response:
+            try:
+                response.raise_for_status()
+            except requests.exceptions.HTTPError as exc:
+                raise LLMUnavailableError(
+                    f"Ollama returned HTTP {response.status_code}."
+                ) from exc
+
+            produced_any = False
+
+            try:
+                for line in response.iter_lines(decode_unicode=True):
+                    if not line:
+                        continue
+
+                    try:
+                        data = json.loads(line)
+                    except ValueError as exc:
+                        raise LLMMalformedResponseError(
+                            "Ollama stream contained a line that was not valid JSON."
+                        ) from exc
+
+                    if data.get("error"):
+                        raise LLMUnavailableError(
+                            f"Ollama reported an error: {data['error']}"
+                        )
+
+                    piece = data.get("response", "")
+                    if piece:
+                        produced_any = True
+                        yield piece
+
+                    if data.get("done"):
+                        break
+            except requests.exceptions.Timeout as exc:
+                raise LLMTimeoutError(
+                    "Ollama stopped sending output for longer than "
+                    f"{settings.llm.request_timeout_seconds}s."
+                ) from exc
+            except requests.exceptions.RequestException as exc:
+                # A dropped connection mid-stream (including a read
+                # timeout surfaced by urllib3 as a connection error).
+                raise LLMConnectionError(
+                    "The connection to Ollama was interrupted mid-answer."
+                ) from exc
+
+            if not produced_any:
+                raise LLMEmptyResponseError(
+                    "Ollama returned an empty response."
+                )

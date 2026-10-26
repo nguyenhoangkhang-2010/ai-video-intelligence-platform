@@ -633,6 +633,23 @@ class CelerySettings(BaseConfig):
         alias="CELERY_MAX_DISPATCH_ATTEMPTS",
     )
 
+    # How often the worker that owns a RUNNING job refreshes its
+    # heartbeat_at (app.workers.heartbeat.JobHeartbeat).
+    job_heartbeat_interval_seconds: int = Field(
+        default=15,
+        alias="CELERY_JOB_HEARTBEAT_INTERVAL_SECONDS",
+    )
+
+    # How long a RUNNING job's heartbeat may stay quiet before the job
+    # is treated as orphaned (its worker died: container restart,
+    # engine crash, OOM kill). Deliberately many intervals long, so a
+    # briefly stalled database write or a busy CPU never makes a live
+    # job look dead.
+    job_heartbeat_timeout_seconds: int = Field(
+        default=180,
+        alias="CELERY_JOB_HEARTBEAT_TIMEOUT_SECONDS",
+    )
+
 # =============================================================================
 # Metrics
 # =============================================================================

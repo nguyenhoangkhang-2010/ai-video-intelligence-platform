@@ -3,7 +3,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 
 import { toApiError } from "@/lib/axios";
 import * as chatService from "@/services/chat";
-import type { ChatHistoryEntry, ChatMessage } from "@/types/chat";
+import type { ChatHistoryEntry, ChatMessage, RagResult } from "@/types/chat";
 
 function toMessages(entry: ChatHistoryEntry): ChatMessage[] {
   return [
@@ -35,6 +35,7 @@ export function useChat(videoId: number) {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [isSending, setIsSending] = useState(false);
   const seededRef = useRef(false);
+  const abortRef = useRef<AbortController | null>(null);
 
   // A different video's history should never seed onto a stale
   // transcript, in the unlikely case this hook's own instance
@@ -64,36 +65,61 @@ export function useChat(videoId: number) {
       ]);
       setIsSending(true);
 
+      const update = (patch: (message: ChatMessage) => ChatMessage) =>
+        setMessages((current) => current.map((message) => (message.id === pendingId ? patch(message) : message)));
+
+      const controller = new AbortController();
+      abortRef.current = controller;
+
       try {
-        const result = await chatService.askVideo(videoId, trimmed);
-        setMessages((current) =>
-          current.map((message) =>
-            message.id === pendingId
-              ? {
-                  id: pendingId,
-                  role: "assistant",
-                  content: result.answer ?? "",
-                  status: result.status,
-                  sources: result.sources,
-                }
-              : message,
-          ),
-        );
+        let result: RagResult;
+        try {
+          // Stream the answer word by word: the first words show up in
+          // seconds instead of after the whole (CPU-bound) generation.
+          result = await chatService.askVideoStream(videoId, trimmed, {
+            signal: controller.signal,
+            onSources: (sources) => update((message) => ({ ...message, sources })),
+            onToken: (text) =>
+              update((message) => ({
+                ...message,
+                pending: false,
+                streaming: true,
+                content: message.content + text,
+              })),
+          });
+        } catch (streamError) {
+          // The stream never opened (older backend, network/HTTP error
+          // before any output) - fall back to the regular request, which
+          // also reports the real error (sign-in redirect, 404, 429...).
+          if ((streamError as { code?: string } | null)?.code !== chatService.STREAM_UNAVAILABLE) {
+            throw streamError;
+          }
+          result = await chatService.askVideo(videoId, trimmed);
+        }
+
+        update(() => ({
+          id: pendingId,
+          role: "assistant",
+          // generation_failed means the model broke off - drop any
+          // partial text rather than presenting it as an answer.
+          content: result.status === "answered" ? (result.answer ?? "") : "",
+          status: result.status,
+          sources: result.sources,
+        }));
       } catch (error) {
-        const apiError = toApiError(error);
-        setMessages((current) =>
-          current.map((message) =>
-            message.id === pendingId
-              ? { id: pendingId, role: "assistant", content: "", error: apiError.message }
-              : message,
-          ),
-        );
+        if (controller.signal.aborted) return;
+        const message = error instanceof Error && !("isAxiosError" in error) ? error.message : toApiError(error).message;
+        update(() => ({ id: pendingId, role: "assistant", content: "", error: message }));
       } finally {
+        if (abortRef.current === controller) abortRef.current = null;
         setIsSending(false);
       }
     },
     [videoId, isSending],
   );
+
+  // Stop an in-flight stream when the panel unmounts or the video changes.
+  useEffect(() => () => abortRef.current?.abort(), [videoId]);
 
   const clear = useCallback(() => setMessages([]), []);
 

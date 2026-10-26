@@ -39,6 +39,7 @@ from app.storage.factory import get_storage_backend
 from app.config.settings import settings
 from app.core.retry import TRANSIENT_EXCEPTIONS
 from app.workers.celery_app import celery_app
+from app.workers.heartbeat import database_heartbeat
 
 
 logger = logging.getLogger(__name__)
@@ -135,6 +136,7 @@ def process_video(
             processing_job_service=processing_service,
             video_service=video_service,
             video_pipeline=video_pipeline,
+            heartbeat=database_heartbeat,
         )
 
         processing_pipeline.run(

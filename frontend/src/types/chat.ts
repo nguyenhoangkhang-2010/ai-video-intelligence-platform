@@ -44,5 +44,8 @@ export interface ChatMessage {
   status?: RagStatus;
   sources?: SearchResult[];
   error?: string;
+  /** Waiting for the first word of the answer (retrieval + model warm-up). */
   pending?: boolean;
+  /** The answer is arriving word by word; `content` holds what's arrived so far. */
+  streaming?: boolean;
 }

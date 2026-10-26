@@ -43,6 +43,12 @@ function renderChatPanel(props: Parameters<typeof ChatPanel>[0]) {
 describe("ChatPanel", () => {
   beforeEach(() => {
     vi.mocked(chatService.askVideo).mockReset();
+    // These tests cover the regular request path: the stream reports
+    // "unavailable" (as it does when it can't be opened), so useChat
+    // falls back to askVideo. Streaming has its own tests below.
+    vi.mocked(chatService.askVideoStream)
+      .mockReset()
+      .mockRejectedValue(Object.assign(new Error("unavailable"), { code: "STREAM_UNAVAILABLE" }));
     // useChat seeds from persisted history on mount (see
     // hooks/useChat.ts) - an empty history is the real "no prior
     // turns yet" case these tests exercise, not an unmocked gap.
@@ -135,6 +141,70 @@ describe("ChatPanel", () => {
 
     await waitFor(() => {
       expect(screen.getByText(/can't reach the server/i)).toBeInTheDocument();
+    });
+  });
+
+  describe("streaming answers", () => {
+    it("shows the answer word by word as it streams, without the regular request", async () => {
+      const user = userEvent.setup();
+      let finish: () => void = () => {};
+      vi.mocked(chatService.askVideoStream).mockImplementation(async (_videoId, query, handlers) => {
+        handlers.onSources?.([]);
+        handlers.onToken("Lạm phát ");
+        handlers.onToken("là mức tăng");
+        await new Promise<void>((resolve) => {
+          finish = resolve;
+        });
+        handlers.onToken(" giá cả.");
+        return { video_id: 1, query, status: "answered", answer: "Lạm phát là mức tăng giá cả.", sources: [] };
+      });
+
+      renderChatPanel({ videoId: 1 });
+      await user.type(screen.getByPlaceholderText(/ask a question about this video/i), "Lạm phát là gì?{Enter}");
+
+      // Partial answer is visible while the model is still writing.
+      expect(await screen.findByText(/Lạm phát là mức tăng/)).toBeInTheDocument();
+      expect(screen.queryByText(/analyzing the transcript/i)).not.toBeInTheDocument();
+
+      finish();
+      await waitFor(() => {
+        expect(screen.getByText("Lạm phát là mức tăng giá cả.")).toBeInTheDocument();
+      });
+      expect(chatService.askVideo).not.toHaveBeenCalled();
+      expect(chatService.askVideoStream).toHaveBeenCalledWith(1, "Lạm phát là gì?", expect.any(Object));
+    });
+
+    it("drops partial text and shows the failure state when generation fails mid-answer", async () => {
+      const user = userEvent.setup();
+      vi.mocked(chatService.askVideoStream).mockImplementation(async (_videoId, query, handlers) => {
+        handlers.onToken("Một nửa câu trả");
+        return { video_id: 1, query, status: "generation_failed", answer: null, sources: [] };
+      });
+
+      renderChatPanel({ videoId: 1 });
+      await user.type(screen.getByPlaceholderText(/ask a question about this video/i), "hello{Enter}");
+
+      await waitFor(() => {
+        expect(screen.getByText(/something went wrong generating an answer/i)).toBeInTheDocument();
+      });
+      expect(screen.queryByText("Một nửa câu trả")).not.toBeInTheDocument();
+      expect(chatService.askVideo).not.toHaveBeenCalled();
+    });
+
+    it("reports a stream that breaks off mid-answer instead of silently retrying", async () => {
+      const user = userEvent.setup();
+      vi.mocked(chatService.askVideoStream).mockImplementation(async (_videoId, _query, handlers) => {
+        handlers.onToken("partial");
+        throw new Error("The answer was cut off before it finished. Please try again.");
+      });
+
+      renderChatPanel({ videoId: 1 });
+      await user.type(screen.getByPlaceholderText(/ask a question about this video/i), "hello{Enter}");
+
+      await waitFor(() => {
+        expect(screen.getByText(/answer was cut off/i)).toBeInTheDocument();
+      });
+      expect(chatService.askVideo).not.toHaveBeenCalled();
     });
   });
 });

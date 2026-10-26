@@ -26,6 +26,9 @@ celery_app = Celery(
     ),
     include=[
         "app.workers.video_processor",
+        # Registers the worker_ready handler that recovers jobs
+        # orphaned by a previous, dead worker (heartbeat gone quiet).
+        "app.workers.recovery",
     ],
 )
 

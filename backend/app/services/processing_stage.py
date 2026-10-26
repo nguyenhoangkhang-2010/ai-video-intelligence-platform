@@ -49,6 +49,29 @@ class ProcessingStageService:
             for stage_name in stage_names
         }
 
+    def release_interrupted(
+        self,
+        processing_job_id: int,
+    ) -> int:
+        """
+        Fail any stage of this job left RUNNING by an earlier attempt
+        whose worker died mid-stage, so this run can claim it again
+        right away instead of only after task_time_limit.
+
+        Called at the start of a run, after the job was claimed. Only
+        stages that started before that claim are released (see
+        ProcessingStageRepository.fail_running_for_job), so a stage a
+        live attempt is genuinely running right now is never touched.
+        The interrupted attempt still counts toward the stage's retry
+        budget (attempt_count was incremented when it was claimed),
+        which is what stops a stage that keeps crashing its worker
+        from being retried forever.
+        """
+        return self.repository.fail_running_for_job(
+            processing_job_id,
+            error_message="Interrupted: the worker running this stage stopped.",
+        )
+
     def has_exhausted_retries(
         self,
         stage: ProcessingStage,

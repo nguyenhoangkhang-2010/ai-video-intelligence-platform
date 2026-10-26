@@ -4,6 +4,7 @@ from sqlalchemy import and_, or_
 from sqlalchemy.orm import Session
 
 from app.models.processing_job import ProcessingJob
+from app.models.processing_stage import ProcessingStage
 from app.models.video import Video
 from app.repositories.base import BaseRepository
 
@@ -103,6 +104,7 @@ class ProcessingJobRepository(BaseRepository[ProcessingJob]):
         self,
         job_id: int,
         stale_after_seconds: int | None = None,
+        heartbeat_timeout_seconds: int | None = None,
     ) -> ProcessingJob | None:
         """
         Atomically transition a job to RUNNING and stamp started_at,
@@ -126,6 +128,14 @@ class ProcessingJobRepository(BaseRepository[ProcessingJob]):
         rejected it every time, since the job was RUNNING, not
         PENDING, forever. See ProcessingJobService.start_if_pending
         for why task_time_limit is the safe threshold to pass here.
+
+        With `heartbeat_timeout_seconds`, a RUNNING job counts as
+        stale as soon as its heartbeat_at has been quiet for that long
+        (the owning worker is gone) instead of waiting out the whole
+        `stale_after_seconds`; a RUNNING row with no heartbeat at all
+        (predates the column) still uses the started_at rule. Every
+        successful claim stamps heartbeat_at, so the new owner starts
+        out "alive".
         """
 
         now = datetime.now(UTC)
@@ -133,11 +143,11 @@ class ProcessingJobRepository(BaseRepository[ProcessingJob]):
         conditions = [ProcessingJob.status == "PENDING"]
 
         if stale_after_seconds is not None:
-            stale_cutoff = now - timedelta(seconds=stale_after_seconds)
             conditions.append(
-                and_(
-                    ProcessingJob.status == "RUNNING",
-                    ProcessingJob.started_at < stale_cutoff,
+                self._stale_running_condition(
+                    now,
+                    fallback_seconds=stale_after_seconds,
+                    heartbeat_timeout_seconds=heartbeat_timeout_seconds,
                 )
             )
 
@@ -151,6 +161,7 @@ class ProcessingJobRepository(BaseRepository[ProcessingJob]):
                 {
                     ProcessingJob.status: "RUNNING",
                     ProcessingJob.started_at: now,
+                    ProcessingJob.heartbeat_at: now,
                 },
                 synchronize_session=False,
             )
@@ -172,6 +183,7 @@ class ProcessingJobRepository(BaseRepository[ProcessingJob]):
     ) -> ProcessingJob:
         job.progress = progress
         job.current_step = current_step
+        job.heartbeat_at = datetime.now(UTC)
 
         if status is not None:
             job.status = status
@@ -353,5 +365,162 @@ class ProcessingJobRepository(BaseRepository[ProcessingJob]):
 
         if updated_rows == 0:
             return None
+
+        return self.get_by_id(job_id)
+
+    @staticmethod
+    def _stale_running_condition(
+        now: datetime,
+        fallback_seconds: int,
+        heartbeat_timeout_seconds: int | None,
+    ):
+        """
+        SQL condition for "RUNNING, but its worker is presumed dead".
+
+        - With a heartbeat timeout: heartbeat_at older than that
+          timeout, or - for a row with no heartbeat at all - started_at
+          older than `fallback_seconds`.
+        - Without one: the original started_at-only rule.
+        """
+        fallback_cutoff = now - timedelta(seconds=fallback_seconds)
+
+        if heartbeat_timeout_seconds is None:
+            return and_(
+                ProcessingJob.status == "RUNNING",
+                ProcessingJob.started_at < fallback_cutoff,
+            )
+
+        heartbeat_cutoff = now - timedelta(seconds=heartbeat_timeout_seconds)
+
+        return and_(
+            ProcessingJob.status == "RUNNING",
+            or_(
+                and_(
+                    ProcessingJob.heartbeat_at.is_not(None),
+                    ProcessingJob.heartbeat_at < heartbeat_cutoff,
+                ),
+                and_(
+                    ProcessingJob.heartbeat_at.is_(None),
+                    ProcessingJob.started_at < fallback_cutoff,
+                ),
+            ),
+        )
+
+    def touch_heartbeat(
+        self,
+        job_id: int,
+    ) -> bool:
+        """
+        Refresh heartbeat_at for a job that is still RUNNING. Returns
+        False once the job is no longer RUNNING (completed, failed,
+        or marked interrupted), so the heartbeat loop can stop.
+        """
+        updated_rows = (
+            self.db.query(ProcessingJob)
+            .filter(
+                ProcessingJob.id == job_id,
+                ProcessingJob.status == "RUNNING",
+            )
+            .update(
+                {ProcessingJob.heartbeat_at: datetime.now(UTC)},
+                synchronize_session=False,
+            )
+        )
+
+        self.db.commit()
+
+        return updated_rows > 0
+
+    def get_stale_running(
+        self,
+        heartbeat_timeout_seconds: int,
+        fallback_seconds: int,
+        limit: int,
+        video_id: int | None = None,
+    ) -> list[ProcessingJob]:
+        """
+        RUNNING jobs whose worker is presumed dead (see
+        _stale_running_condition), optionally for one video only.
+        """
+        query = self.db.query(ProcessingJob).filter(
+            self._stale_running_condition(
+                datetime.now(UTC),
+                fallback_seconds=fallback_seconds,
+                heartbeat_timeout_seconds=heartbeat_timeout_seconds,
+            )
+        )
+
+        if video_id is not None:
+            query = query.filter(ProcessingJob.video_id == video_id)
+
+        return (
+            query.order_by(ProcessingJob.started_at.asc())
+            .limit(limit)
+            .all()
+        )
+
+    def mark_interrupted(
+        self,
+        job_id: int,
+        heartbeat_timeout_seconds: int,
+        fallback_seconds: int,
+        error: str,
+    ) -> ProcessingJob | None:
+        """
+        Atomically move a stale RUNNING job to FAILED, and fail the
+        stage it was in the middle of, in one transaction.
+
+        The UPDATE re-checks staleness in its own WHERE clause, so a
+        job whose worker sends a heartbeat between the caller's read
+        and this write is left alone (0 rows, returns None) - a live
+        job is never failed. Its RUNNING stage is failed too (not left
+        RUNNING), otherwise a later retry could not claim that stage
+        again until the full task_time_limit had passed.
+        """
+        now = datetime.now(UTC)
+
+        updated_rows = (
+            self.db.query(ProcessingJob)
+            .filter(
+                ProcessingJob.id == job_id,
+                self._stale_running_condition(
+                    now,
+                    fallback_seconds=fallback_seconds,
+                    heartbeat_timeout_seconds=heartbeat_timeout_seconds,
+                ),
+            )
+            .update(
+                {
+                    ProcessingJob.status: "FAILED",
+                    ProcessingJob.progress: 100,
+                    ProcessingJob.current_step: "Failed",
+                    ProcessingJob.error_message: error,
+                    ProcessingJob.finished_at: now,
+                },
+                synchronize_session=False,
+            )
+        )
+
+        if updated_rows == 0:
+            self.db.rollback()
+            return None
+
+        (
+            self.db.query(ProcessingStage)
+            .filter(
+                ProcessingStage.processing_job_id == job_id,
+                ProcessingStage.status == "RUNNING",
+            )
+            .update(
+                {
+                    ProcessingStage.status: "FAILED",
+                    ProcessingStage.finished_at: now,
+                    ProcessingStage.error_message: error,
+                },
+                synchronize_session=False,
+            )
+        )
+
+        self.db.commit()
 
         return self.get_by_id(job_id)

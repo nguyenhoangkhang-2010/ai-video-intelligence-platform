@@ -208,6 +208,70 @@ class ProcessingJobService:
         return self.repository.claim_for_running(
             job_id,
             stale_after_seconds=settings.celery.task_time_limit,
+            heartbeat_timeout_seconds=(
+                settings.celery.job_heartbeat_timeout_seconds
+            ),
+        )
+
+    def heartbeat(
+        self,
+        job_id: int,
+    ) -> bool:
+        """
+        Refresh this RUNNING job's heartbeat. Returns False once the
+        job is no longer RUNNING, which tells the caller to stop.
+        """
+        return self.repository.touch_heartbeat(job_id)
+
+    def get_stale_running_jobs(
+        self,
+        video_id: int | None = None,
+        limit: int = 100,
+    ) -> list[ProcessingJob]:
+        """
+        RUNNING jobs whose worker has stopped sending heartbeats for
+        longer than settings.celery.job_heartbeat_timeout_seconds (or,
+        for a row with no heartbeat at all, has been RUNNING for longer
+        than task_time_limit) - i.e. orphaned by a dead worker.
+        """
+        return self.repository.get_stale_running(
+            heartbeat_timeout_seconds=(
+                settings.celery.job_heartbeat_timeout_seconds
+            ),
+            fallback_seconds=settings.celery.task_time_limit,
+            limit=limit,
+            video_id=video_id,
+        )
+
+    def reconcile_stale_running(
+        self,
+        job: ProcessingJob,
+    ) -> ProcessingJob | None:
+        """
+        Mark a job orphaned by a dead worker as FAILED (and fail the
+        stage it was in), so the UI stops showing "processing" and
+        offers Retry - which resumes from the stages that already
+        completed.
+
+        Returns None if the job turned out to be alive after all (its
+        worker sent a heartbeat between the caller's read and this
+        write) or was already finished - the staleness check is
+        repeated atomically in the UPDATE itself.
+        """
+        minutes = max(1, settings.celery.job_heartbeat_timeout_seconds // 60)
+
+        return self.repository.mark_interrupted(
+            job.id,
+            heartbeat_timeout_seconds=(
+                settings.celery.job_heartbeat_timeout_seconds
+            ),
+            fallback_seconds=settings.celery.task_time_limit,
+            error=(
+                "Processing was interrupted: the worker stopped "
+                f"responding for over {minutes} minute(s) (it was "
+                "likely restarted or ran out of memory). Use Retry "
+                "processing to resume - completed steps are kept."
+            ),
         )
 
     def get_orphaned_pending_jobs(

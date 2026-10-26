@@ -59,6 +59,16 @@ export function AIMessage({ message, onRetry }: { message: ChatMessage; onRetry?
       <div className="min-w-0 flex-1">
         {message.pending && <ThinkingIndicator />}
 
+        {message.streaming && !message.error && (
+          <p className="whitespace-pre-wrap text-body leading-relaxed text-text-primary" aria-busy="true">
+            {message.content}
+            <span
+              className="ml-0.5 inline-block h-[1.05em] w-[2px] translate-y-[3px] animate-pulse bg-ai"
+              aria-hidden="true"
+            />
+          </p>
+        )}
+
         {message.error && (
           <div className="flex flex-col items-start gap-1.5">
             <div className="flex items-start gap-1.5 text-body-sm text-error">
@@ -78,14 +88,14 @@ export function AIMessage({ message, onRetry }: { message: ChatMessage; onRetry?
           </div>
         )}
 
-        {!message.pending && !message.error && message.status && statusCopy(message.status) && (
+        {!message.pending && !message.streaming && !message.error && message.status && statusCopy(message.status) && (
           <div className="flex items-start gap-1.5 text-body-sm text-text-secondary">
             <Icon name={statusCopy(message.status)!.icon} size={15} className="mt-0.5 shrink-0 text-text-muted" />
             {statusCopy(message.status)!.text}
           </div>
         )}
 
-        {!message.pending && !message.error && message.status === "answered" && (
+        {!message.pending && !message.streaming && !message.error && message.status === "answered" && (
           <div>
             <p className="whitespace-pre-wrap text-body leading-relaxed text-text-primary">{message.content}</p>
             {message.sources && message.sources.length > 0 && (

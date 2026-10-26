@@ -1,4 +1,6 @@
 import logging
+from collections.abc import Callable
+from contextlib import AbstractContextManager, nullcontext
 
 from app.pipelines.video_pipeline import VideoPipelineService
 from app.services.processing_job import ProcessingJobService
@@ -23,10 +25,20 @@ class ProcessingPipeline:
         processing_job_service: ProcessingJobService,
         video_service: VideoService,
         video_pipeline: VideoPipelineService,
+        heartbeat: Callable[[int], AbstractContextManager[object]] | None = None,
     ):
+        """
+        `heartbeat` (optional) is called with the job id once the job
+        is claimed and must return a context manager that keeps the
+        job's heartbeat alive while the stages run - the Celery task
+        passes app.workers.heartbeat.database_heartbeat. It is only
+        entered after a successful claim, so a duplicate delivery that
+        loses the claim never refreshes another worker's job.
+        """
         self.processing_job_service = processing_job_service
         self.video_service = video_service
         self.video_pipeline = video_pipeline
+        self.heartbeat = heartbeat or (lambda job_id: nullcontext())
 
     def run(
         self,
@@ -68,11 +80,12 @@ class ProcessingPipeline:
         )
 
         try:
-            self.video_pipeline.process(
-                job_id=job_id,
-                video_id=video_id,
-                file_path=file_path,
-            )
+            with self.heartbeat(job_id):
+                self.video_pipeline.process(
+                    job_id=job_id,
+                    video_id=video_id,
+                    file_path=file_path,
+                )
         except Exception as error:
             logger.exception(
                 "Processing pipeline failed. job_id=%s video_id=%s",

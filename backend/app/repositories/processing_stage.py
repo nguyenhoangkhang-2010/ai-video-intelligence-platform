@@ -150,6 +150,54 @@ class ProcessingStageRepository(BaseRepository[ProcessingStage]):
             stage_name,
         )
 
+    def fail_running_for_job(
+        self,
+        processing_job_id: int,
+        error_message: str,
+    ) -> int:
+        """
+        Fail every stage of this job still RUNNING from before the
+        job's current claim (stage.started_at earlier than the job's
+        own started_at), returning how many were changed.
+
+        The job's started_at is stamped by the claim the current run
+        holds, so a RUNNING stage that started before it can only
+        belong to an earlier attempt that lost the job (its worker
+        died) - never to the current run. If the job was never claimed
+        (no started_at), nothing is touched.
+        """
+        from app.models.processing_job import ProcessingJob
+
+        claimed_at = (
+            self.db.query(ProcessingJob.started_at)
+            .filter(ProcessingJob.id == processing_job_id)
+            .scalar()
+        )
+
+        if claimed_at is None:
+            return 0
+
+        updated_rows = (
+            self.db.query(ProcessingStage)
+            .filter(
+                ProcessingStage.processing_job_id == processing_job_id,
+                ProcessingStage.status == "RUNNING",
+                ProcessingStage.started_at < claimed_at,
+            )
+            .update(
+                {
+                    ProcessingStage.status: "FAILED",
+                    ProcessingStage.finished_at: datetime.now(UTC),
+                    ProcessingStage.error_message: error_message,
+                },
+                synchronize_session=False,
+            )
+        )
+
+        self.db.commit()
+
+        return updated_rows
+
     def mark_completed(
         self,
         stage: ProcessingStage,

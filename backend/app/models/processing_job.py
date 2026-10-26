@@ -110,6 +110,19 @@ class ProcessingJob(Base):
         nullable=True,
     )
 
+    # Refreshed every few seconds by the worker that owns this job
+    # (app.workers.heartbeat.JobHeartbeat), and on every progress
+    # update. A RUNNING job whose heartbeat has gone quiet for longer
+    # than settings.celery.job_heartbeat_timeout_seconds belongs to a
+    # worker that is no longer alive - see
+    # ProcessingJobService.reconcile_stale_running. NULL for jobs that
+    # predate the column; those fall back to the started_at +
+    # task_time_limit rule.
+    heartbeat_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+    )
+
     error_message: Mapped[str | None] = mapped_column(
         Text,
         nullable=True,

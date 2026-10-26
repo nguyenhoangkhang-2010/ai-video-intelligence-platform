@@ -1,3 +1,4 @@
+from collections.abc import Iterator
 from typing import Protocol, runtime_checkable
 
 
@@ -29,5 +30,28 @@ class LLMProvider(Protocol):
         timeout, unavailable, empty/malformed response) rather than a
         provider-specific exception, so callers can handle failure
         uniformly regardless of which provider is configured.
+        """
+        ...
+
+
+@runtime_checkable
+class StreamingLLMProvider(LLMProvider, Protocol):
+    """
+    An LLMProvider that can also yield its output incrementally.
+
+    Optional: callers that want streaming (RagAnswerer.answer_stream)
+    check for this shape and fall back to a single `generate` call
+    for providers that don't implement it, so adding streaming never
+    forces every provider to support it.
+    """
+
+    def generate_stream(
+        self,
+        prompt: str,
+    ) -> Iterator[str]:
+        """
+        Yield the generated text piece by piece. Raises the same
+        ai.llm.errors.LLMError subtypes as `generate`, before the
+        first piece or mid-stream.
         """
         ...

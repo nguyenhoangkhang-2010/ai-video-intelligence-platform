@@ -1,7 +1,8 @@
 import logging
+from collections.abc import Iterator
 
 from ai.llm.factory import get_llm_provider
-from ai.llm.provider import LLMProvider
+from ai.llm.provider import LLMProvider, StreamingLLMProvider
 
 
 logger = logging.getLogger(__name__)
@@ -56,6 +57,50 @@ class RagAnswerer:
         )
 
         return answer
+
+    def answer_stream(
+        self,
+        query: str,
+        context: str,
+    ) -> Iterator[str]:
+        """
+        Same grounded answer as `answer`, yielded piece by piece as
+        the model produces it. Providers without streaming support
+        (anything that isn't a StreamingLLMProvider) still work: their
+        full `generate` result is yielded as a single piece.
+
+        Validation happens before the first piece, so an empty query
+        or context raises immediately, exactly like `answer`.
+        """
+        if not query or not query.strip():
+            raise ValueError(
+                "Query cannot be empty."
+            )
+
+        if not context or not context.strip():
+            raise ValueError(
+                "Context cannot be empty."
+            )
+
+        prompt = self._build_prompt(
+            query=query,
+            context=context,
+        )
+
+        logger.info(
+            "Streaming grounded answer."
+        )
+
+        return self._stream(prompt)
+
+    def _stream(
+        self,
+        prompt: str,
+    ) -> Iterator[str]:
+        if isinstance(self.llm_client, StreamingLLMProvider):
+            yield from self.llm_client.generate_stream(prompt)
+        else:
+            yield self.llm_client.generate(prompt)
 
     @staticmethod
     def _build_prompt(

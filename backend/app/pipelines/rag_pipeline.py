@@ -1,4 +1,6 @@
 import logging
+from collections.abc import Iterator
+from dataclasses import dataclass
 
 from ai.llm.errors import LLMError
 from ai.llm.rag_answerer import RagAnswerer
@@ -24,6 +26,34 @@ DEFAULT_TOP_K = 5
 # an unbounded amount of transcript to the LLM regardless of how many
 # chunks a video has.
 MAX_CONTEXT_CHARS = 8000
+
+
+@dataclass(frozen=True)
+class PreparedAnswer:
+    """
+    A RAG question whose retrieval already succeeded: the grounding
+    context, and the exact sources the LLM is shown (the subset that
+    fit into the context budget - see RAGPipeline._build_context).
+    `stream()` generates the answer piece by piece.
+    """
+
+    video_id: int
+    query: str
+    context: str
+    sources: list[SearchResult]
+    answerer: RagAnswerer
+
+    def stream(self) -> Iterator[str]:
+        """
+        Yield the grounded answer as the model produces it. Raises an
+        ai.llm.errors.LLMError subtype if generation fails, before the
+        first piece or mid-answer - the caller decides how to report
+        that (see the streaming RAG endpoint).
+        """
+        return self.answerer.answer_stream(
+            query=self.query,
+            context=self.context,
+        )
 
 
 class RAGPipeline:
@@ -71,16 +101,23 @@ class RAGPipeline:
             reranker=reranker,
         )
 
-    def ask(
+    def prepare(
         self,
         video_id: int,
         query: str,
         top_k: int = DEFAULT_TOP_K,
-    ) -> RAGResult:
+    ) -> "RAGResult | PreparedAnswer":
         """
-        Answer `query` using only content retrieved from `video_id`.
-        No LLM call is made unless there is retrieved context to
-        ground the answer in.
+        Everything up to (not including) the LLM call: validation,
+        the embeddings check, retrieval and context construction.
+
+        Returns a terminal RAGResult when there is nothing to ground an
+        answer in (empty_query / no_embeddings / no_relevant_chunks) -
+        no LLM call is ever made for those - or a PreparedAnswer
+        holding the grounding context and the exact sources the LLM
+        will be shown. Split out so the streaming endpoint can do all
+        database/retrieval work up front, then stream only the
+        generation.
         """
 
         if not query or not query.strip():
@@ -130,16 +167,48 @@ class RAGPipeline:
         )
 
         logger.info(
-            "Calling LLM for video %s grounded in %s of %s retrieved chunk(s).",
+            "Grounding answer for video %s in %s of %s retrieved chunk(s).",
             video_id,
             len(grounding_results),
             len(results),
         )
 
+        return PreparedAnswer(
+            video_id=video_id,
+            query=query,
+            context=context,
+            sources=[
+                self._to_search_result(result)
+                for result in grounding_results
+            ],
+            answerer=self.answerer,
+        )
+
+    def ask(
+        self,
+        video_id: int,
+        query: str,
+        top_k: int = DEFAULT_TOP_K,
+    ) -> RAGResult:
+        """
+        Answer `query` using only content retrieved from `video_id`.
+        No LLM call is made unless there is retrieved context to
+        ground the answer in.
+        """
+
+        prepared = self.prepare(
+            video_id=video_id,
+            query=query,
+            top_k=top_k,
+        )
+
+        if isinstance(prepared, RAGResult):
+            return prepared
+
         try:
             answer = self.answerer.answer(
                 query=query,
-                context=context,
+                context=prepared.context,
             )
         except LLMError:
             # Retrieval genuinely succeeded (there was real grounding
@@ -154,7 +223,7 @@ class RAGPipeline:
                 "LLM generation failed for video %s after a "
                 "successful retrieval of %s chunk(s).",
                 video_id,
-                len(grounding_results),
+                len(prepared.sources),
             )
             return RAGResult(
                 video_id=video_id,
@@ -168,10 +237,7 @@ class RAGPipeline:
             query=query,
             status="answered",
             answer=answer,
-            sources=[
-                self._to_search_result(result)
-                for result in grounding_results
-            ],
+            sources=prepared.sources,
         )
 
     @staticmethod

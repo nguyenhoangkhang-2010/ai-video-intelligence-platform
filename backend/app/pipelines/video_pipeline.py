@@ -652,6 +652,12 @@ class VideoPipelineService:
             STAGE_ORDER,
         )
 
+        # A stage still RUNNING from before this run's claim on the job
+        # was left behind by an attempt whose worker died. Fail it so
+        # the loop below can claim it again now rather than only after
+        # task_time_limit.
+        self.processing_stage_service.release_interrupted(job_id)
+
         # stage_name -> that stage's return value, FOR THIS RUN ONLY.
         # A resumed stage that was already COMPLETED in a previous
         # run never populates this dict this run - downstream stages

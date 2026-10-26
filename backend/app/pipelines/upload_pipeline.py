@@ -171,6 +171,45 @@ class UploadPipeline:
         for job in orphaned:
             self._reconcile_one(job)
 
+        # The RUNNING counterpart: a job whose worker died mid-pipeline
+        # (heartbeat gone quiet) would otherwise show "processing"
+        # forever with no Retry button.
+        for job in self.processing_job_service.get_stale_running_jobs(
+            video_id=video_id,
+        ):
+            self.recover_stale_running(job)
+
+    def recover_stale_running(
+        self,
+        job: ProcessingJob,
+    ) -> ProcessingJob | None:
+        """
+        Fail a job orphaned by a dead worker and mark its video
+        failed, so the frontend's existing failed state (banner +
+        Retry processing) takes over. Returns None if the job turned
+        out to still be alive. Also used by the worker-startup sweep
+        (app.workers.recovery).
+        """
+        recovered = self.processing_job_service.reconcile_stale_running(job)
+
+        if recovered is None:
+            return None
+
+        logger.warning(
+            "Job %s for video %s was RUNNING with no heartbeat for over "
+            "the heartbeat timeout; its worker is gone. Marked FAILED "
+            "(interrupted) so it can be retried.",
+            job.id,
+            job.video_id,
+        )
+
+        self.video_service.update_status(
+            video_id=job.video_id,
+            status="failed",
+        )
+
+        return recovered
+
     def _reconcile_one(
         self,
         job: ProcessingJob,
