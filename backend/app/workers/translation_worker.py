@@ -18,6 +18,7 @@ class TranslationWorker:
         self,
         transcript: str,
         target_language: str,
+        source_language: str | None = None,
     ) -> dict:
         """
         Generate translation from transcript.
@@ -29,6 +30,7 @@ class TranslationWorker:
         subtitle = self.translator.translate(
             transcript,
             target_language,
+            source_language=source_language,
         )
 
         logger.info(

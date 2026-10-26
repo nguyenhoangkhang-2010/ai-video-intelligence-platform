@@ -48,3 +48,23 @@ class FlashcardService:
         return self.repository.create(
             flashcard,
         )
+
+    def replace_for_video(
+        self,
+        video_id: int,
+        flashcards_data: list[FlashcardCreate],
+    ) -> list[Flashcard]:
+        """
+        Atomically replace every flashcard row for `video_id` with
+        `flashcards_data` - see FlashcardRepository.replace_for_video
+        for the consistency guarantee this provides.
+        """
+        new_rows = [
+            Flashcard(**data.model_dump())
+            for data in flashcards_data
+        ]
+
+        return self.repository.replace_for_video(
+            video_id,
+            new_rows,
+        )

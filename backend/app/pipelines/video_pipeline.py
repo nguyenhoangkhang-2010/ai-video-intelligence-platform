@@ -1,9 +1,29 @@
 import logging
 
+from app.core.retry import is_transient_error
+from app.pipelines.stage_definitions import (
+    CHAPTER,
+    EMBEDDING,
+    FLASHCARD,
+    METADATA,
+    QUIZ,
+    STAGE_DEPENDENCIES,
+    STAGE_ORDER,
+    SUMMARY,
+    TRANSCRIPTION,
+    TRANSLATION,
+)
+from app.storage.base import StorageBackend
 from app.utils.ffprobe import extract_metadata
+from app.utils.thumbnail import extract_thumbnail
 from app.services.video import VideoService
 from app.services.processing_job import ProcessingJobService
+from app.services.processing_stage import ProcessingStageService
 from app.services.transcript import TranscriptService
+from app.workers.pipeline_metrics import (
+    observe_stage,
+    record_pipeline_outcome,
+)
 from app.workers.transcription_worker import TranscriptionWorker
 
 from app.schemas.transcript import TranscriptCreate
@@ -47,6 +67,19 @@ from ai.speech.speech_result import SpeechSegment
 logger = logging.getLogger(__name__)
 
 
+class ProcessingIncompleteError(Exception):
+    """
+    Raised by VideoPipelineService.process() when the stage loop
+    finishes with one or more stages not COMPLETED/SKIPPED, but no
+    single exception was collected this run to re-raise directly
+    (e.g. every eligible stage already exhausted its retry budget, or
+    every remaining incomplete stage was blocked by a dependency that
+    never succeeded). Never classified as transient - retrying the
+    task again would not change anything an exception was already
+    raised for.
+    """
+
+
 class VideoPipelineService:
     """
     AI processing pipeline for uploaded videos.
@@ -59,13 +92,17 @@ class VideoPipelineService:
         embedding_service: EmbeddingService,
         translation_service: TranslationService,
         processing_job_service: ProcessingJobService,
+        processing_stage_service: ProcessingStageService,
         quiz_service: QuizService,
         chapter_service: ChapterService,
         flashcard_service: FlashcardService,
+        storage: StorageBackend,
     ):
         self.video_service = video_service
+        self.storage = storage
         self.transcript_service = transcript_service
         self.processing_job_service = processing_job_service
+        self.processing_stage_service = processing_stage_service
         self.summary_service = summary_service
         self.embedding_service = embedding_service
         self.translation_service = translation_service
@@ -79,8 +116,8 @@ class VideoPipelineService:
         self.chapter_pipeline = ChapterTopicPipeline()
         self.flashcard_service = flashcard_service
         self.flashcard_worker = FlashcardWorker()
-        
-        
+
+
     def transcription_stage(
         self,
         job_id: int,
@@ -144,7 +181,14 @@ class VideoPipelineService:
             current_step="Saving Transcript",
         )
         
-        transcript = self.transcript_service.create_transcript(
+        # save_transcript (upsert) rather than create_transcript: a
+        # reprocessed video must get its transcript genuinely
+        # regenerated, not silently keep whatever the first attempt
+        # produced. transcripts.video_id stays UNIQUE at the DB level
+        # regardless (see migration), so this is still exactly one
+        # row per video, just atomically replaced on reprocess instead
+        # of frozen on first write.
+        transcript = self.transcript_service.save_transcript(
             TranscriptCreate(
                 video_id=video_id,
                 language=result["language"],
@@ -176,7 +220,13 @@ class VideoPipelineService:
             transcript=transcript.text,
         )
 
-        summary = self.summary_service.create_summary(
+        # save_summary (upsert) rather than create_summary: a
+        # reprocessed video must get a genuinely regenerated summary,
+        # not silently keep a prior attempt's content. Uniqueness on
+        # (video_id, type) stays DB-enforced (see migration); this
+        # only changes what happens when a row for that key already
+        # exists - replace it, not skip it.
+        summary = self.summary_service.save_summary(
             SummaryCreate(
                 video_id=video_id,
                 type=result["type"],
@@ -253,10 +303,16 @@ class VideoPipelineService:
             len(embeddings),
         )
 
-        self.embedding_service.delete_by_video_id(
-            video_id,
-        )
-
+        # FAISS is written FIRST, before anything in Postgres changes.
+        # This is deliberate: if this raises, no database row for this
+        # video has been touched yet, so the old embeddings stay fully
+        # valid and searchable - the failure is a clean no-op instead
+        # of leaving the DB emptied out from under a FAISS index that
+        # was never actually updated (the previous ordering's failure
+        # mode). VectorStore.replace() is itself atomic at the file
+        # level (temp-write + rename for both the index and its
+        # metadata sidecar), so a crash mid-replace can never leave a
+        # half-written index on disk either.
         vector_store = VectorStore(
             dimension=1024,
         )
@@ -269,21 +325,35 @@ class VideoPipelineService:
             )
         except Exception:
             logger.exception(
-                "FAISS replacement failed for video %s after its "
-                "%s old embedding row(s) were already deleted from "
-                "the database. %s newly generated chunk(s) were not "
-                "persisted to FAISS or the database. Leaving this "
-                "as a failed processing job for the existing "
+                "FAISS replacement failed for video %s. No database "
+                "rows were touched - this video's existing "
+                "embeddings remain valid and searchable. Leaving "
+                "this as a failed processing job for the existing "
                 "retry mechanism to reprocess from scratch.",
                 video_id,
-                len(old_vector_ids),
-                len(embeddings),
             )
             raise
 
+        # Only after FAISS holds the new vectors do we touch Postgres,
+        # and the delete-old+insert-new happens in a single transaction
+        # (EmbeddingRepository.replace_for_video) rather than a delete
+        # followed by a per-row insert loop: a failure here can now
+        # only land as "every old row still present" (rollback) or
+        # "every new row present" (commit) - never a partial mix.
+        #
+        # If this raises, Postgres rolls back to the OLD rows, which
+        # point at vector_ids FAISS no longer has (already replaced
+        # above) - this video is unsearchable until the job is
+        # retried. That retry is self-healing: Embedder's vector_ids
+        # are deterministic (see ai.embedding.embedder), so
+        # re-running this stage regenerates the identical vector_ids,
+        # VectorStore.replace() treats them as already-present
+        # duplicates (no-op for FAISS), and only the Postgres write is
+        # actually retried.
         try:
-            for embedding in embeddings:
-                self.embedding_service.create_embedding(
+            self.embedding_service.replace_for_video(
+                video_id,
+                [
                     EmbeddingCreate(
                         video_id=video_id,
                         chunk_index=embedding["chunk_index"],
@@ -291,15 +361,17 @@ class VideoPipelineService:
                         embedding_model=embedding["embedding_model"],
                         vector_id=embedding["vector_id"],
                     )
-                )
+                    for embedding in embeddings
+                ],
+            )
         except Exception:
             logger.exception(
                 "FAISS replacement for video %s completed "
                 "successfully (%s vector(s) persisted), but "
                 "persisting the corresponding embedding rows to the "
-                "database failed. FAISS and the database are now "
-                "inconsistent for this video until the processing "
-                "job is retried.",
+                "database failed and was rolled back. FAISS and the "
+                "database are now inconsistent for this video until "
+                "the processing job is retried.",
                 video_id,
                 len(embeddings),
             )
@@ -337,9 +409,17 @@ class VideoPipelineService:
         result = self.translation_worker.process(
             transcript=transcript.text,
             target_language="en",
+            source_language=transcript.language,
         )
 
-        translation = self.translation_service.create_translation(
+        # save_translation (upsert) rather than create_translation:
+        # a reprocessed video must get a genuinely regenerated
+        # translation for that language, not silently keep a prior
+        # attempt's text. Uniqueness on (video_id, language) stays
+        # DB-enforced (see migration); this only changes what happens
+        # when a row for that key already exists - replace it, not
+        # skip it.
+        translation = self.translation_service.save_translation(
             TranslationCreate(
                 video_id=video_id,
                 language=result["language"],
@@ -362,10 +442,16 @@ class VideoPipelineService:
         """
         Generate and persist quiz questions from the transcript.
 
-        Mirrors embedding_stage/chapter_stage's replace-on-reprocess
-        pattern: this video's existing quizzes are deleted before the
-        newly generated ones are inserted, so reprocessing a video
-        never accumulates duplicate quiz rows.
+        Idempotent by atomic replacement: this video's quiz set is
+        replaced in a single transaction (QuizRepository.
+        replace_for_video) rather than deleted then inserted row by
+        row, so a crash partway through can never leave this video
+        with a partial mix of old and new quizzes - either the old
+        set is still fully intact (on failure) or the new set is
+        fully present (on success). The LLM's output is not
+        deterministic across retries; that is expected and fine -
+        idempotency here means "one logical attempt, one complete
+        artifact set," not "identical text every time."
         """
 
         self.processing_job_service.update_progress(
@@ -384,13 +470,9 @@ class VideoPipelineService:
             transcript=transcript.text,
         )
 
-        self.quiz_service.delete_by_video_id(
+        self.quiz_service.replace_for_video(
             video_id,
-        )
-
-        for quiz in quizzes:
-
-            self.quiz_service.create_quiz(
+            [
                 QuizCreate(
                     video_id=video_id,
                     type=quiz["type"],
@@ -398,7 +480,9 @@ class VideoPipelineService:
                     answer=quiz["answer"],
                     options=quiz["options"],
                 )
-            )
+                for quiz in quizzes
+            ],
+        )
 
 
         logger.info(
@@ -455,12 +539,16 @@ class VideoPipelineService:
             video_id=video_id,
         )
 
-        self.chapter_service.delete_by_video_id(
+        # Idempotent by atomic replacement (see quiz_stage's docstring
+        # for the same rationale) - this video's chapter set is
+        # replaced in one transaction rather than deleted then
+        # inserted row by row, including the empty-list case (zero
+        # chapters is a valid outcome - see this method's own
+        # docstring - and must still atomically clear any stale
+        # chapters from a previous attempt).
+        self.chapter_service.replace_for_video(
             video_id,
-        )
-
-        for chapter in chapter_result.chapters:
-            self.chapter_service.create_chapter(
+            [
                 ChapterCreate(
                     video_id=video_id,
                     title=chapter.title,
@@ -468,7 +556,9 @@ class VideoPipelineService:
                     end_time=chapter.end,
                     summary=chapter.summary,
                 )
-            )
+                for chapter in chapter_result.chapters
+            ],
+        )
 
         logger.info(
             "Chapter detection completed for video %s. "
@@ -488,9 +578,10 @@ class VideoPipelineService:
         """
         Generate and persist study flashcards from the transcript.
 
-        Mirrors quiz_stage/chapter_stage's replace-on-reprocess
-        pattern: this video's existing flashcards are deleted before
-        the newly generated ones are inserted.
+        Idempotent by atomic replacement (see quiz_stage's docstring
+        for the same rationale) - this video's flashcard set is
+        replaced in one transaction rather than deleted then inserted
+        row by row.
         """
 
         self.processing_job_service.update_progress(
@@ -508,19 +599,18 @@ class VideoPipelineService:
             transcript=transcript.text,
         )
 
-        self.flashcard_service.delete_by_video_id(
+        self.flashcard_service.replace_for_video(
             video_id,
-        )
-
-        for flashcard in flashcards:
-            self.flashcard_service.create_flashcard(
+            [
                 FlashcardCreate(
                     video_id=video_id,
                     question=flashcard["question"],
                     answer=flashcard["answer"],
                     difficulty=flashcard["difficulty"],
                 )
-            )
+                for flashcard in flashcards
+            ],
+        )
 
         logger.info(
             "Flashcard generation completed for video %s. "
@@ -538,55 +628,142 @@ class VideoPipelineService:
         file_path: str,
     ):
         """
-        Execute the complete AI pipeline.
+        Execute the complete AI pipeline, stage by stage, resumably.
+
+        Each stage's ProcessingStage row is checked before running it:
+        COMPLETED is skipped (never re-executed - this is what makes
+        a redelivered/retried job cheap instead of starting over from
+        metadata every time); a stage whose dependency (see
+        app.pipelines.stage_definitions.STAGE_DEPENDENCIES) never
+        reached COMPLETED is left PENDING, never attempted (it was
+        never actually tried, so it is not FAILED); everything else
+        eligible is atomically claimed and run.
+
+        A failed stage does not stop its independent siblings from
+        still being attempted (summary/embedding/translation/quiz/
+        chapter/flashcard all depend only on transcription, never on
+        each other) - the loop continues. Only once every eligible
+        stage has been attempted does this method decide whether the
+        job succeeded or failed, by re-reading every stage's final
+        status.
         """
-        self.metadata_stage(
-            job_id=job_id,
-            video_id=video_id,
-            file_path=file_path,
+        self.processing_stage_service.ensure_seeded(
+            job_id,
+            STAGE_ORDER,
         )
 
-        transcript, transcript_segments = self.transcription_stage(
-            job_id=job_id,
-            video_id=video_id,
-            file_path=file_path,
-        )
+        # stage_name -> that stage's return value, FOR THIS RUN ONLY.
+        # A resumed stage that was already COMPLETED in a previous
+        # run never populates this dict this run - downstream stages
+        # that need its output fall back to re-fetching the persisted
+        # artifact (see _execute_stage) rather than assuming it is
+        # here.
+        results: dict[str, object] = {}
+        failures: list[BaseException] = []
 
-        self.summary_stage(
-            job_id=job_id,
-            video_id=video_id,
-            transcript=transcript,
-        )
+        for stage_name in STAGE_ORDER:
+            stage_row = self.processing_stage_service.get_by_job_id_and_name(
+                job_id, stage_name,
+            )
 
-        self.embedding_stage(
-            job_id=job_id,
-            video_id=video_id,
-            transcript=transcript,
-        )
+            if stage_row.status == "COMPLETED":
+                continue
 
-        self.translation_stage(
-            job_id=job_id,
-            video_id=video_id,
-            transcript=transcript,
-        )
+            dependency = STAGE_DEPENDENCIES[stage_name]
 
-        self.quiz_stage(
-            job_id=job_id,
-            video_id=video_id,
-            transcript=transcript,
-        )
+            if dependency is not None:
+                dependency_row = self.processing_stage_service.get_by_job_id_and_name(
+                    job_id, dependency,
+                )
+                if dependency_row.status != "COMPLETED":
+                    # Blocked, not failed: this stage was never
+                    # actually attempted, so it must stay PENDING.
+                    continue
 
-        self.chapter_stage(
-            job_id=job_id,
-            video_id=video_id,
-            transcript_segments=transcript_segments,
-        )
+            if (
+                stage_row.status == "FAILED"
+                and self.processing_stage_service.has_exhausted_retries(stage_row)
+            ):
+                logger.warning(
+                    "stage_skipped job_id=%s stage=%s attempt=%s "
+                    "reason=retry_budget_exhausted",
+                    job_id, stage_name, stage_row.attempt_count,
+                )
+                continue
 
-        self.flashcard_stage(
-            job_id=job_id,
-            video_id=video_id,
-            transcript=transcript,
+            claimed = self.processing_stage_service.try_claim(
+                job_id, stage_name,
+            )
+
+            if claimed is None:
+                # Lost a race, or genuinely still RUNNING under a
+                # still-alive attempt (not stale) - skip this pass.
+                continue
+
+            logger.info(
+                "stage_started job_id=%s stage=%s attempt=%s",
+                job_id, stage_name, claimed.attempt_count,
+            )
+
+            try:
+                with observe_stage(stage_name):
+                    results[stage_name] = self._execute_stage(
+                        stage_name=stage_name,
+                        job_id=job_id,
+                        video_id=video_id,
+                        file_path=file_path,
+                        results=results,
+                    )
+            except Exception as exc:
+                logger.exception(
+                    "stage_failed job_id=%s stage=%s attempt=%s "
+                    "video_id=%s",
+                    job_id, stage_name, claimed.attempt_count, video_id,
+                )
+                self.processing_stage_service.mark_failed(
+                    claimed, str(exc),
+                )
+                failures.append(exc)
+            else:
+                self.processing_stage_service.mark_completed(
+                    claimed,
+                )
+                logger.info(
+                    "stage_completed job_id=%s stage=%s attempt=%s",
+                    job_id, stage_name, claimed.attempt_count,
+                )
+
+        final_stages = self.processing_stage_service.get_by_job_id(
+            job_id,
         )
+        incomplete = [
+            stage.stage_name
+            for stage in final_stages
+            if stage.status not in ("COMPLETED", "SKIPPED")
+        ]
+
+        if incomplete:
+            transient = next(
+                (exc for exc in failures if is_transient_error(exc)),
+                None,
+            )
+            if transient is not None:
+                # Re-raising the original transient exception (not a
+                # wrapper) so Celery's autoretry_for still recognizes
+                # its type and redelivers the task - the redelivery
+                # will resume at exactly the stages still incomplete.
+                record_pipeline_outcome("failure")
+                raise transient
+            if failures:
+                record_pipeline_outcome("failure")
+                raise failures[0]
+            record_pipeline_outcome("incomplete")
+            raise ProcessingIncompleteError(
+                f"Processing incomplete for video {video_id}: "
+                f"stage(s) {incomplete} did not complete."
+            )
+
+        record_pipeline_outcome("success")
 
         self.video_service.update_status(
             video_id=video_id,
@@ -598,7 +775,108 @@ class VideoPipelineService:
             progress=100,
             current_step="Completed",
         )
-        
+
+    def _execute_stage(
+        self,
+        stage_name: str,
+        job_id: int,
+        video_id: int,
+        file_path: str,
+        results: dict[str, object],
+    ):
+        """
+        Dispatch to the real stage method, resolving each stage's
+        real input - using this run's in-memory result when the
+        dependency actually ran this run, falling back to the
+        persisted artifact when it was skipped because it was already
+        COMPLETED from a previous run.
+        """
+        if stage_name == METADATA:
+            return self.metadata_stage(
+                job_id=job_id, video_id=video_id, file_path=file_path,
+            )
+
+        if stage_name == TRANSCRIPTION:
+            transcript, segments = self.transcription_stage(
+                job_id=job_id, video_id=video_id, file_path=file_path,
+            )
+            results["_transcript_segments"] = segments
+            return transcript
+
+        if stage_name == CHAPTER:
+            segments = results.get("_transcript_segments")
+
+            if segments is None:
+                # Resume case: transcription_stage was already
+                # COMPLETED from a prior attempt, so it was skipped
+                # this run and never produced segments in memory.
+                # transcript_segments is the one piece of
+                # transcription's output that is NOT persisted
+                # anywhere (Transcript only stores flattened text -
+                # see transcription_stage's own docstring), so the
+                # only correct way to recover real, timestamped
+                # segments is to re-run the Whisper call. Accepted
+                # here as a bounded, explicit cost specific to
+                # resuming chapter detection alone - it does not
+                # re-run metadata/summary/embedding/translation/quiz/
+                # flashcard, and save_transcript's upsert (Phase 2)
+                # makes re-persisting the (should be near-identical)
+                # transcript text safe either way.
+                logger.warning(
+                    "Re-running transcription to recover segments "
+                    "for chapter detection on video %s - "
+                    "transcription was already COMPLETED from a "
+                    "prior attempt, so its segment output is not "
+                    "available in memory this run.",
+                    video_id,
+                )
+                rerun_result = self.transcription_worker.process(
+                    video_path=file_path,
+                )
+                segments = rerun_result.get("segments", [])
+
+            return self.chapter_stage(
+                job_id=job_id,
+                video_id=video_id,
+                transcript_segments=segments,
+            )
+
+        # Every remaining stage (summary/embedding/translation/quiz/
+        # flashcard) depends only on transcription's persisted
+        # Transcript - reuse it from this run's results if
+        # transcription actually ran this run, otherwise re-fetch the
+        # persisted row (transcription was already COMPLETED earlier).
+        transcript = results.get(TRANSCRIPTION)
+        if transcript is None:
+            transcript = self.transcript_service.get_by_video_id(
+                video_id,
+            )
+
+        if stage_name == SUMMARY:
+            return self.summary_stage(
+                job_id=job_id, video_id=video_id, transcript=transcript,
+            )
+        if stage_name == EMBEDDING:
+            return self.embedding_stage(
+                job_id=job_id, video_id=video_id, transcript=transcript,
+            )
+        if stage_name == TRANSLATION:
+            return self.translation_stage(
+                job_id=job_id, video_id=video_id, transcript=transcript,
+            )
+        if stage_name == QUIZ:
+            return self.quiz_stage(
+                job_id=job_id, video_id=video_id, transcript=transcript,
+            )
+        if stage_name == FLASHCARD:
+            return self.flashcard_stage(
+                job_id=job_id, video_id=video_id, transcript=transcript,
+            )
+
+        raise ValueError(
+            f"Unknown processing stage: {stage_name!r}"
+        )
+
     def metadata_stage(
         self,
         job_id: int,
@@ -628,3 +906,46 @@ class VideoPipelineService:
             video_id=video_id,
             metadata=metadata,
         )
+
+        self._extract_and_save_thumbnail(
+            video_id=video_id,
+            file_path=file_path,
+            duration=metadata.duration,
+        )
+
+    def _extract_and_save_thumbnail(
+        self,
+        video_id: int,
+        file_path: str,
+        duration: int,
+    ) -> None:
+        """
+        Best-effort thumbnail extraction - deliberately isolated from
+        metadata_stage's own exception handling (the rest of that
+        stage, and the whole remaining pipeline, must run whether or
+        not this succeeds). A representative frame with no library-
+        page value is not worth failing a video's entire processing
+        run over.
+        """
+        try:
+            image_bytes = extract_thumbnail(file_path, duration)
+            if image_bytes is None:
+                return
+
+            key = f"thumbnails/{video_id}.jpg"
+            self.storage.save(key, image_bytes)
+            self.video_service.update_thumbnail(
+                video_id=video_id,
+                thumbnail_key=key,
+            )
+            logger.info(
+                "Thumbnail extracted and saved for video %s (key=%s)",
+                video_id,
+                key,
+            )
+        except Exception:
+            logger.exception(
+                "Thumbnail extraction/save failed for video %s - "
+                "continuing processing without a thumbnail.",
+                video_id,
+            )

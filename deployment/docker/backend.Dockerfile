@@ -43,6 +43,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libsndfile1 \
     libgl1 \
     libglib2.0-0 \
+    gosu \
     && rm -rf /var/lib/apt/lists/*
 
 COPY --from=builder /opt/venv /opt/venv
@@ -52,6 +53,8 @@ COPY backend/app ./backend/app
 COPY backend/ai ./backend/ai
 COPY backend/alembic ./backend/alembic
 COPY backend/alembic.ini ./backend/alembic.ini
+COPY backend/scripts/docker-entrypoint.sh ./backend/scripts/docker-entrypoint.sh
+RUN chmod +x ./backend/scripts/docker-entrypoint.sh
 
 ENV PYTHONPATH=/app/backend
 ENV PYTHONDONTWRITEBYTECODE=1
@@ -65,7 +68,14 @@ ENV DEBUG=False
 
 RUN groupadd --system app && useradd --system --gid app --home-dir /app app \
     && chown -R app:app /app
-USER app
+
+# Deliberately NOT `USER app` here (unlike earlier versions of this
+# file) - the entrypoint needs to start as root so it can chown a
+# freshly-created named-volume mount (see backend/scripts/
+# docker-entrypoint.sh for why) before dropping to "app" via gosu for
+# every real workload. No application code ever actually runs as root:
+# the entrypoint's own `exec gosu app "$@"` is what the container
+# spends essentially all of its time running.
 
 WORKDIR /app/backend
 
@@ -77,4 +87,5 @@ HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
 # Same image/command split as development: run with an explicit
 # `command:` override (see docker-compose.prod.yml) to get the Celery
 # worker instead of the API process.
+ENTRYPOINT ["/app/backend/scripts/docker-entrypoint.sh"]
 CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]

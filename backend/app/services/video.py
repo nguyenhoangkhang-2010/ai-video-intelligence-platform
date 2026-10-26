@@ -4,7 +4,7 @@ from app.repositories.video import VideoRepository
 from app.types.video_metadata import VideoMetadata
 
 from fastapi import HTTPException
-from fastapi import status
+from fastapi import status as http_status
 
 from app.models.video import Video
 
@@ -43,12 +43,25 @@ class VideoService:
 
         if video is None:
             raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
+                status_code=http_status.HTTP_404_NOT_FOUND,
                 detail="Video not found",
             )
 
         return video
-    
+
+    def get_video_by_id(
+        self,
+        video_id: int,
+    ) -> Video | None:
+        """
+        Internal, unscoped lookup by id only - no ownership check,
+        returns None (never raises) on a miss. For system-internal
+        callers only (e.g. UploadPipeline.reconcile_orphaned_jobs,
+        which has no requesting user to scope against); every
+        user-facing route must use get_video instead.
+        """
+        return self.repository.get_by_id(video_id)
+
     def upload_video(
         self,
         owner_id: int,
@@ -84,7 +97,7 @@ class VideoService:
 
         if not success:
             raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
+                status_code=http_status.HTTP_404_NOT_FOUND,
                 detail="Video not found",
             )
 
@@ -107,7 +120,7 @@ class VideoService:
 
         if video is None:
             raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
+                status_code=http_status.HTTP_404_NOT_FOUND,
                 detail="Video not found",
             )
 
@@ -134,7 +147,7 @@ class VideoService:
 
         if video is None:
             raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
+                status_code=http_status.HTTP_404_NOT_FOUND,
                 detail="Video not found",
             )
 
@@ -153,7 +166,7 @@ class VideoService:
         video = self.repository.get_by_id(video_id)
         if video is None:
             raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
+                status_code=http_status.HTTP_404_NOT_FOUND,
                 detail="Video not found",
             )
         video.duration = metadata.duration
@@ -168,11 +181,37 @@ class VideoService:
 
         if video is None:
             raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
+                status_code=http_status.HTTP_404_NOT_FOUND,
                 detail="Video not found",
             )
 
         video.language = language
+
+        return self.repository.update(video)
+
+    def update_thumbnail(
+        self,
+        video_id: int,
+        thumbnail_key: str,
+    ) -> Video:
+        """
+        Persist the storage key of a real, ffmpeg-extracted frame.
+
+        Looked up by id only (not owner-scoped) - called from inside
+        the processing pipeline, which already only ever operates on
+        a video it was dispatched for, the same convention every other
+        pipeline-stage update on this service already follows
+        (update_metadata/update_status/update_processing_result).
+        """
+        video = self.repository.get_by_id(video_id)
+
+        if video is None:
+            raise HTTPException(
+                status_code=http_status.HTTP_404_NOT_FOUND,
+                detail="Video not found",
+            )
+
+        video.thumbnail_key = thumbnail_key
 
         return self.repository.update(video)
 
@@ -185,7 +224,7 @@ class VideoService:
 
         if video is None:
             raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
+                status_code=http_status.HTTP_404_NOT_FOUND,
                 detail="Video not found",
             )
 

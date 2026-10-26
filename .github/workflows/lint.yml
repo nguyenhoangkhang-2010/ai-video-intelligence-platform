@@ -27,14 +27,15 @@ jobs:
       - name: Install ruff
         run: python -m pip install ruff
 
-      # No ruff/flake8/mypy config exists in this repository yet (no
-      # pyproject.toml [tool.ruff] section, no .flake8/mypy.ini), so
-      # this project has not actually adopted a lint gate so far.
-      # Running ruff's default rule set here is informational only
-      # (continue-on-error) rather than blocking, to avoid failing
-      # every PR on pre-existing findings unrelated to whatever that
-      # PR changes. Once the codebase is lint-clean and a real ruff
-      # configuration is added, this should be made blocking.
-      - name: Run ruff check (informational)
-        continue-on-error: true
+      # backend/ruff.toml now exists and is lint-clean (select = ["F"]
+      # - Pyflakes only: unused imports/variables, undefined names.
+      # Checked before adopting it: ruff's raw default rule set
+      # produced 786 findings on this codebase, almost entirely style
+      # rules never agreed to (e.g. an 88-char line limit, demanding a
+      # shebang on every non-executable test file) - not real signal.
+      # `F` alone found 13 genuine issues, including one real latent
+      # bug (an `__all__` entry referencing a renamed symbol), all
+      # fixed. Blocking, not informational, now that there's a real,
+      # clean baseline to hold.
+      - name: Run ruff check
         run: ruff check backend

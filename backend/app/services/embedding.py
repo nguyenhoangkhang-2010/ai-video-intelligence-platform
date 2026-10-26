@@ -45,6 +45,27 @@ class EmbeddingService:
             video_id,
         )
 
+    def replace_for_video(
+        self,
+        video_id: int,
+        embeddings_data: list[EmbeddingCreate],
+    ) -> list[Embedding]:
+        """
+        Atomically replace every embedding row for `video_id` with
+        `embeddings_data` - see
+        EmbeddingRepository.replace_for_video for the consistency
+        guarantee this provides.
+        """
+        new_rows = [
+            Embedding(**data.model_dump())
+            for data in embeddings_data
+        ]
+
+        return self.repository.replace_for_video(
+            video_id,
+            new_rows,
+        )
+
     def create_embedding(
         self,
         embedding_data: EmbeddingCreate,

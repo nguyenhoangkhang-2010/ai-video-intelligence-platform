@@ -25,6 +25,7 @@ the database as of this audit (backend-completion phase). Decision:
 
 Do not add a new database, a new endpoint, or an on-demand-compute
 endpoint for this without first adding real persistence - see the
-"Knowledge Graph" section of docs/deployment.md and the backend
-completion report for this decision's full rationale.
+"Knowledge Graph" section of docs/api/rest_api.md for this decision's
+full rationale (also summarized in docs/diagrams/ai_pipeline.md and
+the Feature Reference table in the root README).
 """

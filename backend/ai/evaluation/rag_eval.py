@@ -21,9 +21,15 @@ inside ai.evaluation.benchmark.BenchmarkRunner):
   this project's tests (the LLM client is always mocked there).
   `details` reports `"kind": "model_based"`.
 
-For a third category - an external, purpose-built RAG evaluation
-library - see ai.evaluation.ragas_eval (optional, lazily imported,
-guarded against ragas being unavailable/broken).
+A third category - the external `ragas` library - was evaluated and
+deliberately NOT adopted: pinning it to a version compatible with its
+own `langchain_community.chat_models.vertexai` import forces a
+numpy/langchain downgrade that breaks pyannote.audio (diarization)
+and other already-working dependencies (verified by actually
+attempting the pin). The two categories above already cover the same
+three conceptual metrics (faithfulness, answer relevance, context
+relevance) without that dependency risk - see docs/adr/0007 for the
+full reasoning.
 
 None of this is imported by app.pipelines.rag_pipeline.RAGPipeline or
 any other production request path; it is only ever invoked explicitly,

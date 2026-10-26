@@ -1,6 +1,7 @@
 import logging
 
-from ai.llm.ollama_client import OllamaClient
+from ai.llm.factory import get_llm_provider
+from ai.llm.provider import LLMProvider
 
 
 logger = logging.getLogger(__name__)
@@ -11,11 +12,11 @@ class RagAnswerer:
 
     def __init__(
         self,
-        llm_client: OllamaClient | None = None,
+        llm_client: LLMProvider | None = None,
     ):
         self.llm_client = (
             llm_client
-            or OllamaClient()
+            or get_llm_provider()
         )
 
     def answer(

@@ -4,7 +4,7 @@
 |------|---------|
 | `datasource.yml` | Auto-provisions the local Prometheus datasource. |
 | `dashboard-provider.yml` | Tells Grafana to load dashboards from the mounted directory. |
-| `dashboard.json` | Minimal "AI Video Platform - Overview" dashboard: request rate, p95 request latency, 5xx error rate, Celery task success/failure rate, p95 Celery task duration, active processing jobs. |
+| `dashboard.json` | Minimal "AI Video Platform - Overview" dashboard: request rate, p95 request latency, 5xx error rate, Celery task success/failure rate, p95 Celery task duration, active processing jobs, pipeline stage execution rate by result, p95 stage duration, pipeline run outcome rate, active pipeline stages. |
 
 ## Usage
 

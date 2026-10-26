@@ -10,6 +10,9 @@ from app.pipelines.processing_pipeline import ProcessingPipeline
 from app.repositories.processing_job import ProcessingJobRepository
 from app.services.processing_job import ProcessingJobService
 
+from app.repositories.processing_stage import ProcessingStageRepository
+from app.services.processing_stage import ProcessingStageService
+
 from app.repositories.transcript import TranscriptRepository
 from app.services.transcript import TranscriptService
 
@@ -30,6 +33,8 @@ from app.services.chapter import ChapterService
 
 from app.repositories.flashcard import FlashcardRepository
 from app.services.flashcard import FlashcardService
+
+from app.storage.factory import get_storage_backend
 
 from app.config.settings import settings
 from app.core.retry import TRANSIENT_EXCEPTIONS
@@ -88,6 +93,9 @@ def process_video(
         processing_repository = ProcessingJobRepository(db)
         processing_service = ProcessingJobService(processing_repository)
 
+        processing_stage_repository = ProcessingStageRepository(db)
+        processing_stage_service = ProcessingStageService(processing_stage_repository)
+
         transcript_repository = TranscriptRepository(db)
         transcript_service = TranscriptService(transcript_repository)
 
@@ -116,9 +124,11 @@ def process_video(
             embedding_service=embedding_service,
             translation_service=translation_service,
             processing_job_service=processing_service,
+            processing_stage_service=processing_stage_service,
             quiz_service=quiz_service,
             chapter_service=chapter_service,
             flashcard_service=flashcard_service,
+            storage=get_storage_backend(),
         )
 
         processing_pipeline = ProcessingPipeline(

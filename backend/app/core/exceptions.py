@@ -9,3 +9,9 @@ class InvalidCredentialsError(AppException):
 
 class VideoNotFoundError(AppException):
     """Video not found."""
+
+class InactiveUserError(AppException):
+    """User account is deactivated."""
+
+class InvalidJobStatusTransitionError(AppException):
+    """Requested processing job status transition is not allowed."""

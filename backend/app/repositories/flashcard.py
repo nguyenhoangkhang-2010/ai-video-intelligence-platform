@@ -60,3 +60,37 @@ class FlashcardRepository(BaseRepository[Flashcard]):
         )
 
         self.db.commit()
+
+    def replace_for_video(
+        self,
+        video_id: int,
+        new_flashcards: list[Flashcard],
+    ) -> list[Flashcard]:
+        """
+        Atomically replace every flashcard row for `video_id`: delete
+        the old rows and insert `new_flashcards` in one transaction -
+        mirrors EmbeddingRepository.replace_for_video. A single
+        commit means this can only ever land in one of two states -
+        every old row gone and every new row present, or (on any
+        failure, via the rollback below) every old row still exactly
+        as it was - never the previous delete-then-per-row-insert
+        loop's partial-mix failure mode.
+        """
+
+        try:
+            (
+                self.db.query(Flashcard)
+                .filter(Flashcard.video_id == video_id)
+                .delete(synchronize_session=False)
+            )
+
+            self.db.add_all(new_flashcards)
+            self.db.commit()
+
+            for flashcard in new_flashcards:
+                self.db.refresh(flashcard)
+
+            return new_flashcards
+        except Exception:
+            self.db.rollback()
+            raise

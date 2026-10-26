@@ -41,3 +41,11 @@ class TranslationRepository(BaseRepository[Translation]):
             )
             .first()
         )
+
+    def update(
+        self,
+        translation: Translation,
+    ) -> Translation:
+        self.db.commit()
+        self.db.refresh(translation)
+        return translation

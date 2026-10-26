@@ -112,6 +112,31 @@ def test_detect_falls_back_to_snippet_title_when_no_labeler():
     assert "alpha" in chapters[0].title or "beta" in chapters[0].title
 
 
+def test_detect_uses_labeler_for_chapter_summaries():
+    embedder = MagicMock()
+    embedder.embed_query.side_effect = lambda text: [1.0, 0.0]
+    labeler = MagicMock()
+    labeler.label.return_value = "Generated Title"
+    labeler.summarize.return_value = "Generated summary."
+
+    detector = ChapterDetector(embedder=embedder, labeler=labeler)
+
+    chapters = detector.detect(_topics()[:1], _segments())
+
+    assert chapters[0].summary == "Generated summary."
+    labeler.summarize.assert_called_once_with("alpha")
+
+
+def test_detect_leaves_summary_none_when_no_labeler():
+    detector = ChapterDetector(
+        embedder=None, labeler=None, max_topics_per_chapter=10,
+    )
+
+    chapters = detector.detect(_topics(), _segments())
+
+    assert chapters[0].summary is None
+
+
 def test_detect_falls_back_to_windowed_grouping_when_no_embedder():
     detector = ChapterDetector(
         embedder=None, labeler=MagicMock(), max_topics_per_chapter=2,

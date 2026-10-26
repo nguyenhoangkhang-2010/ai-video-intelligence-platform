@@ -1,0 +1,92 @@
+{
+  "_comment": "REAL retrieval-evaluation dataset - not synthetic, not the golden_dataset.json regression fixture. Every chunk_text below is the ACTUAL transcript stored for that video_id in the dev database (verified via EmbeddingRepository.get_by_video_id on 2026-10-07), and every query is a real question/topic hand-authored by reading that real content. relevant_vector_ids are the vector_ids a human (this evaluation's author) judged as actually relevant after reading the full transcript text, not guessed from the video title. Methodology and limitations are documented in docs/benchmarks/rag-evaluation.md - most importantly: this project's real dev dataset only has 6 distinct short-form video transcripts (each producing exactly one embedding chunk), so this dataset evaluates cross-document retrieval (which of 6 real documents best answers a query) rather than within-document chunk ranking, and is far too small for statistically significant conclusions - it is a real, honest, but small benchmark.",
+
+  "documents": [
+    {
+      "video_id": 1,
+      "vector_id": "3902f035-04d1-53e6-a027-0d31a987a75b",
+      "chunk_text": "Dale wey, dale wey, dale wey"
+    },
+    {
+      "video_id": 14,
+      "vector_id": "94022b47-d368-5112-b7d8-f921d152992d",
+      "chunk_text": "Dale wey, dale wey, dale wey"
+    },
+    {
+      "video_id": 2,
+      "vector_id": "4c53e138-8c5c-59f4-8f84-b6dac44b4b5d",
+      "chunk_text": "Đà ngoại nói có hai thứ không thể bỏ lỡ trong cuộc đời Một là chuyến tàu cuối cùng về nhà Hai là những người thật lòng yêu thương ta"
+    },
+    {
+      "video_id": 3,
+      "vector_id": "388a0530-ae61-5c6b-a3f4-0a2a09474e23",
+      "chunk_text": "Sẽ chẳng bao giờ biết được khi nào là lần cuối cùng của một ai đó, hôn một ai đó, hay nói lương chia tay, và lần cuối cùng mình nhìn thấy ai đó hạnh phúc. Sẽ chẳng bao giờ biết được là khi nào là lần cuối cùng được nghe họ gọi tên mình, hay là thấy mắt họ mình dịu dàng như thế. Chẳng ai báo chút cho mình rằng đây đây là lần cuối cùng của mình. Để mình biết và trân trọng hơn, lưu giữ nhiều hơn. Mọi thứ đó vẫn cứ diễn ra như thường thật, diễn ra như bao ngày khác, cho đến khi mình nhìn lại, mới dần mình nhận ra là khoảnh khắc ảnh đã trôi qua mãi mãi rồi. Có thể là cái ôm bội vàng lên góc phố, cái hôn nhẹ đầy quen thuộc, hay chỉ là lời hẹn gặp lại, đường trừ như là chắc chắn, nhưng mà cũng chẳng bao giờ xảy ra nữa. Và đáng buồn hơn, đôi khi lần cuối ấy, nó chẳng để lại dấu vết gì rõ ràng cả. Cảm ơn các bạn đã theo dõi và hẹn gặp lại."
+    },
+    {
+      "video_id": 4,
+      "vector_id": "0ee3f926-773d-5a77-bfef-dfa5d5e002cf",
+      "chunk_text": "Mình có đọc được một câu thế này, sợ thì sao chứ, nếu sợ, hãy vừa sợ vừa làm. Chúng ta thường nghĩ rằng, khi nào hết sợ thì mới bắt đầu. Nhưng sự thật là, nỗi sợ chưa bao giờ thực sự biến mất, nó chỉ nhỏ lại khi ta dám tiến về phía trước. Mỗi cột mốc quan trọng trong cuộc đời đều đi cùng với nỗi sợ. Sợ thất bại, sợ mất đi, sợ điều mình mong đợi sẽ không thành. Nhưng nếu vì sợ mà dừng lại, có lẽ ta sẽ chẳng bao giờ biết điều gì đang chờ mình ở phía trước."
+    },
+    {
+      "video_id": 15,
+      "vector_id": "d78df903-2451-5622-ab44-1da856994125",
+      "chunk_text": "Tớ từng nghe một câu nói rất hay rằng, cuộc đời này suy cho cùng ai cũng đang phải chiến đấu với một cuộc chiến mà người khác không hề biết tới. Phía sau một nụ cười dạng dỡ, một vẻ ngoài bất cần hay cả sự im lặng. Biết đâu lại là một tâm hồn đang cố gắng chấp vá từng chút một sau những ngày tháng đầy mệt mỏi và tổn thương. Chúng ta ai cũng có những vết sẹo nên xin đừng vô tình làm tổn thương nhau."
+    }
+  ],
+
+  "queries": [
+    {
+      "query": "nỗi sợ khi bắt đầu một điều mới và cách vượt qua nó",
+      "note": "fear of starting something new and how to overcome it",
+      "relevant_vector_ids": ["0ee3f926-773d-5a77-bfef-dfa5d5e002cf"]
+    },
+    {
+      "query": "tại sao chúng ta hối tiếc những điều chưa dám làm hơn là những điều đã làm",
+      "note": "why we regret things not attempted more than things we did",
+      "relevant_vector_ids": ["0ee3f926-773d-5a77-bfef-dfa5d5e002cf"]
+    },
+    {
+      "query": "khoảnh khắc cuối cùng với một người mà ta không hề biết trước",
+      "note": "the last moment with someone, never knowing it's the last",
+      "relevant_vector_ids": ["388a0530-ae61-5c6b-a3f4-0a2a09474e23"]
+    },
+    {
+      "query": "trân trọng hiện tại vì mọi khoảnh khắc đều có thể là lần cuối",
+      "note": "cherish the present because any moment could be the last",
+      "relevant_vector_ids": ["388a0530-ae61-5c6b-a3f4-0a2a09474e23"]
+    },
+    {
+      "query": "chuyến tàu cuối cùng về nhà và những người thật lòng yêu thương mình",
+      "note": "the last train home and people who truly love you",
+      "relevant_vector_ids": ["4c53e138-8c5c-59f4-8f84-b6dac44b4b5d"]
+    },
+    {
+      "query": "những điều quan trọng không thể bỏ lỡ trong cuộc đời",
+      "note": "important things not to miss in life",
+      "relevant_vector_ids": ["4c53e138-8c5c-59f4-8f84-b6dac44b4b5d"]
+    },
+    {
+      "query": "mỗi người đều đang chiến đấu với một cuộc chiến riêng mà người khác không biết",
+      "note": "everyone fights their own invisible battle",
+      "relevant_vector_ids": ["d78df903-2451-5622-ab44-1da856994125"]
+    },
+    {
+      "query": "đừng vô tình làm tổn thương người khác vì ai cũng có vết sẹo riêng",
+      "note": "don't carelessly hurt others, everyone has their own scars",
+      "relevant_vector_ids": ["d78df903-2451-5622-ab44-1da856994125"]
+    },
+    {
+      "query": "lời bài hát dale wey",
+      "note": "lyrics of the song \"dale wey\" - two real videos share this exact transcript, so BOTH are genuinely relevant, a real duplicate-content edge case",
+      "relevant_vector_ids": [
+        "3902f035-04d1-53e6-a027-0d31a987a75b",
+        "94022b47-d368-5112-b7d8-f921d152992d"
+      ]
+    },
+    {
+      "query": "công thức nấu ăn món phở bò truyền thống",
+      "note": "a traditional beef pho recipe - deliberately has NO relevant document in this pool; tests that a retriever doesn't force an irrelevant top-1 to look confident when nothing actually matches",
+      "relevant_vector_ids": []
+    }
+  ]
+}

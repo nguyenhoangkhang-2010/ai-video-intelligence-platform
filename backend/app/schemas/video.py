@@ -1,8 +1,15 @@
 from datetime import datetime
+from typing import Literal
 
 from pydantic import BaseModel
 from pydantic import ConfigDict
 
+# The only values app/services/video.py and app/pipelines/*.py ever
+# assign to Video.status. Constraining VideoUpdate.status to this set
+# (rather than an unrestricted str) stops a caller from writing an
+# arbitrary string via PUT /videos/{id} and having the API silently
+# accept it as if it were a real lifecycle state.
+VideoStatus = Literal["uploaded", "processing", "processed", "failed"]
 
 class VideoBase(BaseModel):
     """Base schema for Video."""
@@ -19,25 +26,44 @@ class VideoUpdate(BaseModel):
     """Schema for updating a video."""
     title: str | None = None
     language: str | None = None
-    status: str | None = None
+    status: VideoStatus | None = None
 
 class VideoRead(VideoBase):
     """Schema for reading video data."""
     id: int
     owner_id: int
-    status: str
+    status: VideoStatus
+    # Whether a representative frame has been extracted for this
+    # video (see app/utils/thumbnail.py and
+    # VideoPipelineService.metadata_stage) - never the storage key
+    # itself. True means GET /videos/{id}/thumbnail will serve an
+    # image; false means it's still processing or extraction failed,
+    # which the frontend distinguishes via `status`.
+    has_thumbnail: bool
     created_at: datetime
     updated_at: datetime
     model_config = ConfigDict(
         from_attributes=True,
     )
-    
+
 class VideoStatusResponse(BaseModel):
     """Schema for video processing status."""
 
     id: int
-    status: str
+    status: VideoStatus
 
     model_config = ConfigDict(
         from_attributes=True,
     )
+
+class MediaTokenResponse(BaseModel):
+    """
+    Short-lived, resource-scoped token for media delivery endpoints
+    (see app.auth.jwt.create_media_token) - never the caller's main
+    access token. `expires_in` is seconds from issuance, so the
+    frontend can schedule a refetch before it actually expires
+    rather than reacting to a 401.
+    """
+
+    token: str
+    expires_in: int

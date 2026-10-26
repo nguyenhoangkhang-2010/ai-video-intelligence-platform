@@ -7,5 +7,5 @@ __all__ = [
     "create_access_token",
     "decode_token",
     "oauth2_scheme",
-    "get_current_token",
+    "get_current_user",
 ]

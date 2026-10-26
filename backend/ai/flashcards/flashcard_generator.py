@@ -2,8 +2,9 @@
 import logging
 
 from ai.flashcards.flashcard_result import Flashcard, FlashcardResult
+from ai.llm.factory import get_llm_provider
 from ai.llm.json_utils import extract_json
-from ai.llm.ollama_client import OllamaClient
+from ai.llm.provider import LLMProvider
 from app.config.settings import settings
 
 logger = logging.getLogger(__name__)
@@ -20,11 +21,11 @@ class FlashcardGenerator:
 
     def __init__(
         self,
-        llm_client: OllamaClient | None = None,
+        llm_client: LLMProvider | None = None,
     ):
         self.llm_client = (
             llm_client
-            or OllamaClient()
+            or get_llm_provider()
         )
 
     def generate(

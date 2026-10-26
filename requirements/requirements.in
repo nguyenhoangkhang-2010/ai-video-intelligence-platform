@@ -1,0 +1,131 @@
+# Human-maintained list of DIRECT dependencies only - this is no
+# longer the file that gets `pip install -r`'d (see requirements.txt,
+# now a fully-pinned lock file compiled from this one via pip-tools).
+# Edit this file to add/remove/re-range a direct dependency, then
+# regenerate requirements.txt per the instructions at the top of that
+# file. Version bounds here (e.g. `av<19,>=11`, `setuptools<81`) are
+# real, documented compatibility constraints, not just style - keep
+# them when regenerating.
+#
+# Pruned 2026-10-03 from ~131 packages: every removed package had zero
+# `import`/`from` hits anywhere in backend/ (code + tests + scripts),
+# zero references in Dockerfiles/CI/.github workflows/config files, and
+# no notebook content (notebooks/*.ipynb are empty scaffolding). The
+# full AI/ML stack this project actually runs on (torch, transformers,
+# sentence-transformers, FlagEmbedding, faster-whisper, pyannote.audio,
+# FAISS) plus anything plausibly required transitively by it
+# (accelerate, ctranslate2, safetensors, sentencepiece, soundfile,
+# tiktoken, torchaudio, torchvision, tqdm) was kept deliberately even
+# where this codebase never imports it directly, rather than removed on
+# a bare import-search result - see the backend dependency audit for
+# the full per-package classification this was based on.
+#
+# A real build-time regression was found and fixed during that same
+# pruning: `pwdlib` (bare) built and ran fine before this prune only
+# because some now-removed package transitively pulled in
+# argon2-cffi - app/core/security.py's `PasswordHash.recommended()`
+# needs it directly and raised `HasherNotAvailable` the moment a
+# freshly pruned image actually started. Pinned as `pwdlib[argon2]`
+# below so this dependency is explicit and correct on its own, not
+# accidentally satisfied by an unrelated package.
+#
+# Same category, second instance: removing the standalone
+# `email-validator` line broke `app/schemas/user.py`'s
+# `EmailStr` field (pydantic's own optional email-validation feature)
+# with `ImportError: email-validator is not installed` at import time
+# - fixed the same way, as `pydantic[email]` below, rather than restoring
+# a same-looking-unrelated top-level package.
+#
+# Third instance, found while verifying the rebuilt dev image: the
+# Dockerfile's own `pip install --upgrade pip setuptools wheel` step
+# (runs before this file is even copied in, so this is independent of
+# anything pruned here) resolves a setuptools new enough to have
+# dropped `pkg_resources` - `ai/speech/vad.py`'s real `webrtcvad`
+# import does a bare `import pkg_resources` and failed with
+# `ModuleNotFoundError` on a freshly built image. Verified live: `pip
+# install "setuptools<81"` restores it (with a deprecation warning,
+# not an error - matches that warning's own "pin to Setuptools<81"
+# text). Pinned explicitly below so `pip install -r requirements.txt`
+# re-asserts a working version regardless of what the Dockerfile's
+# own upgrade step resolved first.
+#
+# Fourth instance, 2026-10-07: `ragas` was removed entirely, not
+# pinned. Its installed release (0.4.3) imports
+# `langchain_community.chat_models.vertexai`, which no longer exists
+# in the `langchain_community` version this file's unpinned resolution
+# installs - a real, reproduced `ModuleNotFoundError`. Pinning ragas
+# to an older release that still has that import (verified live:
+# ragas==0.1.21) cascades into downgrading numpy below 2.0 and the
+# whole langchain/langgraph stack, which breaks pyannote.audio
+# (diarization) and other already-working dependencies - a strictly
+# worse outcome than not having ragas at all. It was never imported by
+# production code (ai.evaluation.ragas_eval was a standalone,
+# lazily-imported, optional adapter), and the two conceptual metrics
+# it would have added (model-based RAG faithfulness/relevance) are
+# already covered by ai.evaluation.rag_eval's LLMJudge* variants,
+# which reuse the existing OllamaClient instead of a new dependency.
+#
+# Fifth instance, 2026-10-08: `av` (PyAV) is a transitive dependency of
+# faster-whisper and was never listed here directly, so an unpinned
+# resolution picked up whatever the latest release was at build time.
+# PyAV 19.0.0 (2026-09-29) removed the `metadata_errors` kwarg from
+# `av.open()` - still called by faster-whisper==1.2.1's own
+# `audio.decode_audio()` (`av.open(file, mode="r",
+# metadata_errors="ignore")`), which faster-whisper declares only as
+# `av>=11` with no upper bound. Reproduced live: every transcription
+# crashed with `TypeError: open() got an unexpected keyword argument
+# 'metadata_errors'` inside the VAD step, which runs before ASR.
+# faster-whisper 1.2.1 is still the latest release and still makes
+# this call (confirmed from the installed package source), so there
+# is no newer faster-whisper to upgrade to instead. Pinned to av's
+# latest release that still has the parameter (18.1.0) rather than
+# faster-whisper, matching the fix multiple other projects hitting the
+# same break have converged on.
+accelerate
+alembic
+av<19,>=11
+bert-score
+boto3
+celery
+ctranslate2
+faiss-cpu
+fastapi
+faster-whisper
+ffmpeg-python
+FlagEmbedding
+httpx
+langdetect
+numpy
+prometheus-client
+psycopg[binary]
+pwdlib[argon2]
+pyannote.audio
+pydantic[email]
+pydantic-settings
+pytest
+pytest-cov
+python-dotenv
+python-jose
+python-multipart
+rank-bm25
+redis
+requests
+rich
+rouge-score
+ruff
+safetensors
+setuptools<81
+sentencepiece
+sentence-transformers
+soundfile
+sqlalchemy
+tenacity
+tiktoken
+torch
+torchaudio
+torchvision
+tqdm
+transformers
+uvicorn[standard]
+webrtcvad
+websockets

@@ -12,7 +12,7 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 # =============================================================================
@@ -116,6 +116,27 @@ class ServerSettings(BaseConfig):
 # =============================================================================
 # Security
 # =============================================================================
+# Substrings of SECRET_KEY that mark it as a copy-pasted example
+# value rather than a real secret - case-insensitive. min_length=32
+# below only proves the value is *long enough*; it does not and
+# cannot prove it is actually secret (`.env.example`'s own
+# "CHANGE_ME_TO_A_LONG_RANDOM_VALUE" happens to be exactly 32
+# characters, so it passes that check while being a publicly-known
+# value in this very repo). Settings.reject_placeholder_secret_key
+# below is the actual guard against shipping one of these to
+# production.
+_PLACEHOLDER_SECRET_KEY_MARKERS = (
+    "change_me",
+    "changeme",
+    "example",
+    "insecure",
+    "replace_me",
+    "your_secret",
+    "secret_key_here",
+    "todo",
+)
+
+
 class SecuritySettings(BaseConfig):
     """Security configuration."""
     secret_key: str = Field(
@@ -125,6 +146,22 @@ class SecuritySettings(BaseConfig):
     )
     algorithm: str = "HS256"
     access_token_expire_minutes: int = 60
+
+    # Short-lived, resource-scoped media token (see
+    # app.auth.jwt.create_media_token) - issued per-video via
+    # GET /videos/{id}/media-token and used ONLY as the ?token=
+    # query param on <video>/<img> element URLs, so the user's
+    # long-lived main access token never has to appear in a URL
+    # (browser history, server/proxy access logs, Referer headers).
+    # Short enough that a leaked media URL is worthless within
+    # minutes; long enough to cover a page load plus normal playback
+    # start (React Query refetches a new one before this expires -
+    # see frontend hooks/useMediaToken.ts).
+    media_token_expire_seconds: int = Field(
+        default=300,
+        alias="MEDIA_TOKEN_EXPIRE_SECONDS",
+    )
+
     cors_origins: list[str] = Field(
         default=[
             "http://localhost:3000",
@@ -189,6 +226,16 @@ class HuggingFaceSettings(BaseConfig):
 class LLMSettings(BaseConfig):
     """LLM configuration."""
 
+    # Selects which LLMProvider implementation ai.llm.factory.
+    # get_llm_provider() returns. "ollama" is the only implementation
+    # today; this exists so a future provider is a config value and a
+    # new factory branch, not a change to every call site that
+    # currently constructs OllamaClient() directly.
+    provider: Literal["ollama"] = Field(
+        default="ollama",
+        alias="LLM_PROVIDER",
+    )
+
     ollama_base_url: str = Field(
         default="http://localhost:11434",
         alias="OLLAMA_BASE_URL",
@@ -197,6 +244,11 @@ class LLMSettings(BaseConfig):
     default_llm: str = Field(
         default="qwen3:8b",
         alias="DEFAULT_LLM",
+    )
+
+    request_timeout_seconds: int = Field(
+        default=300,
+        alias="OLLAMA_TIMEOUT_SECONDS",
     )
 
 # =============================================================================
@@ -294,6 +346,33 @@ class ChapterSettings(BaseConfig):
     use_llm_labeling: bool = Field(
         default=True,
         alias="CHAPTER_USE_LLM_LABELING",
+    )
+
+    max_context_chars: int = Field(
+        default=6000,
+        alias="CHAPTER_MAX_CONTEXT_CHARS",
+    )
+
+# =============================================================================
+# Summarization
+# =============================================================================
+class SummarySettings(BaseConfig):
+    """Summarization configuration."""
+
+    max_context_chars: int = Field(
+        default=12000,
+        alias="SUMMARY_MAX_CONTEXT_CHARS",
+    )
+
+# =============================================================================
+# Translation
+# =============================================================================
+class TranslationSettings(BaseConfig):
+    """Translation configuration."""
+
+    max_context_chars: int = Field(
+        default=12000,
+        alias="TRANSLATION_MAX_CONTEXT_CHARS",
     )
 
 # =============================================================================
@@ -400,6 +479,16 @@ class RetrievalSettings(BaseConfig):
         alias="RETRIEVAL_CANDIDATE_MULTIPLIER",
     )
 
+    hybrid_enabled: bool = Field(
+        default=True,
+        alias="RETRIEVAL_HYBRID_ENABLED",
+    )
+
+    reranking_enabled: bool = Field(
+        default=True,
+        alias="RETRIEVAL_RERANKING_ENABLED",
+    )
+
 # =============================================================================
 # AI Quality Evaluation
 # =============================================================================
@@ -504,6 +593,46 @@ class CelerySettings(BaseConfig):
         alias="CELERY_TASK_RETRY_BACKOFF_MAX",
     )
 
+    # How long the Redis broker holds an unacked message invisible to
+    # other workers before redelivering it (Celery's Redis transport
+    # `visibility_timeout`, default 3600s/1h if unset - confirmed live:
+    # a task in flight when its worker container was recreated stayed
+    # stuck PENDING for the full default before this was set, directly
+    # contradicting task_acks_late's documented intent of "redelivered
+    # rather than silently lost"). Safe to keep well below
+    # task_time_limit here specifically because a redelivered task for
+    # an already-claimed/finished job is a guaranteed no-op (see the
+    # atomic PENDING->RUNNING claim in ProcessingPipeline.run) - an
+    # occasional premature redelivery costs nothing, while a crashed
+    # worker's job sitting invisible for up to an hour is a real
+    # "stuck job" incident.
+    broker_visibility_timeout: int = Field(
+        default=1800,
+        alias="CELERY_BROKER_VISIBILITY_TIMEOUT",
+    )
+
+    # How old a PENDING job with no started_at must be before it's
+    # treated as orphaned (its original .delay() call likely never
+    # arrived - see UploadPipeline.process's dual-write gap) rather
+    # than merely a normal dispatch still in flight. 5 minutes is
+    # generous relative to how fast a Celery .delay() call actually
+    # returns (milliseconds) - this only exists to rule out false
+    # positives from ordinary request latency, not to detect genuine
+    # delay.
+    dispatch_grace_period_seconds: int = Field(
+        default=300,
+        alias="CELERY_DISPATCH_GRACE_PERIOD_SECONDS",
+    )
+
+    # Bounds ProcessingJobService.reconcile_orphaned_dispatch's
+    # re-dispatch retries, so a permanently-undispatchable job (e.g.
+    # the broker itself is down) reaches a clean terminal FAILED
+    # state instead of being retried forever.
+    max_dispatch_attempts: int = Field(
+        default=3,
+        alias="CELERY_MAX_DISPATCH_ATTEMPTS",
+    )
+
 # =============================================================================
 # Metrics
 # =============================================================================
@@ -554,6 +683,68 @@ class StorageSettings(BaseConfig):
         alias="STORAGE_S3_REGION",
     )
 
+    max_upload_size_mb: int = Field(
+        default=5000,
+        alias="STORAGE_MAX_UPLOAD_SIZE_MB",
+    )
+
+    allowed_upload_extensions: list[str] = Field(
+        default=[".mp4", ".mov", ".mkv", ".avi", ".webm", ".m4v"],
+        alias="STORAGE_ALLOWED_UPLOAD_EXTENSIONS",
+    )
+
+# =============================================================================
+# Rate Limiting
+# =============================================================================
+class RateLimitSettings(BaseConfig):
+    """
+    Redis-backed rate limiting for abuse-prone endpoints (login,
+    register, upload, search, RAG chat, flashcard export). Reuses the
+    same Redis instance Celery already requires - no new
+    infrastructure dependency. Every limit is env-driven so an
+    operator can tune or disable it per deployment without a code
+    change; defaults are generous enough that normal local development
+    (a handful of requests while testing a feature) never trips them,
+    while still providing real protection in production.
+    """
+
+    enabled: bool = Field(default=True, alias="RATE_LIMIT_ENABLED")
+
+    redis_url: str = Field(
+        default="redis://localhost:6379/0",
+        alias="RATE_LIMIT_REDIS_URL",
+    )
+
+    # (limit, window_seconds) per category, keyed by client IP.
+    login_limit: int = Field(default=10, alias="RATE_LIMIT_LOGIN_PER_MINUTE")
+    register_limit: int = Field(default=5, alias="RATE_LIMIT_REGISTER_PER_MINUTE")
+    upload_limit: int = Field(default=20, alias="RATE_LIMIT_UPLOAD_PER_HOUR")
+    search_limit: int = Field(default=30, alias="RATE_LIMIT_SEARCH_PER_MINUTE")
+    export_limit: int = Field(default=20, alias="RATE_LIMIT_EXPORT_PER_MINUTE")
+    retry_limit: int = Field(default=20, alias="RATE_LIMIT_RETRY_PER_HOUR")
+
+    # Direct-peer IPs allowed to supply a trustworthy X-Forwarded-For.
+    # Empty by default - request.client.host (the real TCP peer) is
+    # always used unless a hop is explicitly trusted. In the
+    # documented production topology (nginx in front of uvicorn,
+    # deployment/nginx/nginx.conf), uvicorn is started WITHOUT
+    # --proxy-headers, so request.client.host there is nginx's own
+    # container IP for every request - the rate limiter would
+    # otherwise be keying every real client behind the proxy under
+    # one shared bucket (a trivial way for one user to lock out
+    # everyone else's login attempts). Set this to nginx's container
+    # IP or the Compose network's CIDR to restore real per-client
+    # limiting in that deployment - find it with `docker network
+    # inspect <project>_default` or by pinning nginx a static IP in
+    # the Compose network config. Deliberately NOT set by default
+    # here: guessing wrong would silently trust an untrusted peer's
+    # self-reported header, which is worse than today's "one shared
+    # bucket" behavior.
+    trusted_proxy_ips: list[str] = Field(
+        default=[],
+        alias="RATE_LIMIT_TRUSTED_PROXIES",
+    )
+
 # =============================================================================
 # Global Settings Instance
 # =============================================================================
@@ -571,6 +762,8 @@ class Settings(BaseModel):
     retrieval: RetrievalSettings = Field(default_factory=RetrievalSettings)
     speech: SpeechSettings = Field(default_factory=SpeechSettings)
     chapter: ChapterSettings = Field(default_factory=ChapterSettings)
+    summary: SummarySettings = Field(default_factory=SummarySettings)
+    translation: TranslationSettings = Field(default_factory=TranslationSettings)
     quiz: QuizSettings = Field(default_factory=QuizSettings)
     flashcard: FlashcardSettings = Field(default_factory=FlashcardSettings)
     knowledge_graph: KnowledgeGraphSettings = Field(default_factory=KnowledgeGraphSettings)
@@ -579,6 +772,45 @@ class Settings(BaseModel):
     celery: CelerySettings = Field(default_factory=CelerySettings)
     metrics: MetricsSettings = Field(default_factory=MetricsSettings)
     storage: StorageSettings = Field(default_factory=StorageSettings)
+    rate_limit: RateLimitSettings = Field(default_factory=RateLimitSettings)
+
+    @model_validator(mode="after")
+    def reject_placeholder_secret_key_in_production(self) -> "Settings":
+        """
+        SecuritySettings.secret_key's min_length=32 only proves the
+        value is long enough - it cannot prove it is actually secret.
+        `.env.example`'s own "CHANGE_ME_TO_A_LONG_RANDOM_VALUE" is
+        exactly 32 characters, so it passes that check while being a
+        publicly-known value in this repo's own history: an operator
+        who copies .env.example to .env/.env.production without
+        changing SECRET_KEY would otherwise deploy a production
+        instance signing every JWT (including media tokens) with a
+        secret anyone can read on GitHub.
+
+        Only enforced when ENVIRONMENT=production - development/
+        testing keep working with any placeholder, since that is
+        exactly what local development uses .env.example's defaults
+        for.
+        """
+        if self.app.environment != "production":
+            return self
+
+        lowered = self.security.secret_key.lower()
+
+        if any(
+            marker in lowered
+            for marker in _PLACEHOLDER_SECRET_KEY_MARKERS
+        ):
+            raise ValueError(
+                "SECRET_KEY looks like a placeholder/example value "
+                "(matches a known marker such as 'CHANGE_ME' or "
+                "'example'). Refusing to start with ENVIRONMENT="
+                "production and an unchanged example secret - "
+                "generate a real random value (e.g. `openssl rand "
+                "-hex 32`) and set it as SECRET_KEY before deploying."
+            )
+
+        return self
 
 @lru_cache
 def get_settings() -> Settings:

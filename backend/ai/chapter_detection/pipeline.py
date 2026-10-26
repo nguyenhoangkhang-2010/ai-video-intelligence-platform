@@ -47,9 +47,9 @@ class ChapterTopicPipeline:
         if (
             topic_segmenter is None or chapter_detector is None
         ) and settings.chapter.use_embedding_segmentation:
-            from ai.embedding.embedder import Embedder
+            from ai.embedding.factory import get_embedding_provider
 
-            shared_embedder = Embedder()
+            shared_embedder = get_embedding_provider()
 
         self.topic_segmenter = (
             topic_segmenter

@@ -40,3 +40,11 @@ class SummaryRepository(BaseRepository[Summary]):
             )
             .first()
         )
+
+    def update(
+        self,
+        summary: Summary,
+    ) -> Summary:
+        self.db.commit()
+        self.db.refresh(summary)
+        return summary

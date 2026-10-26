@@ -56,9 +56,9 @@ class ChapterDetector:
             # always use the fallback") always wins over settings.
             self.embedder = embedder
         elif settings.chapter.use_embedding_segmentation:
-            from ai.embedding.embedder import Embedder
+            from ai.embedding.factory import get_embedding_provider
 
-            self.embedder = Embedder()
+            self.embedder = get_embedding_provider()
         else:
             self.embedder = None
 
@@ -95,11 +95,13 @@ class ChapterDetector:
             )
 
             title = self._label(group, segments)
+            summary = self._summarize(group, segments)
 
             chapters.append(
                 Chapter(
                     id=f"chapter-{position}",
                     title=title,
+                    summary=summary,
                     topics=tuple(group),
                     segment_indices=segment_indices,
                 )
@@ -188,6 +190,25 @@ class ChapterDetector:
         words = text.strip().split()
         snippet = " ".join(words[:8])
         return snippet or "Untitled Chapter"
+
+    def _summarize(
+        self,
+        group: list[Topic],
+        segments: list[SpeechSegment],
+    ) -> str | None:
+        # No non-LLM fallback here, unlike _label: a word-snippet
+        # summary would just duplicate the title's own fallback, so a
+        # chapter without an LLM labeler simply has no summary (never
+        # fabricated) - see ChapterLabeler.summarize's docstring.
+        if self.labeler is None:
+            return None
+
+        text = " ".join(
+            self._representative_text(topic, segments)
+            for topic in group
+        )
+
+        return self.labeler.summarize(text)
 
     @staticmethod
     def _representative_text(

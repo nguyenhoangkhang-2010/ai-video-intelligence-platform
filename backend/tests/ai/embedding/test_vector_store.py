@@ -207,3 +207,78 @@ def test_metadata_stays_consistent_with_index_across_reload(vector_store_factory
     for vector_id in ["id-0", "id-1", "id-3", "id-4", "id-5"]:
         assert reloaded.metadata.exists(vector_id)
     assert not reloaded.metadata.exists("id-2")
+
+
+def test_check_consistency_reports_clean_when_both_sides_match(vector_store_factory):
+    store = vector_store_factory()
+    store.add(
+        vectors=[_vec(1, 1, 1, 1), _vec(2, 2, 2, 2)],
+        vector_ids=["a", "b"],
+    )
+
+    report = store.check_consistency(db_vector_ids={"a", "b"})
+
+    assert report == {
+        "faiss_only": [],
+        "db_only": [],
+        "faiss_total": 2,
+        "db_total": 2,
+    }
+
+
+def test_check_consistency_reports_faiss_only_drift(vector_store_factory):
+    """
+    FAISS holds a vector no DB row references - e.g. the DB-side
+    write of embedding_stage's atomic replace rolled back after FAISS
+    had already committed the new vectors.
+    """
+    store = vector_store_factory()
+    store.add(
+        vectors=[_vec(1, 1, 1, 1), _vec(2, 2, 2, 2)],
+        vector_ids=["a", "orphaned-in-faiss"],
+    )
+
+    report = store.check_consistency(db_vector_ids={"a"})
+
+    assert report["faiss_only"] == ["orphaned-in-faiss"]
+    assert report["db_only"] == []
+
+
+def test_check_consistency_reports_db_only_drift(vector_store_factory):
+    """
+    A DB row references a vector_id FAISS does not have - e.g. the
+    DB rolled back to its OLD rows after FAISS had already replaced
+    them with new ones. That video is unsearchable until reprocessed.
+    """
+    store = vector_store_factory()
+    store.add(
+        vectors=[_vec(1, 1, 1, 1)],
+        vector_ids=["a"],
+    )
+
+    report = store.check_consistency(db_vector_ids={"a", "missing-from-faiss"})
+
+    assert report["faiss_only"] == []
+    assert report["db_only"] == ["missing-from-faiss"]
+
+
+def test_check_consistency_reloads_metadata_from_disk(vector_store_factory):
+    """
+    A second VectorStore instance (simulating a different process)
+    must see the first instance's committed writes, not stale
+    in-memory state from its own construction.
+    """
+    store = vector_store_factory()
+    store.add(vectors=[_vec(1, 1, 1, 1)], vector_ids=["a"])
+
+    other_process_store = vector_store_factory()
+    store.add(vectors=[_vec(2, 2, 2, 2)], vector_ids=["b"])
+
+    report = other_process_store.check_consistency(db_vector_ids={"a", "b"})
+
+    assert report == {
+        "faiss_only": [],
+        "db_only": [],
+        "faiss_total": 2,
+        "db_total": 2,
+    }

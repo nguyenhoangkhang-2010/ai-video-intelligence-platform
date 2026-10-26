@@ -45,3 +45,23 @@ class QuizService:
         return self.repository.create(
             quiz,
         )
+
+    def replace_for_video(
+        self,
+        video_id: int,
+        quizzes_data: list[QuizCreate],
+    ) -> list[Quiz]:
+        """
+        Atomically replace every quiz row for `video_id` with
+        `quizzes_data` - see QuizRepository.replace_for_video for the
+        consistency guarantee this provides.
+        """
+        new_rows = [
+            Quiz(**data.model_dump())
+            for data in quizzes_data
+        ]
+
+        return self.repository.replace_for_video(
+            video_id,
+            new_rows,
+        )
