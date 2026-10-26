@@ -465,7 +465,7 @@ class RetrievalSettings(BaseConfig):
     """Retrieval and reranking configuration."""
 
     cross_encoder_model: str = Field(
-        default="cross-encoder/ms-marco-MiniLM-L-6-v2",
+        default="cross-encoder/mmarco-mMiniLMv2-L12-H384-v1",
         alias="CROSS_ENCODER_MODEL",
     )
 

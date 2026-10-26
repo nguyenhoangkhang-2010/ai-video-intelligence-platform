@@ -18,7 +18,7 @@ flowchart TD
         Sparse["SparseRetriever<br/>BM25 over this video's chunks"]
         Dense --> RRF["HybridRetriever<br/>Reciprocal Rank Fusion<br/>(settings.retrieval.hybrid_enabled, default on)"]
         Sparse --> RRF
-        RRF --> Rerank["CrossEncoderReranker<br/>ms-marco-MiniLM-L-6-v2<br/>(settings.retrieval.reranking_enabled, default on;<br/>loaded once per process, cached;<br/>graceful no-op fallback if the model can't load)"]
+        RRF --> Rerank["CrossEncoderReranker<br/>mmarco-mMiniLMv2-L12-H384-v1<br/>(settings.retrieval.reranking_enabled, default on;<br/>loaded once per process, cached;<br/>graceful no-op fallback if the model can't load)"]
     end
 
     Retrieve --> Found{"Any relevant chunks<br/>survive reranking?"}

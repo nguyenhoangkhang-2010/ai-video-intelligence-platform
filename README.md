@@ -135,7 +135,8 @@ Query (video-scoped)
   → Sparse retrieval (BM25 over this video's own chunks)
   → Reciprocal Rank Fusion (rank-based, not raw-score blending —
     dense distance and BM25 score live on incomparable scales)
-  → Cross-encoder reranking (ms-marco-MiniLM-L-6-v2; loaded once per
+  → Cross-encoder reranking (multilingual mmarco-mMiniLMv2-L12-H384-v1,
+    chosen by docs/benchmarks/reranker-vi.md; loaded once per
     process and cached; if the model can't load, RAG falls back to
     hybrid retrieval with no reranking rather than failing the request)
   → Grounded answer (Ollama), or one of three honest non-answers:

@@ -32,6 +32,7 @@ docs/benchmarks/rag-evaluation.md for the full writeup and caveats.
 Usage (from backend/, PYTHONPATH set so `app`/`ai` are importable):
     python scripts/benchmark_rag_retrieval.py
 """
+import argparse
 import json
 import logging
 import time
@@ -100,7 +101,10 @@ class _PooledEmbeddingRepository:
         return getattr(self._real, name)
 
 
-def _build_pipelines(repository: _PooledEmbeddingRepository):
+def _build_pipelines(
+    repository: _PooledEmbeddingRepository,
+    reranker_models: list[str | None],
+):
     semantic_search_service = SemanticSearchService(
         embedding_repository=repository,
     )
@@ -114,25 +118,61 @@ def _build_pipelines(repository: _PooledEmbeddingRepository):
         "hybrid": RetrievalPipeline(retriever=hybrid),
     }
 
-    try:
-        from ai.reranking.cross_encoder import CrossEncoderReranker
+    # One "hybrid + reranking" arm per reranker model (None = the
+    # configured CROSS_ENCODER_MODEL), so models can be compared on the
+    # same real queries.
+    for model_name in reranker_models:
+        arm = (
+            "hybrid_plus_reranking"
+            if model_name is None
+            else f"rerank:{model_name.split('/')[-1]}"
+        )
+        try:
+            from ai.reranking.cross_encoder import CrossEncoderReranker
 
-        reranker = CrossEncoderReranker()
-        pipelines["hybrid_plus_reranking"] = RetrievalPipeline(
-            retriever=hybrid, reranker=reranker,
-        )
-    except Exception:
-        logger.warning(
-            "Cross-encoder reranker unavailable - skipping the "
-            "hybrid_plus_reranking arm.",
-            exc_info=True,
-        )
+            reranker = CrossEncoderReranker(model_name=model_name)
+            pipelines[arm] = RetrievalPipeline(
+                retriever=hybrid, reranker=reranker,
+            )
+        except Exception:
+            logger.warning(
+                "Cross-encoder reranker %s unavailable - skipping the "
+                "%s arm.",
+                model_name or "(configured)",
+                arm,
+                exc_info=True,
+            )
 
     return pipelines
 
 
 def main() -> None:
-    fixture = json.loads(FIXTURE_PATH.read_text(encoding="utf-8"))
+    parser = argparse.ArgumentParser(
+        description="Score the real retrieval stack against a ground-truth fixture.",
+    )
+    parser.add_argument(
+        "--fixture",
+        type=Path,
+        default=FIXTURE_PATH,
+        help=(
+            "documents/queries JSON (default: real_ground_truth.json). "
+            "Use a human-reviewed set from scripts/review_eval_questions.py."
+        ),
+    )
+    parser.add_argument(
+        "--reranker-models",
+        default="",
+        help=(
+            "comma-separated cross-encoder models to compare; empty = "
+            "only the configured CROSS_ENCODER_MODEL"
+        ),
+    )
+    args = parser.parse_args()
+    reranker_models: list[str | None] = [
+        name.strip() for name in args.reranker_models.split(",") if name.strip()
+    ] or [None]
+
+    fixture = json.loads(args.fixture.read_text(encoding="utf-8"))
     documents = fixture["documents"]
     queries = fixture["queries"]
     vector_ids = [doc["vector_id"] for doc in documents]
@@ -140,7 +180,7 @@ def main() -> None:
     db = SessionLocal()
     try:
         repository = _PooledEmbeddingRepository(db, vector_ids)
-        pipelines = _build_pipelines(repository)
+        pipelines = _build_pipelines(repository, reranker_models)
 
         metrics = [
             PrecisionAtK(TOP_K),
