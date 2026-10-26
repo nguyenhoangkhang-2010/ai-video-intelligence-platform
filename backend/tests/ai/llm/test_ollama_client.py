@@ -107,3 +107,32 @@ def test_generate_raises_llm_unavailable_error_on_http_error_status():
             _client().generate("prompt")
 
     assert post.call_count == 1
+
+
+# ---- reasoning ("thinking") mode ----
+
+@pytest.mark.parametrize("think", [False, True])
+def test_generate_sends_configured_think_option(monkeypatch, think):
+    monkeypatch.setattr("ai.llm.ollama_client.settings.llm.think", think)
+    with patch("ai.llm.ollama_client.requests.post", return_value=_ok_response()) as post:
+        _client().generate("prompt")
+
+    assert post.call_args.kwargs["json"]["think"] is think
+
+
+def test_generate_omits_think_option_when_unset(monkeypatch):
+    monkeypatch.setattr("ai.llm.ollama_client.settings.llm.think", None)
+    with patch("ai.llm.ollama_client.requests.post", return_value=_ok_response()) as post:
+        _client().generate("prompt")
+
+    assert "think" not in post.call_args.kwargs["json"]
+
+
+def test_think_defaults_off_and_empty_env_means_unset(monkeypatch):
+    from app.config.settings import LLMSettings
+
+    monkeypatch.delenv("OLLAMA_THINK", raising=False)
+    assert LLMSettings().think is False
+
+    monkeypatch.setenv("OLLAMA_THINK", "")
+    assert LLMSettings().think is None

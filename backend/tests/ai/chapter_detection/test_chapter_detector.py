@@ -33,7 +33,7 @@ def test_detect_groups_similar_adjacent_topics_into_one_chapter():
     embedder.embed_query.side_effect = lambda text: vectors[text]
 
     labeler = MagicMock()
-    labeler.label.return_value = "A Chapter"
+    labeler.describe.return_value = ("A Chapter", None)
 
     detector = ChapterDetector(
         embedder=embedder, labeler=labeler,
@@ -53,7 +53,7 @@ def test_detect_never_produces_overlapping_chapters():
     embedder = MagicMock()
     embedder.embed_query.side_effect = lambda text: [1.0, 0.0]
     labeler = MagicMock()
-    labeler.label.return_value = "Chapter"
+    labeler.describe.return_value = ("Chapter", None)
 
     detector = ChapterDetector(
         embedder=embedder, labeler=labeler, max_topics_per_chapter=1,
@@ -74,7 +74,7 @@ def test_detect_respects_max_topics_per_chapter():
     embedder = MagicMock()
     embedder.embed_query.side_effect = lambda text: [1.0, 0.0]  # all similar
     labeler = MagicMock()
-    labeler.label.return_value = "Chapter"
+    labeler.describe.return_value = ("Chapter", None)
 
     detector = ChapterDetector(
         embedder=embedder, labeler=labeler,
@@ -90,14 +90,14 @@ def test_detect_uses_labeler_for_chapter_titles():
     embedder = MagicMock()
     embedder.embed_query.side_effect = lambda text: [1.0, 0.0]
     labeler = MagicMock()
-    labeler.label.return_value = "Generated Title"
+    labeler.describe.return_value = ("Generated Title", None)
 
     detector = ChapterDetector(embedder=embedder, labeler=labeler)
 
     chapters = detector.detect(_topics()[:1], _segments())
 
     assert chapters[0].title == "Generated Title"
-    labeler.label.assert_called_once_with("alpha")
+    labeler.describe.assert_called_once_with("alpha")
 
 
 def test_detect_falls_back_to_snippet_title_when_no_labeler():
@@ -116,15 +116,16 @@ def test_detect_uses_labeler_for_chapter_summaries():
     embedder = MagicMock()
     embedder.embed_query.side_effect = lambda text: [1.0, 0.0]
     labeler = MagicMock()
-    labeler.label.return_value = "Generated Title"
-    labeler.summarize.return_value = "Generated summary."
+    labeler.describe.return_value = ("Generated Title", "Generated summary.")
 
     detector = ChapterDetector(embedder=embedder, labeler=labeler)
 
     chapters = detector.detect(_topics()[:1], _segments())
 
     assert chapters[0].summary == "Generated summary."
-    labeler.summarize.assert_called_once_with("alpha")
+    labeler.describe.assert_called_once_with("alpha")
+    labeler.label.assert_not_called()
+    labeler.summarize.assert_not_called()
 
 
 def test_detect_leaves_summary_none_when_no_labeler():
@@ -141,7 +142,7 @@ def test_detect_falls_back_to_windowed_grouping_when_no_embedder():
     detector = ChapterDetector(
         embedder=None, labeler=MagicMock(), max_topics_per_chapter=2,
     )
-    detector.labeler.label.return_value = "Chapter"
+    detector.labeler.describe.return_value = ("Chapter", None)
 
     chapters = detector.detect(_topics(), _segments())
 

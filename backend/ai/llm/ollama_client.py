@@ -83,13 +83,25 @@ class OllamaClient:
         """
         return requests.post(
             f"{self.base_url}/api/generate",
-            json={
-                "model": self.model,
-                "prompt": prompt,
-                "stream": False,
-            },
+            json=self._request_body(prompt, stream=False),
             timeout=settings.llm.request_timeout_seconds,
         )
+
+    def _request_body(
+        self,
+        prompt: str,
+        stream: bool,
+    ) -> dict:
+        body = {
+            "model": self.model,
+            "prompt": prompt,
+            "stream": stream,
+        }
+        # settings.llm.think: False/True is sent as-is; None omits the
+        # option for models or Ollama versions that don't accept it.
+        if settings.llm.think is not None:
+            body["think"] = settings.llm.think
+        return body
 
     def generate(
         self,
@@ -157,11 +169,7 @@ class OllamaClient:
         """
         return requests.post(
             f"{self.base_url}/api/generate",
-            json={
-                "model": self.model,
-                "prompt": prompt,
-                "stream": True,
-            },
+            json=self._request_body(prompt, stream=True),
             timeout=(10, settings.llm.request_timeout_seconds),
             stream=True,
         )

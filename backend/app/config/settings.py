@@ -12,7 +12,7 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Literal
 
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 # =============================================================================
@@ -250,6 +250,22 @@ class LLMSettings(BaseConfig):
         default=300,
         alias="OLLAMA_TIMEOUT_SECONDS",
     )
+
+    # Reasoning ("thinking") mode for models that have one (qwen3).
+    # Off by default: every generator in this project wants the final
+    # answer only, and on CPU the hidden reasoning tokens cost ~2.8x
+    # wall time per call (docs/benchmarks/pipeline-performance.md).
+    # Leave empty (OLLAMA_THINK=) to not send the option at all, for
+    # models/Ollama versions that reject it.
+    think: bool | None = Field(
+        default=False,
+        alias="OLLAMA_THINK",
+    )
+
+    @field_validator("think", mode="before")
+    @classmethod
+    def _empty_think_means_unset(cls, value):
+        return None if isinstance(value, str) and not value.strip() else value
 
 # =============================================================================
 # Speech Intelligence

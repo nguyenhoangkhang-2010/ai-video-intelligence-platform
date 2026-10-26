@@ -119,3 +119,50 @@ def test_summarize_truncates_text_before_building_the_prompt():
     prompt = llm_client.generate.call_args.args[0]
     assert "0123456789" in prompt
     assert "0123456789" * 2 not in prompt
+
+
+# ---- describe: title + summary from one generation ----
+
+def test_describe_makes_one_call_for_title_and_summary():
+    llm_client = MagicMock()
+    llm_client.generate.return_value = '```json\n{"title": "Lạm phát", "summary": "Giải thích lạm phát."}\n```'
+
+    labeler = ChapterLabeler(llm_client=llm_client)
+
+    assert labeler.describe("unique marker phrase xyz") == ("Lạm phát", "Giải thích lạm phát.")
+    assert llm_client.generate.call_count == 1
+    assert "unique marker phrase xyz" in llm_client.generate.call_args.args[0]
+
+
+def test_describe_missing_summary_is_none():
+    llm_client = MagicMock()
+    llm_client.generate.return_value = '{"title": "Only a title", "summary": ""}'
+
+    assert ChapterLabeler(llm_client=llm_client).describe("text") == ("Only a title", None)
+
+
+def test_describe_falls_back_to_separate_calls_on_unusable_output():
+    llm_client = MagicMock()
+    llm_client.generate.side_effect = ["not json at all", "Separate Title", "Separate summary."]
+
+    labeler = ChapterLabeler(llm_client=llm_client)
+
+    assert labeler.describe("some content") == ("Separate Title", "Separate summary.")
+    assert llm_client.generate.call_count == 3
+
+
+def test_describe_does_not_retry_when_the_llm_fails():
+    llm_client = MagicMock()
+    llm_client.generate.side_effect = RuntimeError("ollama down")
+
+    labeler = ChapterLabeler(llm_client=llm_client)
+
+    assert labeler.describe("fallback content here") == ("fallback content here", None)
+    assert llm_client.generate.call_count == 1
+
+
+def test_describe_empty_text():
+    llm_client = MagicMock()
+
+    assert ChapterLabeler(llm_client=llm_client).describe("  ") == ("Untitled", None)
+    llm_client.generate.assert_not_called()

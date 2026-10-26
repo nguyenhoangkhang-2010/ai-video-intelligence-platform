@@ -2,8 +2,15 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from ai.speech.faster_whisper import FasterWhisperTranscriber
+from ai.speech.faster_whisper import FasterWhisperTranscriber, clear_model_cache
 from app.config.settings import settings
+
+
+@pytest.fixture(autouse=True)
+def _fresh_model_cache():
+    clear_model_cache()
+    yield
+    clear_model_cache()
 
 
 def _fake_segment(start, end, text, no_speech_prob=0.01):
@@ -109,3 +116,34 @@ def test_constructor_uses_settings_defaults_when_not_explicitly_given():
         device=settings.speech.device,
         compute_type=settings.speech.compute_type,
     )
+
+
+def test_model_is_loaded_once_per_process_and_reused():
+    with patch("ai.speech.faster_whisper.WhisperModel") as whisper_model_class:
+        first = FasterWhisperTranscriber(model_size="medium", device="cpu", compute_type="int8")
+        second = FasterWhisperTranscriber(model_size="medium", device="cpu", compute_type="int8")
+
+    whisper_model_class.assert_called_once()
+    assert second.model is first.model
+
+
+def test_different_model_settings_load_separately():
+    with patch("ai.speech.faster_whisper.WhisperModel") as whisper_model_class:
+        FasterWhisperTranscriber(model_size="small", device="cpu", compute_type="int8")
+        FasterWhisperTranscriber(model_size="medium", device="cpu", compute_type="int8")
+
+    assert whisper_model_class.call_count == 2
+
+
+def test_cached_cuda_fallback_keeps_reporting_cpu():
+    def fake_whisper_model(model_size, device, compute_type):
+        if device == "cuda":
+            raise RuntimeError("no CUDA runtime available")
+        return MagicMock(name="cpu_model")
+
+    with patch("ai.speech.faster_whisper.WhisperModel", side_effect=fake_whisper_model) as whisper_model_class:
+        FasterWhisperTranscriber(device="cuda")
+        again = FasterWhisperTranscriber(device="cuda")
+
+    assert again.device == "cpu"
+    assert whisper_model_class.call_count == 2  # cuda attempt + cpu, only the first time

@@ -94,8 +94,7 @@ class ChapterDetector:
                 )
             )
 
-            title = self._label(group, segments)
-            summary = self._summarize(group, segments)
+            title, summary = self._describe(group, segments)
 
             chapters.append(
                 Chapter(
@@ -174,41 +173,29 @@ class ChapterDetector:
             for i in range(0, len(topics), self.max_topics_per_chapter)
         ]
 
-    def _label(
+    def _describe(
         self,
         group: list[Topic],
         segments: list[SpeechSegment],
-    ) -> str:
+    ) -> tuple[str, str | None]:
+        """
+        (title, summary) for one chapter. With an LLM labeler this is a
+        single generation (ChapterLabeler.describe). Without one, the
+        title is the first few words and there is no summary: a
+        word-snippet summary would just duplicate the title, so it is
+        never fabricated - see ChapterLabeler.summarize's docstring.
+        """
         text = " ".join(
             self._representative_text(topic, segments)
             for topic in group
         )
 
         if self.labeler is not None:
-            return self.labeler.label(text)
+            return self.labeler.describe(text)
 
         words = text.strip().split()
         snippet = " ".join(words[:8])
-        return snippet or "Untitled Chapter"
-
-    def _summarize(
-        self,
-        group: list[Topic],
-        segments: list[SpeechSegment],
-    ) -> str | None:
-        # No non-LLM fallback here, unlike _label: a word-snippet
-        # summary would just duplicate the title's own fallback, so a
-        # chapter without an LLM labeler simply has no summary (never
-        # fabricated) - see ChapterLabeler.summarize's docstring.
-        if self.labeler is None:
-            return None
-
-        text = " ".join(
-            self._representative_text(topic, segments)
-            for topic in group
-        )
-
-        return self.labeler.summarize(text)
+        return snippet or "Untitled Chapter", None
 
     @staticmethod
     def _representative_text(

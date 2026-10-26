@@ -8,6 +8,20 @@ from app.config.settings import settings
 
 logger = logging.getLogger(__name__)
 
+# One loaded model per worker process, keyed by what was requested.
+# A new FasterWhisperTranscriber is built for every video the worker
+# processes (the pipeline is constructed per Celery task), and loading
+# `medium` from disk costs seconds and ~1.5 GB of churn each time.
+# Reusing the loaded model is safe: one worker runs one task at a time
+# (CELERY_WORKER_CONCURRENCY / prefork), so it is never shared between
+# concurrent transcriptions.
+_MODEL_CACHE: dict[tuple[str, str, str], tuple[WhisperModel, str]] = {}
+
+
+def clear_model_cache() -> None:
+    """Drop cached models (tests; or to free memory)."""
+    _MODEL_CACHE.clear()
+
 
 class FasterWhisperTranscriber(BaseTranscriber):
     """
@@ -47,10 +61,19 @@ class FasterWhisperTranscriber(BaseTranscriber):
             or settings.speech.compute_type
         )
 
-        self.model, self.device = self._load_model(
-            requested_device,
-            requested_compute_type,
-        )
+        key = (self.model_size, requested_device, requested_compute_type)
+        if key not in _MODEL_CACHE:
+            _MODEL_CACHE[key] = self._load_model(
+                requested_device,
+                requested_compute_type,
+            )
+        else:
+            logger.info(
+                "Reusing loaded Whisper model (model=%s, device=%s)",
+                self.model_size,
+                _MODEL_CACHE[key][1],
+            )
+        self.model, self.device = _MODEL_CACHE[key]
 
     def _load_model(
         self,
