@@ -1,64 +1,64 @@
 import Link from "next/link";
 
+import { DialRing } from "@/components/dial/DialRing";
 import { Icon } from "@/components/ui/Icon";
 import { VideoStatusBadge } from "@/components/ui/StatusBadge";
+import { dialToneFor } from "@/components/video/VideoDial";
 import { VideoThumbnail } from "@/components/video/VideoThumbnail";
 import { ROUTES } from "@/lib/constants";
 import { formatRelativeTime, formatTimecode } from "@/lib/utils";
 import type { Video } from "@/types/video";
 
 /**
- * The library's editorial lead — the most recent upload, given real
- * visual weight instead of sitting as one more tile in a uniform
- * grid. Shows this video's real, extracted frame when one exists (see
- * VideoThumbnail); otherwise the media surface stays the same honest
- * abstract pattern it's always used — never dressed up to look like a
- * real video frame.
+ * The library's lead piece - the most recent upload, presented like
+ * the watch on the winder's centre cushion: a large dial with the real
+ * extracted frame set into the face, next to its engraved details.
+ * Shows a real frame only when one exists (see VideoThumbnail).
  */
 export function FeaturedVideo({ video }: { video: Video }) {
   return (
     <Link
       href={ROUTES.video(video.id)}
-      className="group relative flex flex-col overflow-hidden rounded-2xl border border-border bg-surface transition-colors duration-base hover:border-border-strong md:flex-row"
+      className="group grid grid-cols-1 items-center gap-8 border-y-2 border-text-primary py-8 md:grid-cols-[minmax(0,320px)_1fr] md:gap-12"
     >
-      <div className="relative aspect-video shrink-0 overflow-hidden md:aspect-auto md:w-[46%]">
-        <div
-          className="absolute inset-0 bg-[radial-gradient(ellipse_at_30%_20%,rgb(var(--color-surface-elevated))_0%,rgb(var(--color-surface-sunken))_75%)]"
-          aria-hidden="true"
-        />
-        {/*
-         * rs_video_frame.glb moved to the real Workspace video player
-         * (see app/(app)/videos/[id]/page.tsx) - it now wraps the video
-         * that's actually playing there, instead of decorating this
-         * card. VideoThumbnail below renders this card's own real,
-         * extracted frame when one exists; it's a plain 2D image,
-         * never a WebGL surface.
-         */}
-        <VideoThumbnail video={video} patternSpacing={34} />
-        <span className="absolute left-4 top-4 rounded-full bg-bg/60 backdrop-blur-[2px]">
-          <VideoStatusBadge status={video.status} />
-        </span>
-        <span className="absolute inset-0 flex items-center justify-center">
-          <span className="flex h-16 w-16 items-center justify-center rounded-full bg-bg/60 text-text-primary backdrop-blur-sm transition-transform duration-base group-hover:scale-105">
-            <Icon name="play" size={26} />
+      <div className="mx-auto aspect-square w-full max-w-[320px]">
+        <DialRing progress={1} tone={dialToneFor(video)} ticks={60} caseWidth={4} emphasized>
+          <span className="absolute inset-[15%] overflow-hidden rounded-full bg-surface">
+            <VideoThumbnail video={video} patternSpacing={22} />
+            <span className="absolute inset-0 flex items-center justify-center">
+              <span className="flex h-14 w-14 items-center justify-center rounded-full bg-lume text-lume-on transition-transform duration-base group-hover:scale-110">
+                <Icon name="play" size={22} />
+              </span>
+            </span>
           </span>
-        </span>
+        </DialRing>
       </div>
 
-      <div className="flex flex-1 flex-col justify-center gap-3 p-7 md:p-9">
-        <p className="text-label font-medium uppercase tracking-[0.14em] text-ai">Most recent</p>
-        <h2 className="font-display text-heading-lg font-semibold leading-snug text-text-primary" title={video.title}>
+      <div className="flex flex-col gap-4">
+        <div className="flex items-center gap-3">
+          <p className="index-label text-accent">Most recent</p>
+          <VideoStatusBadge status={video.status} />
+        </div>
+        <h2 className="font-display text-display font-semibold leading-tight text-text-primary" title={video.title}>
           {video.title}
         </h2>
-        <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 text-body-sm text-text-muted">
-          <span>{formatRelativeTime(video.created_at)}</span>
+        <dl className="grid max-w-md grid-cols-2 border-t border-text-primary/30 pt-4">
+          <div>
+            <dt className="index-label text-text-muted">Added</dt>
+            <dd className="mt-1 text-body-sm text-text-primary">{formatRelativeTime(video.created_at)}</dd>
+          </div>
           {video.duration > 0 && (
-            <span className="font-mono">{formatTimecode(video.duration)}</span>
+            <div>
+              <dt className="index-label text-text-muted">Runs</dt>
+              <dd className="mt-1 font-mono text-body-sm text-text-primary">{formatTimecode(video.duration)}</dd>
+            </div>
           )}
-        </div>
-        <span className="mt-2 inline-flex w-fit items-center gap-1.5 text-body-sm font-medium text-text-primary transition-colors duration-fast group-hover:text-accent-hover">
-          Open workspace
-          <Icon name="chevron-right" size={15} />
+        </dl>
+        <span className="mt-1 inline-flex w-fit items-center gap-2 text-body-sm font-semibold text-text-primary">
+          <span className="border-b-2 border-lume pb-0.5 transition-colors duration-fast group-hover:text-accent">
+            Open workspace
+          </span>
+          <Icon name="arrow-right" size={15} />
         </span>
       </div>
     </Link>

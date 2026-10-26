@@ -22,6 +22,43 @@ const HEAD_PITCH_LIMIT = THREE.MathUtils.degToRad(8);
 const EYE_YAW_LIMIT = THREE.MathUtils.degToRad(10);
 const EYE_PITCH_LIMIT = THREE.MathUtils.degToRad(6);
 
+/**
+ * nova.glb ships with a near-black suit/visor, a teal signal and a
+ * violet cheek glow - the old palette. Re-tint this instance's own
+ * material copies (never the cached originals) to the Chronograph
+ * palette: plum-ink suit and visor, amber lume eyes, carmine cheeks.
+ */
+const NOVA_TINT: Record<string, { color: string; emissive?: string }> = {
+  M_Shell: { color: "#E6E8E5" },
+  M_Suit: { color: "#3D3442" },
+  M_Visor: { color: "#2E2833" },
+  M_Signal: { color: "#E0A526", emissive: "#E0A526" },
+  M_Cheek: { color: "#A3243B", emissive: "#A3243B" },
+};
+
+function recolorNova(root: THREE.Group): THREE.Group {
+  const copies = new Map<THREE.Material, THREE.Material>();
+  root.traverse((object) => {
+    const mesh = object as THREE.Mesh;
+    if (!mesh.isMesh) return;
+    const swap = (material: THREE.Material) => {
+      const tint = NOVA_TINT[material.name];
+      if (!tint || !(material instanceof THREE.MeshStandardMaterial)) return material;
+      let copy = copies.get(material);
+      if (!copy) {
+        const next = material.clone();
+        next.color.set(tint.color);
+        if (tint.emissive) next.emissive.set(tint.emissive);
+        copies.set(material, next);
+        copy = next;
+      }
+      return copy;
+    };
+    mesh.material = Array.isArray(mesh.material) ? mesh.material.map(swap) : swap(mesh.material);
+  });
+  return root;
+}
+
 interface NovaModelProps {
   state: NovaState;
   /** Cursor/head-tracking layer - off in reduced-motion mode. */
@@ -63,7 +100,7 @@ export function NovaModel({ state, trackPointer = true, onGestureEnd, externalPo
   // touch bones nothing else can reach. Plain Object3D.clone() would
   // NOT work here - it doesn't re-bind SkinnedMesh -> Skeleton -> bone
   // references, so SkeletonUtils.clone is required.
-  const scene = useMemo(() => SkeletonUtils.clone(sharedScene) as THREE.Group, [sharedScene]);
+  const scene = useMemo(() => recolorNova(SkeletonUtils.clone(sharedScene) as THREE.Group), [sharedScene]);
 
   // Rest-pose quaternions for the 3 bones the look layer ever touches,
   // captured once from this fresh clone before any AnimationMixer has

@@ -14,13 +14,15 @@ import type { VideoStatus } from "@/types/video";
 // Nova's own color rather than competing with genuine warnings.
 export type Tone = "neutral" | "info" | "progress" | "success" | "error" | "ai";
 
+// Each badge reads like a watch's date window: a small framed
+// aperture with printed capitals and a square index pip.
 const toneClasses: Record<Tone, string> = {
-  neutral: "bg-surface-elevated text-text-secondary border-border-strong",
-  info: "bg-info-muted text-info border-info/30",
-  progress: "bg-ai-muted text-ai border-ai-border",
-  success: "bg-success-muted text-success border-success/30",
-  error: "bg-error-muted text-error border-error/30",
-  ai: "bg-ai-muted text-ai border-ai-border",
+  neutral: "bg-surface-elevated text-text-secondary border-text-primary/40",
+  info: "bg-surface-elevated text-info border-info/60",
+  progress: "bg-surface-elevated text-ai border-ai/70",
+  success: "bg-surface-elevated text-success border-success/60",
+  error: "bg-error-muted text-error border-error/70",
+  ai: "bg-surface-elevated text-ai border-ai/70",
 };
 
 const videoStatusTone: Record<VideoStatus, Tone> = {
@@ -62,14 +64,14 @@ export function BaseBadge({
   return (
     <span
       className={cn(
-        "inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-caption font-medium",
+        "index-label inline-flex items-center gap-1.5 whitespace-nowrap rounded-sm border px-2 py-[3px]",
         toneClasses[tone],
         className,
       )}
     >
       <span
         className={cn(
-          "h-1.5 w-1.5 rounded-full",
+          "h-1.5 w-1.5",
           tone === "neutral" && "bg-text-muted",
           tone === "info" && "bg-info",
           tone === "progress" && "bg-ai",

@@ -70,7 +70,7 @@ function NovaImpl({ state, className, onGestureEnd, externalPointer, shape = "ci
 function NovaFallbackGlyph() {
   return (
     <div className="flex h-full w-full items-center justify-center bg-surface-elevated">
-      <span className="h-3 w-3 rounded-full bg-ai shadow-[0_0_16px_4px_rgb(var(--color-ai)/0.55)]" />
+      <span className="h-3 w-3 rounded-full bg-ai" />
     </div>
   );
 }

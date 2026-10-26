@@ -47,7 +47,7 @@ export function NovaAmbient() {
 
   return (
     <div className="pointer-events-none fixed bottom-5 right-5 z-tooltip">
-      <div className="relative h-14 w-14 rounded-full bg-surface/80 shadow-lg ring-1 ring-black/[0.06] backdrop-blur-sm">
+      <div className="relative h-14 w-14 rounded-full border-[3px] border-case bg-surface-sunken">
         <Nova state={state} className="h-full w-full" externalPointer={getGlobalPointer()} />
       </div>
     </div>

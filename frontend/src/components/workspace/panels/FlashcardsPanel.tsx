@@ -3,8 +3,6 @@
 import { useEffect } from "react";
 
 import { FlashcardView } from "@/components/flashcards/FlashcardView";
-import { useAccentSlotClaim } from "@/components/3d/workspace3d/AccentSlotContext";
-import { Workspace3DObject } from "@/components/3d/workspace3d/Workspace3DObject";
 import { Button } from "@/components/ui/Button";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { ErrorState } from "@/components/ui/ErrorState";
@@ -23,11 +21,6 @@ export function FlashcardsPanel({ videoId, videoStatus }: { videoId: number; vid
   const exportFlashcards = useExportFlashcards(videoId);
   const total = flashcards.data?.length ?? 0;
   const study = useFlashcardStudy(total);
-  // Claims the shared Workspace accent slot only while the real
-  // completion accent is actually mounted below (see
-  // AccentSlotContext.tsx) - the same real condition the accent's own
-  // render guard uses.
-  useAccentSlotClaim(study.completed.size === total && total > 0);
 
   useEffect(() => {
     study.reset();
@@ -80,7 +73,11 @@ export function FlashcardsPanel({ videoId, videoStatus }: { videoId: number; vid
       <EmptyState
         icon="flashcard"
         title="No flashcards available"
-        description="Processing finished without producing flashcards for this video."
+        description={
+          videoStatus === "failed"
+            ? "Processing failed before flashcards could be generated — use Retry processing in the banner above."
+            : "Processing finished without producing flashcards for this video."
+        }
       />
     );
   }
@@ -115,7 +112,7 @@ export function FlashcardsPanel({ videoId, videoStatus }: { videoId: number; vid
             onClick={study.previous}
             disabled={study.isFirst}
             aria-label="Previous card"
-            className="flex h-9 w-9 items-center justify-center rounded-full border border-border-strong text-text-secondary enabled:hover:border-atmosphere enabled:hover:text-atmosphere disabled:opacity-30"
+            className="flex h-9 w-9 items-center justify-center rounded-full border-2 border-text-primary/60 bg-surface-elevated text-text-primary enabled:hover:border-atmosphere enabled:hover:text-atmosphere disabled:opacity-30"
           >
             <Icon name="chevron-left" size={16} />
           </button>
@@ -145,7 +142,7 @@ export function FlashcardsPanel({ videoId, videoStatus }: { videoId: number; vid
             onClick={study.next}
             disabled={study.isLast}
             aria-label="Next card"
-            className="flex h-9 w-9 items-center justify-center rounded-full border border-border-strong text-text-secondary enabled:hover:border-atmosphere enabled:hover:text-atmosphere disabled:opacity-30"
+            className="flex h-9 w-9 items-center justify-center rounded-full border-2 border-text-primary/60 bg-surface-elevated text-text-primary enabled:hover:border-atmosphere enabled:hover:text-atmosphere disabled:opacity-30"
           >
             <Icon name="chevron-right" size={16} />
           </button>
@@ -155,16 +152,7 @@ export function FlashcardsPanel({ videoId, videoStatus }: { videoId: number; vid
 
         {allCompleted && (
           <div className="flex animate-rise flex-col items-center gap-2">
-            {/*
-             * rs_flashcards.glb (ui-3d/README.md) - its real "Float"
-             * clip as a small completion accent, shown only once
-             * `study.completed` (real session state, every card this
-             * visit has actually been flipped) reaches the total -
-             * never a decorative default, only a genuine "you finished
-             * these" moment.
-             */}
-            <Workspace3DObject model="flashcards" loopClip="Float" className="h-20 w-20" />
-            <div className="flex items-center gap-2 rounded-full border border-warm/30 bg-warm-muted px-3 py-1.5 text-caption font-medium text-warm">
+            <div className="flex items-center gap-2 border border-text-primary bg-lume px-3 py-1.5 text-caption font-semibold text-lume-on shadow-step-ink">
               <Icon name="check" size={13} />
               You&apos;ve reviewed all {total} cards
             </div>

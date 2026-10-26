@@ -74,7 +74,11 @@ export function TranscriptPanel({ videoId, videoStatus }: { videoId: number; vid
       <EmptyState
         icon="transcript"
         title="No transcript available"
-        description="Processing finished without producing a transcript for this video."
+        description={
+          videoStatus === "failed"
+            ? "Processing failed before a transcript could be generated — use Retry processing in the banner above."
+            : "Processing finished without producing a transcript for this video."
+        }
       />
     );
   }

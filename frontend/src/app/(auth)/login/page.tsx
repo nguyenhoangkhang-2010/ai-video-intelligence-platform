@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useState, type FormEvent } from "react";
 
 import { useNovaAttention } from "@/components/3d/NovaAttentionContext";
-import { Button3D } from "@/components/3d/workspace3d/Button3D";
+import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { useAuth } from "@/hooks/useAuth";
 import { toApiError } from "@/lib/axios";
@@ -47,10 +47,11 @@ export default function LoginPage() {
 
   return (
     <div>
-      <h1 className="font-display text-heading-lg font-semibold text-text-primary">Welcome back</h1>
-      <p className="mt-1.5 text-body-sm text-text-muted">Sign in to continue to your workspace.</p>
+      <p className="index-label text-accent">Session · resume</p>
+      <h1 className="mt-2 font-display text-heading-lg font-semibold text-text-primary">Welcome back</h1>
+      <p className="mt-1.5 text-body-sm text-text-secondary">Sign in to continue to your workspace.</p>
 
-      <form onSubmit={handleSubmit} noValidate className="mt-7 flex flex-col gap-4">
+      <form onSubmit={handleSubmit} noValidate className="mt-6 flex flex-col gap-4">
         <Input
           label="Email"
           type="email"
@@ -71,19 +72,19 @@ export default function LoginPage() {
         />
 
         {formError && (
-          <p role="alert" className="rounded border border-error/30 bg-error-muted px-3 py-2 text-body-sm text-error">
+          <p role="alert" className="border-l-2 border-error bg-error-muted px-3 py-2 text-body-sm text-error">
             {formError}
           </p>
         )}
 
-        <Button3D glbModel="buttonPrimary" type="submit" isLoading={isSubmitting} fullWidth className="mt-1">
+        <Button type="submit" size="lg" isLoading={isSubmitting} fullWidth className="mt-2">
           Sign in
-        </Button3D>
+        </Button>
       </form>
 
-      <p className="mt-6 text-center text-body-sm text-text-muted">
+      <p className="mt-6 text-center text-body-sm text-text-secondary">
         Don&apos;t have an account?{" "}
-        <Link href={ROUTES.register} className="font-medium text-accent hover:text-accent-hover">
+        <Link href={ROUTES.register} className="font-medium text-accent underline underline-offset-4 hover:text-accent-hover">
           Create one
         </Link>
       </p>

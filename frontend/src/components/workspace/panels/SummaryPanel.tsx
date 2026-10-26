@@ -81,7 +81,11 @@ export function SummaryPanel({ videoId, videoStatus }: { videoId: number; videoS
       <EmptyState
         icon="summary"
         title="No summary available"
-        description="Processing finished without producing a summary for this video."
+        description={
+          videoStatus === "failed"
+            ? "Processing failed before a summary could be generated — use Retry processing in the banner above."
+            : "Processing finished without producing a summary for this video."
+        }
       />
     );
   }

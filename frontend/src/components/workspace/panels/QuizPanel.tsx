@@ -8,8 +8,6 @@ import { Icon } from "@/components/ui/Icon";
 import { ProcessingState } from "@/components/ui/ProcessingState";
 import { Skeleton } from "@/components/ui/Spinner";
 import { QuizQuestionCard } from "@/components/quiz/QuizQuestionCard";
-import { useAccentSlotClaim } from "@/components/3d/workspace3d/AccentSlotContext";
-import { Workspace3DObject } from "@/components/3d/workspace3d/Workspace3DObject";
 import { PanelHeader } from "@/components/workspace/PanelHeader";
 import { useQuizzes } from "@/hooks/useQuizzes";
 import { toApiError } from "@/lib/axios";
@@ -53,15 +51,6 @@ export function QuizPanel({ videoId, videoStatus }: { videoId: number; videoStat
   const quizzes = useQuizzes(videoId, videoStatus);
   const [index, setIndex] = useState(0);
   const [answered, setAnswered] = useState<Set<number>>(new Set());
-  // Real client-side correctness from THIS question's own answer
-  // reveal (see QuizQuestionCard - never a fabricated score), driving
-  // a brief rs_quiz_card.glb reaction accent. `reactionKey` changes on
-  // every reveal so the one-shot clip replays even if the same
-  // correct/wrong value repeats back to back.
-  const [reaction, setReaction] = useState<{ correct: boolean; key: number } | null>(null);
-  // Claims the shared Workspace accent slot only while a real reaction
-  // is actually mounted below (see AccentSlotContext.tsx).
-  useAccentSlotClaim(reaction !== null);
 
   if (quizzes.isLoading) {
     return (
@@ -91,7 +80,11 @@ export function QuizPanel({ videoId, videoStatus }: { videoId: number; videoStat
       <EmptyState
         icon="quiz"
         title="No quiz available"
-        description="Processing finished without producing quiz questions for this video."
+        description={
+          videoStatus === "failed"
+            ? "Processing failed before quiz questions could be generated — use Retry processing in the banner above."
+            : "Processing finished without producing quiz questions for this video."
+        }
       />
     );
   }
@@ -123,31 +116,10 @@ export function QuizPanel({ videoId, videoStatus }: { videoId: number; videoStat
             quiz={quiz}
             index={index}
             focused
-            onAnswered={(wasCorrect) => {
+            onAnswered={() => {
               setAnswered((current) => new Set(current).add(index));
-              if (wasCorrect !== undefined) {
-                setReaction((current) => ({ correct: wasCorrect, key: (current?.key ?? 0) + 1 }));
-              }
             }}
           />
-          {/*
-           * rs_quiz_card.glb (ui-3d/README.md) - a small, secondary
-           * reaction accent playing its real Answer_Correct/
-           * Answer_Wrong clip once per reveal, driven entirely by the
-           * same client-side correctness check the card itself already
-           * makes (never a fabricated score). Positioned beside the
-           * question, not over it, so it never blocks reading the real
-           * answer state the card already shows.
-           */}
-          {reaction && (
-            <Workspace3DObject
-              key={reaction.key}
-              model="quizCard"
-              playClip={reaction.correct ? "Answer_Correct" : "Answer_Wrong"}
-              playKey={reaction.key}
-              className="pointer-events-none absolute -right-4 -top-4 hidden h-20 w-20 sm:block lg:-right-24 lg:h-24 lg:w-24"
-            />
-          )}
         </div>
 
         <div className="flex items-center gap-3">
@@ -156,7 +128,7 @@ export function QuizPanel({ videoId, videoStatus }: { videoId: number; videoStat
             onClick={() => setIndex((current) => Math.max(0, current - 1))}
             disabled={isFirst}
             aria-label="Previous question"
-            className="flex h-9 w-9 items-center justify-center rounded-full border border-border-strong text-text-secondary enabled:hover:border-atmosphere enabled:hover:text-atmosphere disabled:opacity-30"
+            className="flex h-9 w-9 items-center justify-center rounded-full border-2 border-text-primary/60 bg-surface-elevated text-text-primary enabled:hover:border-atmosphere enabled:hover:text-atmosphere disabled:opacity-30"
           >
             <Icon name="chevron-left" size={16} />
           </button>
@@ -170,8 +142,8 @@ export function QuizPanel({ videoId, videoStatus }: { videoId: number; videoStat
               <span
                 key={i}
                 className={cn(
-                  "h-1.5 w-1.5 rounded-full transition-colors duration-base",
-                  i === index ? "bg-atmosphere" : answered.has(i) ? "bg-success/60" : "bg-border-strong",
+                  "h-2 w-2 rounded-full transition-colors duration-base",
+                  i === index ? "bg-atmosphere" : answered.has(i) ? "bg-text-primary" : "bg-case",
                 )}
               />
             ))}
@@ -182,14 +154,14 @@ export function QuizPanel({ videoId, videoStatus }: { videoId: number; videoStat
             onClick={() => setIndex((current) => Math.min(total - 1, current + 1))}
             disabled={isLast}
             aria-label="Next question"
-            className="flex h-9 w-9 items-center justify-center rounded-full border border-border-strong text-text-secondary enabled:hover:border-atmosphere enabled:hover:text-atmosphere disabled:opacity-30"
+            className="flex h-9 w-9 items-center justify-center rounded-full border-2 border-text-primary/60 bg-surface-elevated text-text-primary enabled:hover:border-atmosphere enabled:hover:text-atmosphere disabled:opacity-30"
           >
             <Icon name="chevron-right" size={16} />
           </button>
         </div>
 
         {allAnswered && (
-          <div className="flex animate-rise items-center gap-2 rounded-full border border-warm/30 bg-warm-muted px-3 py-1.5 text-caption font-medium text-warm">
+          <div className="flex animate-rise items-center gap-2 border border-text-primary bg-lume px-3 py-1.5 text-caption font-semibold text-lume-on shadow-step-ink">
             <Icon name="check" size={13} />
             You&apos;ve answered all {total} questions
           </div>

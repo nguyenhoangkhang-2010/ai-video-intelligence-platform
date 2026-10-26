@@ -14,6 +14,15 @@ import {
 
 interface VideoPlayerContextValue {
   videoRef: RefObject<HTMLVideoElement>;
+  /**
+   * Callback ref for the <video> element. Use this (not `videoRef`) as
+   * the element's `ref`: the player mounts its <video> only after the
+   * media token resolves, long after this provider's first render, so
+   * listeners must attach whenever the element actually appears - a
+   * mount-time effect reading `videoRef.current` saw `null` and never
+   * attached, leaving duration at 0:00 and the play overlay stuck.
+   */
+  attachVideo: (element: HTMLVideoElement | null) => void;
   currentTime: number;
   duration: number;
   isPlaying: boolean;
@@ -38,7 +47,8 @@ const VideoPlayerContext = createContext<VideoPlayerContextValue | null>(null);
  * each maintaining their own copy of currentTime/duration.
  */
 export function VideoPlayerProvider({ children }: { children: ReactNode }) {
-  const videoRef = useRef<HTMLVideoElement>(null);
+  const videoRef = useRef<HTMLVideoElement | null>(null);
+  const [element, setElement] = useState<HTMLVideoElement | null>(null);
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
   const [isPlaying, setIsPlaying] = useState(false);
@@ -46,12 +56,25 @@ export function VideoPlayerProvider({ children }: { children: ReactNode }) {
   const [volume, setVolumeState] = useState(1);
   const [isBuffering, setIsBuffering] = useState(false);
 
+  const attachVideo = useCallback((next: HTMLVideoElement | null) => {
+    videoRef.current = next;
+    setElement(next);
+  }, []);
+
   useEffect(() => {
-    const el = videoRef.current;
+    const el = element;
     if (!el) return;
 
+    // The element may already have metadata (cached media) or state
+    // from before these listeners existed - sync once on attach.
+    setDuration(Number.isFinite(el.duration) ? el.duration : 0);
+    setCurrentTime(el.currentTime);
+    setIsPlaying(!el.paused);
+    setIsMuted(el.muted);
+    setVolumeState(el.volume);
+
     const onTimeUpdate = () => setCurrentTime(el.currentTime);
-    const onLoadedMetadata = () => setDuration(el.duration || 0);
+    const onLoadedMetadata = () => setDuration(Number.isFinite(el.duration) ? el.duration : 0);
     const onPlay = () => setIsPlaying(true);
     const onPause = () => setIsPlaying(false);
     const onVolumeChange = () => {
@@ -64,6 +87,7 @@ export function VideoPlayerProvider({ children }: { children: ReactNode }) {
 
     el.addEventListener("timeupdate", onTimeUpdate);
     el.addEventListener("loadedmetadata", onLoadedMetadata);
+    el.addEventListener("durationchange", onLoadedMetadata);
     el.addEventListener("play", onPlay);
     el.addEventListener("pause", onPause);
     el.addEventListener("volumechange", onVolumeChange);
@@ -74,6 +98,7 @@ export function VideoPlayerProvider({ children }: { children: ReactNode }) {
     return () => {
       el.removeEventListener("timeupdate", onTimeUpdate);
       el.removeEventListener("loadedmetadata", onLoadedMetadata);
+      el.removeEventListener("durationchange", onLoadedMetadata);
       el.removeEventListener("play", onPlay);
       el.removeEventListener("pause", onPause);
       el.removeEventListener("volumechange", onVolumeChange);
@@ -81,7 +106,7 @@ export function VideoPlayerProvider({ children }: { children: ReactNode }) {
       el.removeEventListener("playing", onPlaying);
       el.removeEventListener("canplay", onCanPlay);
     };
-  }, []);
+  }, [element]);
 
   const play = useCallback(() => void videoRef.current?.play(), []);
   const pause = useCallback(() => videoRef.current?.pause(), []);
@@ -115,6 +140,7 @@ export function VideoPlayerProvider({ children }: { children: ReactNode }) {
   const value = useMemo<VideoPlayerContextValue>(
     () => ({
       videoRef,
+      attachVideo,
       currentTime,
       duration,
       isPlaying,
@@ -128,7 +154,7 @@ export function VideoPlayerProvider({ children }: { children: ReactNode }) {
       setVolume,
       toggleMute,
     }),
-    [currentTime, duration, isPlaying, isMuted, volume, isBuffering, play, pause, togglePlay, seek, setVolume, toggleMute],
+    [attachVideo, currentTime, duration, isPlaying, isMuted, volume, isBuffering, play, pause, togglePlay, seek, setVolume, toggleMute],
   );
 
   return <VideoPlayerContext.Provider value={value}>{children}</VideoPlayerContext.Provider>;

@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
+import * as processingService from "@/services/processing";
 import * as videosService from "@/services/videos";
 import { isTerminalVideoStatus, PROCESSING_POLL_INTERVAL_MS } from "@/lib/constants";
 import type { Video } from "@/types/video";
@@ -76,6 +77,27 @@ export function useMediaToken(videoId: number, enabled = true) {
     enabled,
     staleTime: 120_000,
     select: (data) => data.token,
+  });
+}
+
+/**
+ * Retries a FAILED processing job for this video. On success the video
+ * is marked "processing" in the cache straight away so useVideo /
+ * useVideoProcessingJobs resume polling and the workspace switches to
+ * the live progress banner without waiting for the worker to pick the
+ * job up.
+ */
+export function useRetryProcessingJob(videoId: number) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (jobId: number) => processingService.retryProcessingJob(jobId),
+    onSuccess: () => {
+      queryClient.setQueryData<Video>(videoKeys.detail(videoId), (current) =>
+        current ? { ...current, status: "processing" } : current,
+      );
+      void queryClient.invalidateQueries({ queryKey: videoKeys.jobs(videoId) });
+      void queryClient.invalidateQueries({ queryKey: videoKeys.list() });
+    },
   });
 }
 

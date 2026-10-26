@@ -1,21 +1,13 @@
 import type { Config } from "tailwindcss";
 
 /**
- * Design tokens for ReelSense.
+ * Design tokens for ReelSense — "Chronograph Titanium".
  *
- * Visual identity: "Daylight Intelligence" — a light-first Cloud/Mist/
- * Ink foundation (not black-as-default) carrying four real hue
- * identities: Cobalt/Indigo primary (navigation, primary actions),
- * Teal signal (AI/live-intelligence states only, same hue family as
- * Nova's own M_Signal material, deepened for contrast on light
- * surfaces), Violet secondary (Study mode identity, same family as
- * Nova's M_Cheek, likewise deepened), and a controlled Warm coral/
- * amber accent reserved for genuine achievement moments. See
- * globals.css for the exact values and the full rationale. All values
- * are also defined as CSS custom properties in globals.css so non-
- * Tailwind contexts (e.g. <video> chrome) can use them too — Tailwind
- * classes here simply reference those variables, so there is one
- * source of truth, not two.
+ * Every colour resolves to a CSS custom property in globals.css (one
+ * source of truth): titanium case (bg), matte dial surfaces, plum ink
+ * text, and three functional colours — lume amber (primary action /
+ * "now"), petrol (AI), carmine (study + chapter indices). Flat by
+ * rule: shadows here are hairline rings, never soft blurs.
  */
 const config: Config = {
   darkMode: "class",
@@ -50,6 +42,16 @@ const config: Config = {
           border: "rgb(var(--color-accent) / 0.35)",
           on: "rgb(var(--color-on-accent) / <alpha-value>)",
         },
+
+        // Lume - amber fill for primary actions and the playhead/"now"
+        // position. Text-weight amber lives in `accent` above.
+        lume: {
+          DEFAULT: "rgb(var(--color-lume) / <alpha-value>)",
+          hover: "rgb(var(--color-lume-hover) / <alpha-value>)",
+          muted: "rgb(var(--color-lume) / 0.22)",
+          on: "rgb(var(--color-on-lume) / <alpha-value>)",
+        },
+        case: "rgb(var(--color-case) / <alpha-value>)",
 
         // AI accent - Nova, AI-generated content, retrieval/evidence
         // indicators only. Never used for general product chrome
@@ -132,26 +134,25 @@ const config: Config = {
       // hero panels, Nova's own frame) get a generous, cinematic
       // curve. Not one uniform "rounded-xl everywhere" scale.
       borderRadius: {
-        sm: "3px",
-        DEFAULT: "5px",
-        md: "7px",
-        lg: "10px",
-        xl: "20px",
-        "2xl": "28px",
+        sm: "1px",
+        DEFAULT: "2px",
+        md: "2px",
+        lg: "3px",
+        xl: "4px",
+        "2xl": "6px",
       },
       // Soft, neutral-tinted shadows (slate, not pure black) - the
       // refined-light-UI convention; pure-black shadows at dark-theme
       // opacities read as harsh smudges on white surfaces.
       boxShadow: {
-        sm: "0 1px 2px rgb(15 23 42 / 0.06), 0 1px 1px rgb(15 23 42 / 0.04)",
-        md: "0 8px 24px -4px rgb(15 23 42 / 0.10), 0 2px 8px -2px rgb(15 23 42 / 0.06)",
-        lg: "0 20px 48px -8px rgb(15 23 42 / 0.14), 0 4px 16px -4px rgb(15 23 42 / 0.08)",
-        focus: "0 0 0 2px rgb(var(--color-accent) / 0.45)",
-        // Restrained bloom, not a neon border - used sparingly (a
-        // hovered AI-marked control, a just-answered chat state).
-        "glow-signal": "0 0 24px -6px rgb(var(--color-ai) / 0.4)",
-        "glow-secondary": "0 0 28px -8px rgb(var(--color-atmosphere) / 0.35)",
-        "glow-primary": "0 0 24px -6px rgb(var(--color-accent) / 0.3)",
+        sm: "0 0 0 1px rgb(var(--color-border-strong))",
+        md: "0 0 0 1px rgb(var(--color-border-strong))",
+        lg: "0 0 0 1px rgb(var(--color-text-primary) / 0.35)",
+        focus: "0 0 0 2px rgb(var(--color-accent))",
+        // A hard, offset "machined" edge for raised case parts - a
+        // solid step, no blur.
+        step: "0 3px 0 0 rgb(var(--color-case))",
+        "step-ink": "0 3px 0 0 rgb(var(--color-text-primary))",
       },
       // Motion system: five durations, four easings, used consistently
       // rather than ad hoc per-component values. "spatial"/"hero" are
@@ -196,6 +197,7 @@ const config: Config = {
         // (hero headline, auth panel), never routine UI.
         rise: "rise 700ms cubic-bezier(0.05,0.7,0.1,1) both",
         "mode-enter": "mode-enter 420ms cubic-bezier(0.65,0,0.35,1) both",
+        sweep: "sweep 60s linear infinite",
       },
       keyframes: {
         "fade-in": {
@@ -211,12 +213,16 @@ const config: Config = {
           "100%": { backgroundPosition: "200% 0" },
         },
         rise: {
-          from: { opacity: "0", transform: "translateY(28px) scale(0.98)", filter: "blur(6px)" },
-          to: { opacity: "1", transform: "translateY(0) scale(1)", filter: "blur(0)" },
+          from: { opacity: "0", transform: "translateY(18px)" },
+          to: { opacity: "1", transform: "translateY(0)" },
         },
         "mode-enter": {
           from: { opacity: "0", transform: "translateY(10px)" },
           to: { opacity: "1", transform: "translateY(0)" },
+        },
+        sweep: {
+          from: { transform: "rotate(0deg)" },
+          to: { transform: "rotate(360deg)" },
         },
       },
     },

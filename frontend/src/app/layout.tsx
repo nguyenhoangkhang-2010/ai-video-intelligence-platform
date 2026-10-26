@@ -1,24 +1,26 @@
 import type { Metadata } from "next";
-import { Inter, JetBrains_Mono, Space_Grotesk } from "next/font/google";
+import { IBM_Plex_Mono, IBM_Plex_Sans, Sora } from "next/font/google";
 
 import { Providers } from "@/app/providers";
 
 import "@/app/globals.css";
 
-const bodyFont = Inter({
-  subsets: ["latin"],
+const bodyFont = IBM_Plex_Sans({
+  subsets: ["latin", "vietnamese"],
+  weight: ["400", "500", "600"],
   variable: "--font-body",
   display: "swap",
 });
 
-const displayFont = Space_Grotesk({
+const displayFont = Sora({
   subsets: ["latin"],
   variable: "--font-display",
   display: "swap",
 });
 
-const monoFont = JetBrains_Mono({
-  subsets: ["latin"],
+const monoFont = IBM_Plex_Mono({
+  subsets: ["latin", "vietnamese"],
+  weight: ["400", "500"],
   variable: "--font-mono",
   display: "swap",
 });

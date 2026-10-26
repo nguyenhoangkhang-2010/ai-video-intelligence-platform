@@ -1,9 +1,11 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import type { ReactElement } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { ProcessingBanner } from "@/components/workspace/ProcessingBanner";
+import * as processingService from "@/services/processing";
 import * as videosService from "@/services/videos";
 import type { Video } from "@/types/video";
 
@@ -16,6 +18,7 @@ import type { Video } from "@/types/video";
  * error message and no way to retry.
  */
 vi.mock("@/services/videos");
+vi.mock("@/services/processing");
 
 function makeVideo(overrides: Partial<Video> = {}): Video {
   return {
@@ -79,5 +82,28 @@ describe("ProcessingBanner", () => {
   it("renders nothing once the video has actually finished processing", () => {
     const { container } = renderWithQueryClient(<ProcessingBanner video={makeVideo({ status: "processed" })} />);
     expect(container).toBeEmptyDOMElement();
+  });
+
+  it("offers a real retry for a failed job and calls the retry endpoint with that job's id", async () => {
+    const failedJob = {
+      id: 20,
+      video_id: 1,
+      job_type: "full_pipeline",
+      status: "FAILED" as const,
+      progress: 100,
+      current_step: "Failed",
+      started_at: "2026-01-01T00:00:00Z",
+      finished_at: "2026-01-01T00:01:00Z",
+      error_message: "open() got an unexpected keyword argument 'metadata_errors'",
+    };
+    vi.mocked(videosService.getVideoProcessingJobs).mockResolvedValue([failedJob]);
+    vi.mocked(processingService.retryProcessingJob).mockResolvedValue({ ...failedJob, status: "PENDING" });
+    const user = userEvent.setup();
+
+    renderWithQueryClient(<ProcessingBanner video={makeVideo({ status: "failed" })} />);
+
+    await user.click(await screen.findByRole("button", { name: /retry processing/i }));
+
+    await waitFor(() => expect(processingService.retryProcessingJob).toHaveBeenCalledWith(20));
   });
 });

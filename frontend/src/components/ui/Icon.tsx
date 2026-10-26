@@ -45,6 +45,8 @@ export type IconName =
   | "eye-off"
   | "trash"
   | "arrow-left"
+  | "arrow-right"
+  | "crown"
   | "empty-inbox"
   | "wifi-off"
   | "lock"
@@ -253,6 +255,8 @@ const paths: Record<IconName, JSX.Element> = {
     </>
   ),
   "arrow-left": <path d="M16 10H4m0 0 5-5m-5 5 5 5" />,
+  "arrow-right": <path d="M4 10h12m0 0-5-5m5 5-5 5" />,
+  crown: <path d="M7 4h6v12H7zM9 4v12M11 4v12M5 8h2M5 12h2" />,
   "empty-inbox": (
     <>
       <path d="M3 11.5 5.2 4h9.6l2.2 7.5" />

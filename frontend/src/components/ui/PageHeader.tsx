@@ -12,23 +12,20 @@ interface PageHeaderProps {
 }
 
 /**
- * Editorial page header shared by top-level routes (Library, Account).
- * Replaces the old `h-14 border-b flex items-center justify-between`
- * pattern that made every page look like the same admin-panel
- * template — this gives each page a title with real hierarchy (an
- * eyebrow label above a display-weight heading) instead of a single
- * flat heading-sm line.
+ * Top-level route header (Library, Account): a printed index label, a
+ * Sora title, and a heavy ink rule underneath - the "case-back
+ * engraving" that names the page. No card, no tinted band.
  */
 export function PageHeader({ eyebrow, title, description, meta, actions, className }: PageHeaderProps) {
   return (
-    <header className={cn("shrink-0 border-b border-border px-6 pb-5 pt-6 sm:px-8 sm:pt-7", className)}>
-      <div className="flex flex-wrap items-end justify-between gap-4">
+    <header className={cn("shrink-0 px-6 pt-7 sm:px-10 sm:pt-9", className)}>
+      <div className="flex flex-wrap items-end justify-between gap-4 border-b-2 border-text-primary pb-5">
         <div className="min-w-0">
-          <p className="text-label font-medium uppercase tracking-[0.14em] text-text-muted">{eyebrow}</p>
-          <h1 className="mt-1 font-display text-display font-semibold leading-tight text-text-primary">
+          <p className="index-label text-text-secondary">{eyebrow}</p>
+          <h1 className="mt-2 font-display text-display-lg font-semibold leading-none tracking-tight text-text-primary">
             {title}
           </h1>
-          {description && <p className="mt-1.5 max-w-xl text-body-sm text-text-secondary">{description}</p>}
+          {description && <p className="mt-3 max-w-xl text-body-sm text-text-secondary">{description}</p>}
         </div>
         <div className="flex shrink-0 items-center gap-3">
           {meta}

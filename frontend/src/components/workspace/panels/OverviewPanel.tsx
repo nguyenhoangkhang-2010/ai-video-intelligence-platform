@@ -1,8 +1,5 @@
 "use client";
 
-import { useAccentSlotClaim } from "@/components/3d/workspace3d/AccentSlotContext";
-import { statusBadgeHideNodes } from "@/components/3d/workspace3d/registry";
-import { Workspace3DObject } from "@/components/3d/workspace3d/Workspace3DObject";
 import { BaseBadge, type Tone } from "@/components/ui/StatusBadge";
 import { ErrorState } from "@/components/ui/ErrorState";
 import { Icon, type IconName } from "@/components/ui/Icon";
@@ -63,12 +60,6 @@ export function OverviewPanel({ video, onNavigate }: OverviewPanelProps) {
   const chapters = useChapters(video.id, video.status);
   const flashcards = useFlashcards(video.id, video.status);
   const player = useVideoPlayer();
-  // Claims the shared Workspace accent slot only for the render passes
-  // that actually mount the status-badge Workspace3DObject below (see
-  // AccentSlotContext.tsx) - called unconditionally (rules of hooks),
-  // with the same real availability check the accent's own render
-  // guard depends on.
-  useAccentSlotClaim(!meeting.isLoading && !meeting.isError);
 
   if (meeting.isLoading) {
     return (
@@ -101,22 +92,13 @@ export function OverviewPanel({ video, onNavigate }: OverviewPanelProps) {
   ];
   const readyCount = capabilities.filter((capability) => capability.ready).length;
 
-  // rs_status_badges.glb bakes all three states as nested groups in
-  // one file (see registry.ts's STATUS_BADGE_GROUPS) - hiding the
-  // other two leaves only the one matching this video's own real
-  // `status`, so the accent visually confirms the same fact
-  // `videoStatusLabel` already states in text, never a second/
-  // duplicate signal.
-  const statusBadgeHide = statusBadgeHideNodes(
-    video.status === "processed" ? "ready" : video.status === "failed" ? "failed" : "processing",
-  );
 
   return (
     <div className="flex flex-col gap-8 p-6 sm:p-8">
       <div className="flex items-start justify-between gap-4">
         <div className="min-w-0">
-          <p className="text-label font-medium uppercase tracking-[0.14em] text-accent">AI Video Brief</p>
-          <h1 className="mt-2 font-display text-display-lg font-semibold leading-tight text-text-primary">
+          <p className="index-label text-accent">AI Video Brief</p>
+          <h1 className="mt-2 font-display text-display font-semibold leading-tight text-text-primary">
             {video.title}
           </h1>
           <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1 text-body-sm text-text-muted">
@@ -126,12 +108,6 @@ export function OverviewPanel({ video, onNavigate }: OverviewPanelProps) {
             <span>{videoStatusLabel(video.status)}</span>
           </div>
         </div>
-        <Workspace3DObject
-          model="statusBadges"
-          hideNodes={statusBadgeHide}
-          loopClip="Pulse"
-          className="hidden h-14 w-20 shrink-0 sm:block"
-        />
       </div>
 
       {/*
@@ -150,7 +126,7 @@ export function OverviewPanel({ video, onNavigate }: OverviewPanelProps) {
       <div className="flex flex-col gap-8">
         {/* Executive summary — large, editorial lead, not a truncated card. */}
         <section className="min-w-0">
-          <p className="text-label font-semibold uppercase tracking-wide text-text-secondary">Executive summary</p>
+          <p className="index-label text-text-secondary">Executive summary</p>
           {summary ? (
             <p className="mt-3 text-heading-sm font-medium leading-relaxed text-text-primary">
               {truncate(summary.content, 480)}
@@ -174,7 +150,7 @@ export function OverviewPanel({ video, onNavigate }: OverviewPanelProps) {
 
           {data.transcript && (
             <div className="mt-8 border-t border-border pt-6">
-              <p className="text-label font-semibold uppercase tracking-wide text-text-secondary">From the transcript</p>
+              <p className="index-label text-text-secondary">From the transcript</p>
               <p className="mt-3 text-body-sm leading-relaxed text-text-secondary">{truncate(data.transcript.text, 260)}</p>
               <button
                 type="button"
@@ -195,7 +171,7 @@ export function OverviewPanel({ video, onNavigate }: OverviewPanelProps) {
          */}
         <section className="min-w-0 border-t border-border pt-6">
           <div className="flex items-center justify-between">
-            <p className="text-label font-semibold uppercase tracking-wide text-text-secondary">Readiness</p>
+            <p className="index-label text-text-secondary">Readiness</p>
             <span className="font-mono text-caption text-text-muted">
               {readyCount}/{capabilities.length}
             </span>
@@ -203,7 +179,7 @@ export function OverviewPanel({ video, onNavigate }: OverviewPanelProps) {
           <button
             type="button"
             onClick={() => onNavigate("chat")}
-            className="mt-3 flex w-full items-center justify-center gap-2 rounded-full bg-ai px-4 py-2 text-body-sm font-medium text-ai-on transition-colors duration-fast hover:bg-ai-hover"
+            className="mt-3 flex w-full items-center justify-center gap-2 bg-ai px-4 py-2.5 text-body-sm font-semibold text-ai-on shadow-step-ink transition-[transform,box-shadow,background-color] duration-fast hover:bg-ai-hover active:translate-y-[3px] active:shadow-none"
           >
             <Icon name="chat" size={14} />
             Ask about this video
@@ -240,7 +216,7 @@ export function OverviewPanel({ video, onNavigate }: OverviewPanelProps) {
       {chapterList.length > 0 && (
         <section className="border-t border-border pt-6">
           <div className="mb-3 flex items-center justify-between">
-            <p className="text-label font-semibold uppercase tracking-wide text-text-secondary">Chapters</p>
+            <p className="index-label text-text-secondary">Chapters</p>
             <button
               type="button"
               onClick={() => onNavigate("chapters")}
@@ -258,8 +234,10 @@ export function OverviewPanel({ video, onNavigate }: OverviewPanelProps) {
                   type="button"
                   onClick={() => player.seek(chapter.start_time)}
                   className={cn(
-                    "shrink-0 rounded-md border px-3 py-2 text-left transition-colors duration-fast",
-                    isActive ? "border-accent-border bg-accent-muted" : "border-border hover:border-border-strong hover:bg-surface-hover",
+                    "shrink-0 border-l-[3px] border-y border-r px-3 py-2 text-left transition-colors duration-fast",
+                    isActive
+                      ? "border-y-text-primary/40 border-r-text-primary/40 border-l-atmosphere bg-surface-elevated"
+                      : "border-y-border border-r-border border-l-case hover:bg-surface-hover",
                   )}
                 >
                   <p className="font-mono text-caption text-text-muted">{formatTimecode(chapter.start_time)}</p>

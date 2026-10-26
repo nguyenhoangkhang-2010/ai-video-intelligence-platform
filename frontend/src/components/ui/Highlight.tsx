@@ -10,7 +10,7 @@ export function Highlight({ text, query }: { text: string; query: string }) {
     <>
       {parts.map((part, index) =>
         part.toLowerCase() === trimmed.toLowerCase() ? (
-          <mark key={index} className="rounded bg-accent/30 text-text-primary">
+          <mark key={index} className="bg-lume/50 text-text-primary">
             {part}
           </mark>
         ) : (

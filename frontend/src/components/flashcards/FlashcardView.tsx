@@ -18,7 +18,7 @@ export function FlashcardView({ card, revealed, onToggle }: FlashcardViewProps) 
         onClick={onToggle}
         aria-label={revealed ? "Show question" : "Show answer"}
         className={cn(
-          "relative h-72 w-full rounded-2xl border border-border-strong bg-surface text-left shadow-glow-secondary transition-transform duration-slow ease-calm [transform-style:preserve-3d]",
+          "relative h-72 w-full rounded-2xl border-2 border-text-primary/70 bg-surface-elevated text-left shadow-step-ink transition-transform duration-slow ease-calm [transform-style:preserve-3d]",
           revealed && "[transform:rotateY(180deg)]",
         )}
       >

@@ -67,7 +67,7 @@ export function NovaScene({ children, mode = "ambient" }: NovaSceneProps) {
     >
       <ambientLight intensity={0.35} />
       <directionalLight position={[1.5, 2.5, 3]} intensity={1.6} color="#ffffff" />
-      <directionalLight position={[-2, 1, -1.5]} intensity={0.3} color="#5CF2E3" />
+      <directionalLight position={[-2, 1, -1.5]} intensity={0.3} color="#F2D9A0" />
       <Suspense fallback={null}>
         {/*
          * Self-hosted, not drei's preset="studio" (which fetches from a

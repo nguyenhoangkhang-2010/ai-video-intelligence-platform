@@ -1,21 +1,22 @@
 "use client";
 
 import { useParams } from "next/navigation";
-import { useMemo, useState, type ReactNode, type UIEvent } from "react";
+import { useMemo, useState } from "react";
 
 import { Nova } from "@/components/3d/Nova";
 import { useNovaAttention } from "@/components/3d/NovaAttentionContext";
-import { AccentSlotProvider, useAccentSlotFree } from "@/components/3d/workspace3d/AccentSlotContext";
-import { VIDEO_FRAME_CONTROL_NODES } from "@/components/3d/workspace3d/registry";
 import { ErrorState } from "@/components/ui/ErrorState";
-import { Skeleton } from "@/components/ui/Spinner";
-import { atmosphereGradient, SECTION_ATMOSPHERE } from "@/components/workspace/atmosphere";
+import { Skeleton, Spinner } from "@/components/ui/Spinner";
 import { ChapterStrip } from "@/components/workspace/ChapterStrip";
+import { ChronographDial, type SubDialDef } from "@/components/workspace/ChronographDial";
+import { ModeTabs } from "@/components/workspace/ModeTabs";
 import { ProcessingBanner } from "@/components/workspace/ProcessingBanner";
 import { WorkspaceHeader } from "@/components/workspace/WorkspaceHeader";
-import { WorkspaceNav } from "@/components/workspace/WorkspaceNav";
-import type { WorkspaceSection } from "@/components/workspace/sections";
-import { Workspace3DObject } from "@/components/3d/workspace3d/Workspace3DObject";
+import {
+  WORKSPACE_SECTION_GROUPS,
+  WORKSPACE_SECTIONS,
+  type WorkspaceSection,
+} from "@/components/workspace/sections";
 import { ChatPanel } from "@/components/workspace/panels/ChatPanel";
 import { ChaptersPanel } from "@/components/workspace/panels/ChaptersPanel";
 import { FlashcardsPanel } from "@/components/workspace/panels/FlashcardsPanel";
@@ -33,24 +34,27 @@ import { toApiError } from "@/lib/axios";
 import { cn } from "@/lib/utils";
 import { getVideoStreamUrl } from "@/services/videos";
 
+const SUB_DIALS: SubDialDef[] = [
+  { label: "Watch", icon: "video", tone: "ink" },
+  { label: "Understand", icon: "summary", tone: "lume" },
+  { label: "Ask", icon: "chat", tone: "ai" },
+  { label: "Study", icon: "quiz", tone: "atmosphere" },
+];
+
 /**
- * The Intelligence Studio: a cinematic media stage up top (not a
- * bordered card), an always-visible mode bar, and an active
- * intelligence environment below it that carries its own subtle
- * per-mode atmosphere (see atmosphere.ts) - a real spatial
- * relationship between three layers, not "video + tabs + panel".
- * Nova lives inside this same canvas as a workspace-scale ambient
- * presence (see NovaScene's "workspace" mode), reacting to whatever
- * the shared NovaAttentionContext says is actually happening
- * (Chat/Search driving it, same as everywhere else) - not a second
- * canvas, not an avatar in the header.
+ * The workspace as a chronograph: on the left the case, with the real
+ * video set into the dial and the bezel as its timeline; four
+ * sub-dials pick a group (Watch / Understand / Ask / Study) and the
+ * crown steps through all nine modes in order. On the right, the
+ * active mode's panel with that group's modes as engraved tabs. Nova
+ * sits in a porthole at the panel's corner, driven by the shared
+ * NovaAttentionContext (Chat/Search tell it what's happening).
  */
 export default function VideoWorkspacePage() {
   const params = useParams<{ id: string }>();
   const videoId = Number(params.id);
   const [activeSection, setActiveSection] = useState<WorkspaceSection>("overview");
-  const [navCompact, setNavCompact] = useState(false);
-  const { state: novaState } = useNovaAttention();
+  const { state: novaState, notice } = useNovaAttention();
   // Quiz/Flashcards own real session progress (which questions were
   // answered, which cards were flipped) in local component state -
   // every other panel remounts on tab switch (see the key={activeSection}
@@ -63,16 +67,9 @@ export default function VideoWorkspacePage() {
     () => new Set(),
   );
 
-  function handleContentScroll(event: UIEvent<HTMLDivElement>) {
-    setNavCompact(event.currentTarget.scrollTop > 24);
-  }
-
-  // Each panel starts scrolled to its own top, so switching sections
-  // always drops the nav back out of its compact state rather than
-  // staying collapsed for a panel the person hasn't scrolled yet.
   function handleSelectSection(section: WorkspaceSection) {
     setActiveSection(section);
-    setNavCompact(false);
+    if (WORKSPACE_SECTIONS.find((candidate) => candidate.id === section)?.tone === "ai") notice("attention", 900);
     if (section === "quiz" || section === "flashcards") {
       setKeepAliveSections((current) => (current.has(section) ? current : new Set(current).add(section)));
     }
@@ -88,21 +85,9 @@ export default function VideoWorkspacePage() {
 
   if (video.isLoading) {
     return (
-      <div className="flex h-full flex-col items-center justify-center gap-4 p-6">
-        {/*
-         * A real brand-loading moment, not decoration for its own sake -
-         * this only ever renders while `useVideo`'s fetch is genuinely
-         * in flight, and unmounts the instant real data (or an error)
-         * arrives, same "gone once the real state moves on" pattern as
-         * ProcessingBanner. Nothing else in the Workspace uses the logo
-         * mark, so this stays a single, deliberate brand touch instead
-         * of scattering it everywhere.
-         */}
-        <Workspace3DObject model="logoMark" loopClip="Float" className="h-16 w-16 opacity-70" />
-        <div className="flex w-full flex-col gap-4">
-          <Skeleton className="h-14 w-full" />
-          <Skeleton className="flex-1" />
-        </div>
+      <div className="flex h-full flex-col items-center justify-center gap-3 p-6">
+        <Spinner size={40} className="text-text-primary" />
+        <p className="index-label text-text-secondary">Winding the movement…</p>
       </div>
     );
   }
@@ -116,118 +101,101 @@ export default function VideoWorkspacePage() {
   }
 
   const chapterList = chapters.data ?? [];
-  const atmosphere = atmosphereGradient(SECTION_ATMOSPHERE[activeSection]);
+  const activeGroup =
+    WORKSPACE_SECTION_GROUPS.find((group) => group.ids.includes(activeSection)) ?? WORKSPACE_SECTION_GROUPS[0]!;
+  const order = WORKSPACE_SECTIONS.map((section) => section.id);
+
+  function handleCrown(direction: 1 | -1) {
+    const index = order.indexOf(activeSection);
+    const next = order[(index + direction + order.length) % order.length];
+    if (next) handleSelectSection(next);
+  }
+
+  function handleSelectGroup(label: string) {
+    const group = WORKSPACE_SECTION_GROUPS.find((candidate) => candidate.label === label);
+    if (!group || group.label === activeGroup.label) return;
+    handleSelectSection(group.ids[0]!);
+  }
 
   return (
     <VideoPlayerProvider>
-      <AccentSlotProvider>
-      <div className="flex h-full flex-col overflow-hidden">
+      <div className="flex h-full flex-col overflow-y-auto lg:overflow-hidden">
         <WorkspaceHeader video={video.data} />
         <ProcessingBanner video={video.data} />
 
-        {/*
-         * Desktop (lg+): video and content are two real columns, not a
-         * stack - video ~58%, content ~42% (`lg:basis-*` below), each
-         * owning its own scroll independently. Below lg: the same two
-         * blocks stack vertically instead, each still independently
-         * bounded/scrollable - not the single shared-scroll-container
-         * hack this used to need.
-         *
-         * That old hack existed because the video's own aspect-video box
-         * sized purely from WIDTH, with no regard for vertical space,
-         * and could demand more height than was available, collapsing
-         * the panel area below it to a literal 0px. That root cause is
-         * now fixed at the SOURCE instead (VideoPlayer.tsx caps itself
-         * at `max-h-[42vh]`, regardless of what layout it's placed in),
-         * so this wrapper no longer needs to force everything through
-         * one shared scroll container as a workaround - video and
-         * content can safely be two independent regions again, which is
-         * what a real side-by-side layout needs anyway.
-         */}
-        <div className="flex min-h-0 flex-1 flex-col overflow-hidden lg:flex-row lg:gap-5 lg:overflow-hidden lg:p-5">
-          {/* Video column - the primary visual anchor, ~58% width on desktop. */}
-          <div className="relative shrink-0 overflow-y-auto border-b border-border bg-bg-secondary px-5 py-7 sm:px-8 sm:py-9 lg:basis-[58%] lg:shrink-0 lg:grow-0 lg:overflow-visible lg:rounded-2xl lg:border lg:border-border lg:bg-bg-secondary lg:p-6">
-            <div
-              className="pointer-events-none absolute inset-0 opacity-70 lg:rounded-2xl"
-              style={{
-                background:
-                  "radial-gradient(ellipse 900px 500px at 50% -10%, rgb(var(--color-accent) / 0.1), transparent 60%)",
-              }}
-              aria-hidden="true"
-            />
-            <div className="relative mx-auto flex w-full max-w-5xl flex-col gap-3 lg:max-w-none">
-              <VideoFrameShell>
-                {streamUrl ? (
-                  <VideoPlayer src={streamUrl} title={video.data.title} chapters={chapterList} />
-                ) : mediaToken.isError ? (
-                  <div className="flex aspect-video w-full items-center justify-center">
-                    <ErrorState error={toApiError(mediaToken.error)} onRetry={() => mediaToken.refetch()} />
-                  </div>
-                ) : (
-                  <Skeleton className="aspect-video w-full" />
-                )}
-              </VideoFrameShell>
-              {chapterList.length > 0 && <ChapterStrip chapters={chapterList} />}
+        <div className="flex min-h-0 flex-1 flex-col lg:flex-row">
+          {/* The case - dial, bezel timeline, sub-dials, crown. */}
+          <section
+            aria-label="Video dial"
+            className="flex min-w-0 shrink-0 flex-col items-center px-4 py-4 sm:px-8 lg:basis-[54%] lg:overflow-y-auto"
+          >
+            {/*
+             * Fits the viewport height when it can, but never shrinks
+             * below 560px - a fully height-capped dial collapsed to a tiny
+             * video on short laptop screens. Below that the column scrolls
+             * instead, and `my-auto` keeps it centred when there is room
+             * without clipping its top when there isn't.
+             */}
+            <div className="my-auto flex w-full flex-col items-center gap-4">
+              <div className="w-full pr-[4%]" style={{ maxWidth: "min(100%, 780px, max(560px, 100vh - 150px))" }}>
+                <ChronographDial
+                  chapters={chapterList}
+                  fallbackDuration={video.data.duration}
+                  subDials={SUB_DIALS}
+                  activeSubDial={activeGroup.label}
+                  onSelectSubDial={handleSelectGroup}
+                  onCrown={handleCrown}
+                >
+                  {streamUrl ? (
+                    <VideoPlayer
+                      src={streamUrl}
+                      title={video.data.title}
+                      chapters={chapterList}
+                      fallbackDuration={video.data.duration}
+                      fill
+                    />
+                  ) : mediaToken.isError ? (
+                    <div className="flex h-full w-full items-center justify-center bg-surface">
+                      <ErrorState error={toApiError(mediaToken.error)} onRetry={() => mediaToken.refetch()} compact />
+                    </div>
+                  ) : (
+                    <Skeleton className="h-full w-full" />
+                  )}
+                </ChronographDial>
+              </div>
+              {chapterList.length > 0 && (
+                <div className="w-full max-w-xl">
+                  <ChapterStrip chapters={chapterList} />
+                </div>
+              )}
             </div>
-          </div>
+          </section>
 
-          {/* Content column - mode nav + active panel, own scroll, own bounded height. */}
-          <div className="relative flex min-h-0 flex-1 flex-col overflow-hidden lg:basis-[42%] lg:grow lg:rounded-2xl lg:border lg:border-border lg:bg-surface">
-            <WorkspaceNav
-              active={activeSection}
-              onSelect={handleSelectSection}
-              compact={navCompact}
-              className="sticky top-0 z-20 shrink-0 lg:rounded-t-2xl"
-            />
+          {/* The active mode's panel. */}
+          <section
+            aria-label="Workspace panel"
+            className="relative flex min-h-[70vh] min-w-0 flex-1 flex-col border-t-2 border-text-primary bg-surface lg:min-h-0 lg:border-l-2 lg:border-t-0"
+          >
+            <nav
+              aria-label="Workspace modes"
+              className="shrink-0 border-b border-text-primary/25 pr-20"
+            >
+              <ModeTabs active={activeSection} onSelect={handleSelectSection} />
+            </nav>
 
             {/*
-             * Nova's workspace presence - anchored to this OUTER,
-             * non-scrolling content-column wrapper (not the inner
-             * scrollable panel div below) specifically so it never
-             * needs to compete in z-order with panel content: every
-             * panel's own heading starts right at the top of that
-             * scrollable area, exactly where a "top-right" placement
-             * would otherwise sit, so anything sharing that scrolling
-             * context would either have to hide behind the panel's
-             * opaque background (invisible in practice) or float above
-             * it (covering real content). Sitting outside the scroll
-             * boundary entirely avoids that dilemma: Nova stays a
-             * constant, small, `pointer-events-none` presence next to
-             * the nav row, and the panel underneath scrolls completely
-             * independently of it. Hidden below `lg`, where the column
-             * is too narrow to spare the width beside the nav labels.
-             *
-             * Positioning lives on THIS wrapper div, not on <Nova>
-             * itself - NovaImpl's own root is unconditionally `relative`
-             * (see NovaImpl.tsx), and Tailwind's generated stylesheet
-             * order means a consumer-supplied `absolute` in the same
-             * class list does NOT reliably beat that base `relative`
-             * (found live: Nova rendered pinned to its in-flow position
-             * near the nav labels instead of the intended corner).
-             * NovaAmbient.tsx already establishes the correct pattern -
-             * wrap Nova in your own positioned box, let Nova itself just
-             * fill it - so this follows that same one instead of
-             * inventing a second way to position Nova.
+             * Nova's porthole - positioned on its own wrapper outside the
+             * scrolling panel (NovaImpl's root is always `relative`, so
+             * positioning must live on a parent, not on <Nova> itself).
              */}
-            <div className="pointer-events-none absolute right-3 top-2 z-30 hidden h-14 w-14 opacity-80 lg:block">
+            <div className="pointer-events-none absolute right-3 top-1.5 z-30 h-14 w-14 rounded-full border-[3px] border-case bg-surface-sunken">
               <Nova state={novaState} mode="workspace" className="h-full w-full" />
             </div>
 
-            <div
-              className="relative min-h-[360px] flex-1 overflow-y-auto"
-              onScroll={handleContentScroll}
-            >
-              {atmosphere && (
-                <div
-                  className="pointer-events-none absolute inset-0 z-0 transition-[background] duration-slow"
-                  style={{ background: atmosphere }}
-                  aria-hidden="true"
-                />
-              )}
-
-              <div className="relative z-10 mx-auto h-full w-full max-w-5xl px-1">
+            <div className="relative min-h-0 flex-1 overflow-y-auto">
+              <div className="mx-auto h-full w-full max-w-5xl">
                 {activeSection !== "quiz" && activeSection !== "flashcards" && (
-                  <div key={activeSection} className="h-full animate-rise">
+                  <div key={activeSection} className="h-full animate-mode-enter">
                     <ActivePanel
                       section={activeSection}
                       videoId={videoId}
@@ -238,79 +206,27 @@ export default function VideoWorkspacePage() {
                 )}
                 {/*
                  * Quiz/Flashcards stay mounted (hidden via CSS, not
-                 * unmounted/remounted) once first visited, unlike every
-                 * other panel above - see the keepAliveSections comment
-                 * near the top of this component for why: their session
-                 * progress (answered questions, flipped cards) lives in
-                 * local component state that a remount would silently
-                 * reset the moment someone switched tabs and back.
+                 * unmounted/remounted) once first visited - see the
+                 * keepAliveSections comment near the top of this
+                 * component: their session progress lives in local
+                 * component state a remount would silently reset.
                  */}
                 {keepAliveSections.has("quiz") && (
-                  <div className={cn("h-full", activeSection === "quiz" ? "animate-rise" : "hidden")}>
+                  <div className={cn("h-full", activeSection === "quiz" ? "animate-mode-enter" : "hidden")}>
                     <QuizPanel videoId={videoId} videoStatus={video.data.status} />
                   </div>
                 )}
                 {keepAliveSections.has("flashcards") && (
-                  <div className={cn("h-full", activeSection === "flashcards" ? "animate-rise" : "hidden")}>
+                  <div className={cn("h-full", activeSection === "flashcards" ? "animate-mode-enter" : "hidden")}>
                     <FlashcardsPanel videoId={videoId} videoStatus={video.data.status} />
                   </div>
                 )}
               </div>
             </div>
-          </div>
+          </section>
         </div>
       </div>
-      </AccentSlotProvider>
     </VideoPlayerProvider>
-  );
-}
-
-/**
- * rs_video_frame.glb wrapping the REAL, currently-open `<video>` - not
- * a card somewhere else with the video rendered separately. Sized
- * purely by CSS containment, not a fixed pixel box: this wrapper has
- * no width/height of its own, so it shrink-wraps to `children`'s own
- * real rendered size (VideoPlayer's own `aspect-video max-h-[42vh]
- * w-auto` sizing) via normal block layout, and the frame - an
- * absolutely-positioned sibling with `inset: 0` on the nearest
- * positioned ancestor - always exactly matches that box with no
- * separate measurement/ResizeObserver code: a real window resize (or
- * the video's own aspect ratio loading in) changes VideoPlayer's
- * rendered box, which changes this wrapper's box (CSS layout, live),
- * which changes what `inset-0` resolves to, and R3F's own Canvas
- * already re-observes its element's size on every resize - the
- * existing bounding-box auto-fit in Workspace3DImpl.tsx (already
- * built for exactly this) then reframes the model on the next frame.
- *
- * Only rendered while `useAccentSlotFree()` is true - see
- * AccentSlotContext.tsx: the video column is always visible alongside
- * whichever content-column panel is active, and some panels mount
- * their own real accent (Overview's status badge, Search's button
- * skin, a Quiz/Chat/Flashcards reaction) - without yielding, a mode
- * accent appearing while this frame also showed would be a genuine
- * 3rd simultaneous Canvas, over the project's 2-canvas budget. The
- * frame disappears the instant such an accent claims the slot and
- * reappears the instant it's released - never a 3rd context, even
- * momentarily.
- */
-function VideoFrameShell({ children }: { children: ReactNode }) {
-  const frameIsFree = useAccentSlotFree();
-
-  return (
-    <div className="relative mx-auto w-fit rounded-2xl shadow-lg ring-1 ring-black/[0.06]">
-      {frameIsFree && (
-        <div
-          className="pointer-events-none absolute -inset-3 sm:-inset-4"
-          style={{ zIndex: -1 }}
-          aria-hidden="true"
-        >
-          <Workspace3DObject model="videoFrame" hideNodes={VIDEO_FRAME_CONTROL_NODES} className="h-full w-full" />
-        </div>
-      )}
-      <div className="overflow-hidden rounded-2xl">
-        {children}
-      </div>
-    </div>
   );
 }
 

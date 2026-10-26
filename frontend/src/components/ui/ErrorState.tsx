@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 
+import { DialRing } from "@/components/dial/DialRing";
 import { Button } from "@/components/ui/Button";
 import { Icon, type IconName } from "@/components/ui/Icon";
 import type { ApiError } from "@/lib/axios";
@@ -64,19 +65,14 @@ export function ErrorState({
       )}
       role="alert"
     >
-      <div
-        className={cn(
-          "flex items-center justify-center rounded-full bg-error-muted text-error",
-          compact ? "h-9 w-9" : "h-12 w-12",
-        )}
-      >
-        <Icon name={icon} size={compact ? 18 : 22} />
-      </div>
+      <DialRing size={compact ? 44 : 64} ticks={12} majorEvery={3} caseWidth={7} progress={1} tone="error">
+        <Icon name={icon} size={compact ? 16 : 20} className="text-error" />
+      </DialRing>
       <div className="max-w-sm">
-        <p className={cn("font-medium text-text-primary", compact ? "text-body-sm" : "text-body")}>
+        <p className={cn("font-display font-semibold text-text-primary", compact ? "text-body-sm" : "text-body-lg")}>
           {title}
         </p>
-        <p className="mt-1 text-body-sm text-text-muted">{error.message}</p>
+        <p className="mt-1 text-body-sm text-text-secondary">{error.message}</p>
       </div>
       {(onRetry || action) && (
         <div className="mt-1 flex items-center gap-2">

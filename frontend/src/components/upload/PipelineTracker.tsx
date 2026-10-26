@@ -4,13 +4,13 @@ import { useEffect } from "react";
 import { useRouter } from "next/navigation";
 
 import { useNovaAttention } from "@/components/3d/NovaAttentionContext";
+import { GearTrain } from "@/components/dial/GearTrain";
 import { Icon } from "@/components/ui/Icon";
 import { useVideo, useVideoProcessingJobs } from "@/hooks/useVideos";
 import { toApiError } from "@/lib/axios";
 import { ROUTES } from "@/lib/constants";
-import { cn } from "@/lib/utils";
 
-const STAGES = ["Ingest", "Transcribe", "Understand", "Index", "Ready"] as const;
+const STAGES = ["Ingest", "Transcribe", "Understand", "Index", "Ready"];
 
 /**
  * Groups the pipeline's own real `current_step` values (see
@@ -71,12 +71,12 @@ export function PipelineTracker({ videoId }: { videoId: number }) {
   if (isFailed) {
     return (
       <div className="flex flex-col items-center gap-3 text-center">
-        <span className="flex h-12 w-12 items-center justify-center rounded-full bg-error-muted text-error">
-          <Icon name="alert" size={22} />
+        <span className="flex h-12 w-12 items-center justify-center rounded-full border-[3px] border-error bg-error-muted text-error">
+          <Icon name="alert" size={20} />
         </span>
         <div>
-          <p className="text-body font-medium text-text-primary">Processing failed</p>
-          <p className="mt-1 max-w-sm text-body-sm text-text-muted">
+          <p className="font-display text-body-lg font-semibold text-text-primary">Processing failed</p>
+          <p className="mt-1 max-w-sm text-body-sm text-text-secondary">
             {job?.error_message ?? "The pipeline couldn't finish processing this video."}
           </p>
         </div>
@@ -91,12 +91,12 @@ export function PipelineTracker({ videoId }: { videoId: number }) {
   if (video.isError || jobsQuery.isError) {
     return (
       <div className="flex flex-col items-center gap-3 text-center">
-        <span className="flex h-12 w-12 items-center justify-center rounded-full bg-error-muted text-error">
-          <Icon name="alert" size={22} />
+        <span className="flex h-12 w-12 items-center justify-center rounded-full border-[3px] border-error bg-error-muted text-error">
+          <Icon name="alert" size={20} />
         </span>
         <div>
-          <p className="text-body font-medium text-text-primary">Couldn&apos;t check processing status</p>
-          <p className="mt-1 max-w-sm text-body-sm text-text-muted">
+          <p className="font-display text-body-lg font-semibold text-text-primary">Couldn&apos;t check processing status</p>
+          <p className="mt-1 max-w-sm text-body-sm text-text-secondary">
             {toApiError(video.error ?? jobsQuery.error).message}
           </p>
         </div>
@@ -106,7 +106,7 @@ export function PipelineTracker({ videoId }: { videoId: number }) {
             if (video.isError) void video.refetch();
             if (jobsQuery.isError) void jobsQuery.refetch();
           }}
-          className="flex items-center gap-1.5 rounded border border-border-strong px-2.5 py-1.5 text-caption font-medium text-text-secondary transition-colors duration-fast hover:border-accent hover:text-accent"
+          className="flex items-center gap-1.5 border border-text-primary/60 px-3 py-1.5 text-caption font-medium text-text-primary transition-colors duration-fast hover:bg-surface"
         >
           <Icon name="refresh" size={12} />
           Retry
@@ -115,53 +115,23 @@ export function PipelineTracker({ videoId }: { videoId: number }) {
     );
   }
 
-  return (
-    <div className="flex w-full max-w-lg flex-col items-center gap-6 text-center">
-      <div className="flex w-full items-center">
-        {STAGES.map((stage, index) => (
-          <div key={stage} className="flex flex-1 items-center last:flex-none">
-            <div className="flex flex-col items-center gap-2">
-              <span
-                className={cn(
-                  "flex h-8 w-8 items-center justify-center rounded-full border font-mono text-caption transition-colors duration-spatial",
-                  index < activeIndex
-                    ? "border-ai bg-ai text-ai-on"
-                    : index === activeIndex
-                      ? "border-ai bg-ai-muted text-ai"
-                      : "border-border-strong bg-surface text-text-muted",
-                )}
-              >
-                {index < activeIndex ? <Icon name="check" size={14} /> : index + 1}
-              </span>
-              <span
-                className={cn(
-                  "text-caption font-medium",
-                  index <= activeIndex ? "text-text-primary" : "text-text-muted",
-                )}
-              >
-                {stage}
-              </span>
-            </div>
-            {index < STAGES.length - 1 && (
-              <div className="mx-2 h-px flex-1 bg-border-strong">
-                <div
-                  className="h-full bg-ai transition-[width] duration-spatial ease-spatial"
-                  style={{ width: index < activeIndex ? "100%" : "0%" }}
-                />
-              </div>
-            )}
-          </div>
-        ))}
-      </div>
+  const shownProgress = isReady ? 100 : progress;
 
-      <div className="w-full">
-        <p className="text-body-sm font-medium text-text-primary">
-          {isReady ? "Ready — opening your workspace…" : job?.current_step ?? "Starting…"}
-        </p>
-        <div className="mt-2 h-1 w-full overflow-hidden rounded-full bg-surface-elevated">
+  return (
+    <div className="flex w-full max-w-2xl flex-col items-center gap-6 text-center">
+      <GearTrain stages={STAGES} activeIndex={activeIndex} complete={isReady} />
+
+      <div className="w-full max-w-md">
+        <div className="flex items-baseline justify-between gap-4">
+          <p className="text-body-sm font-medium text-text-primary">
+            {isReady ? "Ready — opening your workspace…" : job?.current_step ?? "Starting…"}
+          </p>
+          <span className="font-mono text-body-sm text-text-secondary">{Math.round(shownProgress)}%</span>
+        </div>
+        <div className="mt-2 h-[6px] w-full border border-text-primary/60 bg-surface-elevated">
           <div
-            className="h-full rounded-full bg-ai transition-[width] duration-base ease-calm"
-            style={{ width: `${isReady ? 100 : progress}%` }}
+            className="h-full bg-ai transition-[width] duration-base ease-calm"
+            style={{ width: `${shownProgress}%` }}
           />
         </div>
       </div>

@@ -10,6 +10,7 @@ import { Icon } from "@/components/ui/Icon";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { Skeleton } from "@/components/ui/Spinner";
 import { FeaturedVideo } from "@/components/video/FeaturedVideo";
+import { VideoDial } from "@/components/video/VideoDial";
 import { VideoRow } from "@/components/video/VideoRow";
 import { useDeleteVideo, useVideos } from "@/hooks/useVideos";
 import { toApiError } from "@/lib/axios";
@@ -18,11 +19,17 @@ import { cn } from "@/lib/utils";
 import type { Video } from "@/types/video";
 
 type SortKey = "recent" | "title" | "duration";
+type ViewKey = "dials" | "list";
 
 const SORT_OPTIONS: Array<{ key: SortKey; label: string }> = [
   { key: "recent", label: "Recent" },
   { key: "title", label: "Title" },
   { key: "duration", label: "Duration" },
+];
+
+const VIEW_OPTIONS: Array<{ key: ViewKey; label: string }> = [
+  { key: "dials", label: "Dials" },
+  { key: "list", label: "List" },
 ];
 
 function sortVideos(videos: Video[], sort: SortKey): Video[] {
@@ -38,6 +45,45 @@ function sortVideos(videos: Video[], sort: SortKey): Video[] {
   }
 }
 
+/** A row of framed toggle buttons - the case's pushers. */
+function Segmented<T extends string>({
+  options,
+  value,
+  onChange,
+  label,
+}: {
+  options: Array<{ key: T; label: string }>;
+  value: T;
+  onChange: (value: T) => void;
+  label: string;
+}) {
+  return (
+    <div role="group" aria-label={label} className="flex border border-text-primary/60">
+      {options.map((option, index) => (
+        <button
+          key={option.key}
+          type="button"
+          onClick={() => onChange(option.key)}
+          aria-pressed={value === option.key}
+          className={cn(
+            "index-label px-3 py-2 transition-colors duration-fast",
+            index > 0 && "border-l border-text-primary/60",
+            value === option.key ? "bg-text-primary text-surface" : "bg-surface-elevated text-text-secondary hover:text-text-primary",
+          )}
+        >
+          {option.label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+/**
+ * The library as a watch-winder case: the newest video sits on the
+ * centre cushion as a large dial, the rest are smaller dials whose
+ * reserve arc shows how long each runs relative to the longest one in
+ * view. A list view stays one click away for scanning many at once.
+ */
 export default function LibraryPage() {
   const { data: videos, isLoading, isError, error, refetch } = useVideos();
   const deleteVideo = useDeleteVideo();
@@ -45,6 +91,7 @@ export default function LibraryPage() {
   const [pendingDelete, setPendingDelete] = useState<Video | null>(null);
   const [query, setQuery] = useState("");
   const [sort, setSort] = useState<SortKey>("recent");
+  const [view, setView] = useState<ViewKey>("dials");
 
   const visibleVideos = useMemo(() => {
     if (!videos) return [];
@@ -54,155 +101,155 @@ export default function LibraryPage() {
     return sortVideos(filtered, sort);
   }, [videos, query, sort]);
 
+  const longest = useMemo(() => Math.max(1, ...visibleVideos.map((video) => video.duration || 0)), [visibleVideos]);
+  const totalSeconds = useMemo(() => (videos ?? []).reduce((sum, video) => sum + (video.duration || 0), 0), [videos]);
+
   const hasVideos = Boolean(videos && videos.length > 0);
   const isFiltering = hasVideos && query.trim().length > 0;
-  // The editorial "most recent" lead only makes sense in the default,
-  // unmodified view - once the person is actively filtering/sorting,
-  // pinning a featured item above their own query would be confusing.
+  // The "most recent" lead only makes sense in the default, unmodified
+  // view - once the person is actively filtering/sorting, pinning a
+  // featured item above their own query would be confusing.
   const showFeatured = hasVideos && !isFiltering && sort === "recent";
   const featured = showFeatured ? visibleVideos[0] : undefined;
-  const gridVideos = featured ? visibleVideos.slice(1) : visibleVideos;
+  const restVideos = featured ? visibleVideos.slice(1) : visibleVideos;
+  const indexOffset = featured ? 2 : 1;
 
   return (
-    <div className="relative flex h-full flex-col overflow-hidden">
-      <div
-        className="pointer-events-none absolute -top-32 right-[-10%] z-0 h-[480px] w-[480px] rounded-full bg-[radial-gradient(ellipse_at_center,rgb(var(--color-accent)/0.1),transparent_70%)]"
-        aria-hidden="true"
+    <div className="flex h-full flex-col overflow-hidden">
+      <PageHeader
+        eyebrow="Library · winder case"
+        title="Your videos"
+        description="Every upload becomes a searchable, explainable body of knowledge — transcript, summary, chapters and grounded Q&A."
+        meta={
+          hasVideos && (
+            <dl className="hidden items-end gap-6 sm:flex">
+              <div className="text-right">
+                <dt className="index-label text-text-muted">Pieces</dt>
+                <dd className="font-mono text-heading font-medium text-text-primary">{videos!.length}</dd>
+              </div>
+              <div className="text-right">
+                <dt className="index-label text-text-muted">Total reserve</dt>
+                <dd className="font-mono text-heading font-medium text-text-primary">
+                  {Math.floor(totalSeconds / 3600)}h {String(Math.floor((totalSeconds % 3600) / 60)).padStart(2, "0")}m
+                </dd>
+              </div>
+            </dl>
+          )
+        }
+        actions={
+          <Link
+            href={ROUTES.upload}
+            className="inline-flex h-10 items-center gap-2 bg-lume px-4 text-body-sm font-semibold text-lume-on shadow-step-ink transition-[transform,box-shadow,background-color] duration-fast hover:bg-lume-hover active:translate-y-[3px] active:shadow-none"
+          >
+            <Icon name="upload" size={15} />
+            Upload video
+          </Link>
+        }
       />
 
-      <div className="relative z-10 flex h-full flex-col overflow-hidden">
-        <PageHeader
-          eyebrow="Library"
-          title="Your videos"
-          description="Every upload here becomes a searchable, explainable body of knowledge — transcript, summary, chapters, and grounded Q&A."
-          meta={
-            hasVideos && (
-              <span className="hidden font-mono text-body-sm text-text-muted sm:inline">
-                {videos!.length} video{videos!.length === 1 ? "" : "s"}
-              </span>
-            )
-          }
-          actions={
-            <Link
-              href={ROUTES.upload}
-              className="inline-flex h-9 items-center gap-2 rounded bg-accent px-4 text-body font-medium text-accent-on transition-colors duration-fast hover:bg-accent-hover"
-            >
-              <Icon name="upload" size={15} />
-              Upload video
-            </Link>
-          }
-        />
+      {hasVideos && (
+        <div className="flex shrink-0 flex-wrap items-center justify-between gap-3 px-6 py-4 sm:px-10">
+          <div className="relative w-full max-w-xs">
+            <Icon
+              name="search"
+              size={14}
+              className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-text-secondary"
+            />
+            <input
+              type="text"
+              value={query}
+              onChange={(event) => setQuery(event.target.value)}
+              placeholder="Filter by title…"
+              aria-label="Filter videos by title"
+              className="h-9 w-full border border-text-primary/60 bg-surface-elevated pl-8 pr-2 text-body-sm text-text-primary placeholder:text-text-muted focus-visible:outline-2 focus-visible:outline-accent"
+            />
+          </div>
 
-        {hasVideos && (
-          <div className="flex shrink-0 flex-wrap items-center justify-between gap-3 border-b border-border px-6 py-3 sm:px-8">
-            <div className="relative w-full max-w-xs">
-              <Icon
-                name="search"
-                size={14}
-                className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-text-muted"
-              />
-              <input
-                type="text"
-                value={query}
-                onChange={(event) => setQuery(event.target.value)}
-                placeholder="Filter by title…"
-                aria-label="Filter videos by title"
-                className="h-8 w-full rounded border border-border-strong bg-surface-sunken pl-7 pr-2 text-body-sm text-text-primary placeholder:text-text-muted transition-colors duration-fast focus-visible:outline-2 focus-visible:outline-accent"
-              />
-            </div>
+          <div className="flex flex-wrap items-center gap-3">
+            <Segmented label="Sort videos" options={SORT_OPTIONS} value={sort} onChange={setSort} />
+            <Segmented label="Library view" options={VIEW_OPTIONS} value={view} onChange={setView} />
+          </div>
+        </div>
+      )}
 
-            <div className="flex items-center gap-1 rounded-md border border-border-strong bg-surface-sunken p-0.5">
-              {SORT_OPTIONS.map((option) => (
-                <button
-                  key={option.key}
-                  type="button"
-                  onClick={() => setSort(option.key)}
-                  aria-pressed={sort === option.key}
-                  className={cn(
-                    "rounded px-2.5 py-1 text-caption font-medium transition-colors duration-fast",
-                    sort === option.key
-                      ? "bg-surface-elevated text-text-primary"
-                      : "text-text-muted hover:text-text-secondary",
-                  )}
-                >
-                  {option.label}
-                </button>
-              ))}
-            </div>
+      <div className="flex-1 overflow-y-auto px-6 pb-10 sm:px-10">
+        {isLoading && (
+          <div className="grid grid-cols-2 gap-8 pt-6 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
+            {Array.from({ length: 5 }).map((_, index) => (
+              <div key={index} className="flex flex-col items-center gap-3">
+                <Skeleton className="aspect-square w-full max-w-[200px] rounded-full" />
+                <Skeleton className="h-3 w-2/3" />
+              </div>
+            ))}
           </div>
         )}
 
-        <div className="flex-1 overflow-y-auto px-6 py-6 sm:px-8">
-          {isLoading && (
-            <div className="flex flex-col divide-y divide-border">
-              {Array.from({ length: 6 }).map((_, index) => (
-                <div key={index} className="flex items-center gap-5 py-3">
-                  <Skeleton className="aspect-video w-36 shrink-0 rounded-md" />
-                  <div className="flex flex-1 flex-col gap-2">
-                    <Skeleton className="h-4 w-1/2" />
-                    <Skeleton className="h-3 w-1/4" />
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
+        {isError && <ErrorState error={toApiError(error)} onRetry={() => refetch()} />}
 
-          {isError && <ErrorState error={toApiError(error)} onRetry={() => refetch()} />}
+        {!isLoading && !isError && videos && videos.length === 0 && (
+          <EmptyState
+            icon="video"
+            title="The case is empty"
+            description="Upload your first video to get a transcript, summary and searchable chapters."
+            action={
+              <Link
+                href={ROUTES.upload}
+                className="mt-2 inline-flex h-9 items-center gap-1.5 bg-lume px-4 text-body-sm font-semibold text-lume-on shadow-step-ink"
+              >
+                <Icon name="upload" size={15} />
+                Upload video
+              </Link>
+            }
+          />
+        )}
 
-          {!isLoading && !isError && videos && videos.length === 0 && (
-            <EmptyState
-              icon="video"
-              title="No videos yet"
-              description="Upload your first video to get a transcript, summary, and searchable chapters."
-              action={
-                <Link
-                  href={ROUTES.upload}
-                  className="mt-2 inline-flex h-8 items-center gap-1.5 rounded bg-accent px-3 text-body-sm font-medium text-accent-on transition-colors duration-fast hover:bg-accent-hover"
-                >
-                  <Icon name="upload" size={15} />
-                  Upload video
-                </Link>
-              }
-            />
-          )}
+        {!isLoading && !isError && isFiltering && visibleVideos.length === 0 && (
+          <EmptyState
+            icon="search"
+            title="No matching videos"
+            description={`Nothing in your library matches "${query.trim()}".`}
+            action={
+              <button
+                type="button"
+                onClick={() => setQuery("")}
+                className="mt-2 border border-text-primary/60 px-3 py-1.5 text-body-sm font-medium text-text-primary transition-colors duration-fast hover:bg-surface"
+              >
+                Clear filter
+              </button>
+            }
+          />
+        )}
 
-          {!isLoading && !isError && isFiltering && visibleVideos.length === 0 && (
-            <EmptyState
-              icon="search"
-              title="No matching videos"
-              description={`Nothing in your library matches "${query.trim()}".`}
-              action={
-                <button
-                  type="button"
-                  onClick={() => setQuery("")}
-                  className="mt-2 rounded border border-border-strong px-3 py-1.5 text-body-sm font-medium text-text-secondary transition-colors duration-fast hover:border-accent hover:text-text-primary"
-                >
-                  Clear filter
-                </button>
-              }
-            />
-          )}
+        {!isLoading && !isError && visibleVideos.length > 0 && (
+          <div className="flex animate-fade-in flex-col gap-10">
+            {featured && <FeaturedVideo video={featured} />}
 
-          {!isLoading && !isError && visibleVideos.length > 0 && (
-            <div className="flex animate-fade-in flex-col gap-8">
-              {featured && <FeaturedVideo video={featured} />}
-              {gridVideos.length > 0 && (
-                <div>
-                  {featured && (
-                    <p className="mb-1 text-label font-semibold uppercase tracking-wide text-text-secondary">
-                      Rest of your library
-                    </p>
-                  )}
-                  <div className="flex flex-col divide-y divide-border">
-                    {gridVideos.map((video) => (
-                      <VideoRow key={video.id} video={video} onDelete={setPendingDelete} />
+            {restVideos.length > 0 && (
+              <section>
+                {featured && <p className="index-label mb-6 text-text-secondary">Rest of the case</p>}
+                {view === "dials" ? (
+                  <div className="grid grid-cols-2 gap-x-6 gap-y-12 sm:grid-cols-3 lg:grid-cols-4 2xl:grid-cols-5">
+                    {restVideos.map((video, index) => (
+                      <VideoDial
+                        key={video.id}
+                        video={video}
+                        index={index + indexOffset}
+                        reserve={(video.duration || 0) / longest}
+                        onDelete={setPendingDelete}
+                      />
                     ))}
                   </div>
-                </div>
-              )}
-            </div>
-          )}
-        </div>
+                ) : (
+                  <div className="flex flex-col border-t-2 border-text-primary">
+                    {restVideos.map((video, index) => (
+                      <VideoRow key={video.id} video={video} index={index + indexOffset} onDelete={setPendingDelete} />
+                    ))}
+                  </div>
+                )}
+              </section>
+            )}
+          </div>
+        )}
       </div>
 
       <ConfirmDialog
@@ -213,14 +260,23 @@ export default function LibraryPage() {
             ? `"${pendingDelete.title}" and everything generated from it — transcript, summary, chapters, quizzes, flashcards — will be permanently removed.`
             : undefined
         }
-        confirmLabel="Delete video"
+        error={deleteVideo.isError ? toApiError(deleteVideo.error).message : null}
+        confirmLabel={deleteVideo.isError ? "Try again" : "Delete video"}
         danger
         isConfirming={deleteVideo.isPending}
-        onCancel={() => setPendingDelete(null)}
+        onCancel={() => {
+          setPendingDelete(null);
+          deleteVideo.reset();
+        }}
         onConfirm={() => {
           if (!pendingDelete) return;
+          // Only closes on success — a failed delete keeps the dialog
+          // open with the real error shown above, so the person can
+          // retry or cancel instead of silently losing the attempt
+          // (previously this closed via onSettled regardless of
+          // outcome, so a failure was never visible anywhere).
           deleteVideo.mutate(pendingDelete.id, {
-            onSettled: () => setPendingDelete(null),
+            onSuccess: () => setPendingDelete(null),
           });
         }}
       />

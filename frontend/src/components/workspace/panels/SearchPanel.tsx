@@ -3,13 +3,11 @@
 import { useEffect, useState, type FormEvent } from "react";
 
 import { useNovaAttention } from "@/components/3d/NovaAttentionContext";
-import { useAccentSlotClaim } from "@/components/3d/workspace3d/AccentSlotContext";
-import { Workspace3DObject } from "@/components/3d/workspace3d/Workspace3DObject";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { ErrorState } from "@/components/ui/ErrorState";
 import { Highlight } from "@/components/ui/Highlight";
 import { Icon } from "@/components/ui/Icon";
-import { Skeleton } from "@/components/ui/Spinner";
+import { Skeleton, Spinner } from "@/components/ui/Spinner";
 import { PanelHeader } from "@/components/workspace/PanelHeader";
 import { useVideoSearch } from "@/hooks/useSearch";
 import { toApiError } from "@/lib/axios";
@@ -28,18 +26,6 @@ export function SearchPanel({ videoId }: { videoId: number }) {
   const [query, setQuery] = useState("");
   const search = useVideoSearch(videoId);
   const { notice } = useNovaAttention();
-  // Real DOM hover/focus state (not a fabricated toggle) driving
-  // rs_button_ai.glb's decorative Hover clip behind the real submit
-  // button below - see Button3D.tsx for the same pattern; this one's
-  // custom compact icon-button shape doesn't fit that shared wrapper,
-  // so the same technique is applied directly here instead.
-  const [submitHovered, setSubmitHovered] = useState(false);
-  const [submitFocused, setSubmitFocused] = useState(false);
-  const [submitPressKey, setSubmitPressKey] = useState(0);
-  // The submit button's own accent is always mounted whenever this
-  // panel is - claims the shared Workspace accent slot for as long as
-  // Search is the active mode (see AccentSlotContext.tsx).
-  useAccentSlotClaim(true);
 
   // The shared Nova entity reflects the real retrieval lifecycle -
   // querying the video's intelligence layer is genuinely "searching",
@@ -63,8 +49,8 @@ export function SearchPanel({ videoId }: { videoId: number }) {
         meta={search.isSuccess && <span>{search.data.results.length} result{search.data.results.length === 1 ? "" : "s"}</span>}
       />
 
-      <form onSubmit={handleSubmit} className="flex shrink-0 items-center gap-2.5 border-b border-border px-5 py-6 sm:px-6">
-        <div className="mx-auto flex w-full max-w-2xl items-center gap-3">
+      <form onSubmit={handleSubmit} className="flex shrink-0 items-center gap-2.5 border-b border-text-primary/20 px-5 py-6 sm:px-6">
+        <div className="mx-auto flex w-full max-w-2xl items-center gap-3 border-b-2 border-ai pb-2">
           <span className="font-mono text-display text-ai" aria-hidden="true">
             ›
           </span>
@@ -81,51 +67,18 @@ export function SearchPanel({ videoId }: { videoId: number }) {
               type="button"
               onClick={() => setQuery("")}
               aria-label="Clear search"
-              className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-text-muted transition-colors duration-fast hover:bg-surface-elevated hover:text-text-secondary"
+              className="flex h-7 w-7 shrink-0 items-center justify-center text-text-secondary transition-colors duration-fast hover:bg-surface-elevated hover:text-text-primary"
             >
               <Icon name="close" size={13} />
             </button>
           )}
-          {/*
-           * ONE real button - rs_button_ai.glb is its own visual body
-           * (painted behind the icon via `-z-10` inside this `isolate`
-           * button), not a decorative accent floating beside a
-           * separately-filled HTML button. No `bg-ai-muted`/hover-fill
-           * classes left on the button itself - the GLB's own Hover/
-           * Press/Thinking clips are the only surface treatment now,
-           * driven by this exact button's real hover/focus/press/
-           * pending state (see Button3D.tsx for the identical pattern;
-           * this one's compact round icon-button shape doesn't fit
-           * that shared wrapper's text-button layout, so the same
-           * technique is applied directly here instead).
-           */}
           <button
             type="submit"
             disabled={!query.trim() || search.isPending}
             aria-label="Run search"
-            className="relative isolate flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-ai disabled:opacity-40"
-            onMouseEnter={() => setSubmitHovered(true)}
-            onMouseLeave={() => setSubmitHovered(false)}
-            onFocus={() => setSubmitFocused(true)}
-            onBlur={() => setSubmitFocused(false)}
-            onMouseDown={() => setSubmitPressKey((key) => key + 1)}
+            className="flex h-10 w-10 shrink-0 items-center justify-center bg-ai text-ai-on shadow-step-ink transition-[transform,box-shadow,background-color] duration-fast hover:bg-ai-hover active:translate-y-[3px] active:shadow-none disabled:bg-surface-sunken disabled:text-text-disabled disabled:shadow-none"
           >
-            <span className="pointer-events-none absolute inset-0 -z-10" aria-hidden="true">
-              <Workspace3DObject
-                model="buttonAi"
-                holdClip="Hover"
-                holdActive={submitHovered || submitFocused}
-                playClip="Press"
-                playKey={submitPressKey}
-                loopClip={search.isPending ? "Thinking" : undefined}
-                className="h-full w-full"
-              />
-            </span>
-            <Icon
-              name={search.isPending ? "spinner" : "chevron-right"}
-              size={15}
-              className={search.isPending ? "animate-spin" : undefined}
-            />
+            {search.isPending ? <Spinner size={16} className="text-current" /> : <Icon name="arrow-right" size={16} />}
           </button>
         </div>
       </form>

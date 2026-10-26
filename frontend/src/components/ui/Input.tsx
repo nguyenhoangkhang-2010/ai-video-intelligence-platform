@@ -20,25 +20,21 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(
     return (
       <div className="flex flex-col gap-1.5">
         {label && (
-          <label htmlFor={inputId} className="text-label font-medium text-text-secondary">
+          <label htmlFor={inputId} className="index-label text-text-secondary">
             {label}
           </label>
         )}
         {/*
-          Focus is a composed shift (surface lightens to white, a soft
-          cobalt ring appears around the whole control), not a bare
-          border-color swap - the wrapper carries the ring via
-          `focus-within` so it also encloses the password-reveal
-          button, and the native `:focus-visible` outline is suppressed
-          here specifically (kept everywhere else in the app) since
-          this treatment already gives keyboard focus a clearly visible,
-          more considered signal than the generic outline would add on
-          top of it.
+          Focus lifts the field from the sunken dial to the raised face
+          and draws a solid 2px amber ring around the whole control
+          (via `focus-within`, so it also encloses the password-reveal
+          button) - the native outline is suppressed only here, since
+          this ring already gives keyboard focus a clear signal.
         */}
         <div
           className={cn(
             "relative rounded transition-shadow duration-fast ease-calm",
-            "focus-within:shadow-[0_0_0_3px_rgb(var(--color-accent)/0.16)]",
+            "focus-within:shadow-[0_0_0_2px_rgb(var(--color-accent))]",
           )}
         >
           <input
@@ -51,7 +47,7 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(
               "h-10 w-full rounded border bg-surface-sunken px-3 text-body text-text-primary placeholder:text-text-muted",
               "transition-[background-color,border-color] duration-fast ease-calm",
               "focus:outline-none focus:bg-surface",
-              error ? "border-error" : "border-border-strong hover:border-text-muted focus:border-accent",
+              error ? "border-error" : "border-text-primary/40 hover:border-text-primary/70 focus:border-accent",
               isPassword && "pr-10",
               className,
             )}

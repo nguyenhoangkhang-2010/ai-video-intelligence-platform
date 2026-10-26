@@ -1,6 +1,6 @@
 import { forwardRef, type ButtonHTMLAttributes } from "react";
 
-import { Icon } from "@/components/ui/Icon";
+import { Spinner } from "@/components/ui/Spinner";
 import { cn } from "@/lib/utils";
 
 // Six variants, each earning its place rather than padding a count:
@@ -12,7 +12,7 @@ import { cn } from "@/lib/utils";
 // link-weight action next to prose; "ghost" stays the icon-toolbar
 // weight (a hover surface, no text color shift needed) - the two are
 // visually and semantically distinct, not duplicates.
-type Variant = "primary" | "secondary" | "quiet" | "ghost" | "danger" | "ai" | "unstyled";
+type Variant = "primary" | "secondary" | "quiet" | "ghost" | "danger" | "ai";
 type Size = "sm" | "md" | "lg";
 
 interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
@@ -22,31 +22,22 @@ interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   fullWidth?: boolean;
 }
 
-// Primary/ai carry a small resting lift (shadow) that deepens and
-// nudges down 1px on press - a real press-feedback micro-interaction,
-// not just a color swap. Secondary/danger stay flat (bordered
-// controls reading a physical "dent" on press would be inconsistent
-// with their own resting state), quiet/ghost stay motion-free (they're
-// meant to be quiet).
+// Raised variants (primary/ai) sit on a hard 3px "machined" step
+// (shadow-step - a solid offset, never a blur) and press down onto it
+// on :active, like a real pusher on a watch case. Bordered variants
+// stay flat; quiet/ghost stay motion-free.
 const variantClasses: Record<Variant, string> = {
   primary:
-    "bg-accent text-accent-on shadow-sm hover:bg-accent-hover hover:shadow-md active:translate-y-px active:bg-accent-active active:shadow-sm disabled:bg-accent/40 disabled:shadow-none",
+    "bg-lume text-lume-on shadow-step-ink hover:bg-lume-hover active:translate-y-[3px] active:shadow-none disabled:bg-lume/50 disabled:shadow-none",
   secondary:
-    "bg-surface-elevated text-text-primary border border-border-strong hover:border-border-strong hover:bg-surface-hover active:bg-surface disabled:opacity-50",
+    "bg-surface-elevated text-text-primary border border-text-primary/70 hover:bg-surface-hover active:bg-surface-sunken disabled:opacity-50",
   quiet:
     "bg-transparent text-accent underline-offset-4 hover:underline disabled:text-text-disabled disabled:no-underline",
   ghost: "bg-transparent text-text-secondary hover:bg-surface-hover hover:text-text-primary",
-  danger: "bg-error/15 text-error hover:bg-error/25 border border-error/30 active:bg-error/30",
-  // AI-driven actions only (e.g. submitting a semantic search) — same
-  // teal accent as Nova/evidence, never used for general product
-  // actions (those stay "primary"/cobalt).
-  ai: "bg-ai text-ai-on shadow-sm hover:bg-ai-hover hover:shadow-md active:translate-y-px active:shadow-sm disabled:bg-ai/40 disabled:shadow-none",
-  // No background/border/shadow of its own — for a caller supplying
-  // its own visual underneath (a ui-3d GLB layer via Button3D.tsx) and
-  // needing only the real interactive/structural button shell: shape,
-  // sizing, focus ring, disabled cursor. Never used directly in JSX;
-  // Button3D is the one caller.
-  unstyled: "",
+  danger: "bg-error text-white hover:bg-error/90 active:bg-error/80 disabled:opacity-60",
+  // AI-driven actions only (e.g. submitting a semantic search) - petrol,
+  // the same colour as Nova/evidence, never general product actions.
+  ai: "bg-ai text-ai-on shadow-step-ink hover:bg-ai-hover active:translate-y-[3px] active:shadow-none disabled:bg-ai/50 disabled:shadow-none",
 };
 
 const sizeClasses: Record<Size, string> = {
@@ -73,7 +64,7 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
         ref={ref}
         disabled={disabled || isLoading}
         className={cn(
-          "inline-flex items-center justify-center rounded font-medium transition-[background-color,border-color,box-shadow,transform,color,opacity] duration-fast ease-calm",
+          "inline-flex items-center justify-center rounded font-medium tracking-[0.01em] transition-[background-color,border-color,box-shadow,transform,color,opacity] duration-fast ease-calm",
           "disabled:cursor-not-allowed",
           "focus-visible:outline-2 focus-visible:outline-accent focus-visible:outline-offset-2",
           variantClasses[variant],
@@ -83,7 +74,7 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
         )}
         {...props}
       >
-        {isLoading && <Icon name="spinner" size={16} className="animate-spin" />}
+        {isLoading && <Spinner size={16} className="text-current" />}
         {children}
       </button>
     );

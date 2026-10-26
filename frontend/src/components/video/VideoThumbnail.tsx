@@ -9,10 +9,8 @@ import type { Video } from "@/types/video";
 interface VideoThumbnailProps {
   video: Video;
   /**
-   * Spacing (px) of the decorative scan-line pattern shown when no
-   * real frame is available yet, so each caller can match its own
-   * existing density (VideoRow's compact row vs. FeaturedVideo's
-   * large editorial surface) instead of this component forcing one.
+   * Scale (px) of the placeholder glyph shown when no real frame is
+   * available, so each caller can match its own surface size.
    */
   patternSpacing?: number;
 }
@@ -32,8 +30,8 @@ interface VideoThumbnailProps {
  *    never a placeholder dressed up as a frame.
  *  - no thumbnail and done processing (extraction failed, or this
  *    video predates the thumbnail feature and hasn't been backfilled):
- *    the same abstract scan-line surface this library has always used
- *    for "no real frame available."
+ *    a flat surface with a small film-frame glyph - "no real frame
+ *    available", never dressed up as one.
  *
  * Also falls back to that same abstract surface if the real image URL
  * errors after being rendered (has_thumbnail can be briefly stale
@@ -73,12 +71,13 @@ export function VideoThumbnail({ video, patternSpacing = 18 }: VideoThumbnailPro
 
   return (
     <div
-      className="absolute inset-0 opacity-[0.06] transition-opacity duration-base group-hover:opacity-[0.12]"
-      style={{
-        backgroundImage:
-          `repeating-linear-gradient(115deg, rgb(var(--color-ai)) 0px, rgb(var(--color-ai)) 1px, transparent 1px, transparent ${patternSpacing}px)`,
-      }}
+      className="absolute inset-0 flex items-center justify-center bg-surface-sunken text-text-disabled"
       aria-hidden="true"
-    />
+    >
+      <svg width={patternSpacing * 2} height={patternSpacing * 2} viewBox="0 0 24 24" fill="none">
+        <rect x="3" y="6" width="18" height="12" stroke="currentColor" strokeWidth="1.4" />
+        <path d="M10 9.5v5l4.2-2.5z" fill="currentColor" />
+      </svg>
+    </div>
   );
 }

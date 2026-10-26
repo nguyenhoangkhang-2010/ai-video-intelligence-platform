@@ -41,7 +41,7 @@ export function Dialog({ open, onClose, title, description, children, footer, wi
   return createPortal(
     <div className="fixed inset-0 z-modal flex items-center justify-center p-4">
       <div
-        className="absolute inset-0 bg-bg/70 backdrop-blur-[2px] animate-fade-in"
+        className="absolute inset-0 bg-text-primary/45 animate-fade-in"
         onClick={onClose}
         aria-hidden="true"
       />
@@ -52,16 +52,16 @@ export function Dialog({ open, onClose, title, description, children, footer, wi
         aria-labelledby={titleId}
         tabIndex={-1}
         className={cn(
-          "relative w-full animate-slide-up rounded-lg border border-border-strong bg-surface-elevated shadow-lg outline-none",
+          "relative w-full animate-slide-up rounded-lg border border-text-primary/70 bg-surface-elevated shadow-step-ink outline-none",
           widthClasses[width],
         )}
       >
-        <div className="flex items-start justify-between gap-4 border-b border-border p-5">
+        <div className="flex items-start justify-between gap-4 border-b border-text-primary/20 p-5">
           <div>
             <h2 id={titleId} className="font-display text-heading-sm font-semibold text-text-primary">
               {title}
             </h2>
-            {description && <p className="mt-1 text-body-sm text-text-muted">{description}</p>}
+            {description && <p className="mt-1 text-body-sm text-text-secondary">{description}</p>}
           </div>
           <button
             type="button"
@@ -75,7 +75,7 @@ export function Dialog({ open, onClose, title, description, children, footer, wi
 
         {children && <div className="p-5">{children}</div>}
 
-        {footer && <div className="flex items-center justify-end gap-2 border-t border-border p-4">{footer}</div>}
+        {footer && <div className="flex items-center justify-end gap-2 border-t border-text-primary/20 bg-surface p-4">{footer}</div>}
       </div>
     </div>,
     document.body,

@@ -76,7 +76,11 @@ export function TranslationPanel({ videoId, videoStatus }: { videoId: number; vi
       <EmptyState
         icon="translate"
         title="No translation available"
-        description="Processing finished without producing an English translation for this video."
+        description={
+          videoStatus === "failed"
+            ? "Processing failed before a translation could be generated — use Retry processing in the banner above."
+            : "Processing finished without producing an English translation for this video."
+        }
       />
     );
   }

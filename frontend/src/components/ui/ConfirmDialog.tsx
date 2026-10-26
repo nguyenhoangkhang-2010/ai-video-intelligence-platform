@@ -7,6 +7,14 @@ interface ConfirmDialogProps {
   open: boolean;
   title: string;
   description?: string;
+  /**
+   * A mutation failure from the action this dialog just confirmed -
+   * rendered as a real, distinctly-styled alert (same pattern as
+   * login/register's formError) rather than silently closing the
+   * dialog on failure, which previously left no visible sign the
+   * action didn't actually happen.
+   */
+  error?: string | null;
   confirmLabel?: string;
   isConfirming?: boolean;
   danger?: boolean;
@@ -18,6 +26,7 @@ export function ConfirmDialog({
   open,
   title,
   description,
+  error,
   confirmLabel = "Confirm",
   isConfirming,
   danger,
@@ -46,6 +55,12 @@ export function ConfirmDialog({
           </Button>
         </>
       }
-    />
+    >
+      {error && (
+        <p role="alert" className="border-l-2 border-error bg-error-muted px-3 py-2 text-body-sm text-error">
+          {error}
+        </p>
+      )}
+    </Dialog>
   );
 }

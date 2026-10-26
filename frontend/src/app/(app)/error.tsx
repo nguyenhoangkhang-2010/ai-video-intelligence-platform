@@ -2,6 +2,7 @@
 
 import { useEffect } from "react";
 
+import { DialRing } from "@/components/dial/DialRing";
 import { Button } from "@/components/ui/Button";
 import { Icon } from "@/components/ui/Icon";
 
@@ -22,12 +23,12 @@ export default function AppSegmentError({ error, reset }: { error: Error & { dig
 
   return (
     <div className="flex h-full w-full flex-col items-center justify-center gap-3 bg-bg p-6 text-center">
-      <div className="flex h-12 w-12 items-center justify-center rounded-full bg-error-muted text-error">
-        <Icon name="alert" size={22} />
-      </div>
+      <DialRing size={64} ticks={12} majorEvery={3} caseWidth={7} progress={1} tone="error">
+        <Icon name="alert" size={20} className="text-error" />
+      </DialRing>
       <div className="max-w-sm">
         <p className="font-display text-heading font-semibold text-text-primary">Something went wrong</p>
-        <p className="mt-1 text-body-sm text-text-muted">
+        <p className="mt-1 text-body-sm text-text-secondary">
           This screen hit an unexpected error. Your data is safe — try again, or head back to the library.
         </p>
       </div>

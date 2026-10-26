@@ -17,7 +17,7 @@ export default function GlobalError({ error, reset }: { error: Error & { digest?
 
   return (
     <html lang="en">
-      <body style={{ background: "#0a0a0f", color: "#f5f5f7" }}>
+      <body style={{ background: "#C5C8C6", color: "#3D3442" }}>
         <div
           style={{
             display: "flex",
@@ -32,7 +32,7 @@ export default function GlobalError({ error, reset }: { error: Error & { digest?
           }}
         >
           <p style={{ fontSize: "1.25rem", fontWeight: 600 }}>Something went wrong</p>
-          <p style={{ fontSize: "0.875rem", color: "#9a9aa5", maxWidth: "28rem" }}>
+          <p style={{ fontSize: "0.875rem", color: "#5A5160", maxWidth: "28rem" }}>
             ReelSense hit an unexpected error loading the app. Reloading usually fixes it.
           </p>
           <button
@@ -40,12 +40,13 @@ export default function GlobalError({ error, reset }: { error: Error & { digest?
             onClick={() => reset()}
             style={{
               marginTop: "0.25rem",
-              borderRadius: "0.375rem",
-              border: "1px solid #2a2a35",
+              borderRadius: "2px",
+              border: "1px solid #3D3442",
               padding: "0.5rem 1rem",
               fontSize: "0.875rem",
-              color: "#f5f5f7",
-              background: "transparent",
+              color: "#4A3304",
+              background: "#E0A526",
+              fontWeight: 600,
               cursor: "pointer",
             }}
           >

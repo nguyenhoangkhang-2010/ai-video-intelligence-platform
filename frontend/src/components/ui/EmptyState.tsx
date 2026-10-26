@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 
+import { DialRing } from "@/components/dial/DialRing";
 import { Icon, type IconName } from "@/components/ui/Icon";
 import { cn } from "@/lib/utils";
 
@@ -12,7 +13,7 @@ interface EmptyStateProps {
   className?: string;
 }
 
-/** Generic "nothing here yet" state — always paired with a specific title, never a bare icon. */
+/** Generic "nothing here yet" state — an empty dial, always paired with a specific title. */
 export function EmptyState({
   icon = "empty-inbox",
   title,
@@ -29,21 +30,14 @@ export function EmptyState({
         className,
       )}
     >
-      <div
-        className={cn(
-          "flex items-center justify-center rounded-full bg-surface-elevated text-text-muted",
-          compact ? "h-9 w-9" : "h-12 w-12",
-        )}
-      >
-        <Icon name={icon} size={compact ? 18 : 22} />
-      </div>
+      <DialRing size={compact ? 44 : 64} ticks={12} majorEvery={3} caseWidth={7}>
+        <Icon name={icon} size={compact ? 16 : 20} className="text-text-secondary" />
+      </DialRing>
       <div className="max-w-sm">
-        <p className={cn("font-medium text-text-primary", compact ? "text-body-sm" : "text-body")}>
+        <p className={cn("font-display font-semibold text-text-primary", compact ? "text-body-sm" : "text-body-lg")}>
           {title}
         </p>
-        {description && (
-          <p className="mt-1 text-body-sm text-text-muted">{description}</p>
-        )}
+        {description && <p className="mt-1 text-body-sm text-text-secondary">{description}</p>}
       </div>
       {action}
     </div>

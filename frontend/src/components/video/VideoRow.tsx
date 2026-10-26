@@ -1,63 +1,52 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
 
 import { Icon } from "@/components/ui/Icon";
 import { VideoStatusBadge } from "@/components/ui/StatusBadge";
+import { VideoActionsMenu } from "@/components/video/VideoActionsMenu";
 import { VideoThumbnail } from "@/components/video/VideoThumbnail";
 import { ROUTES } from "@/lib/constants";
-import { cn, formatDate, formatTimecode } from "@/lib/utils";
+import { formatDate, formatTimecode } from "@/lib/utils";
 import type { Video } from "@/types/video";
 
 interface VideoRowProps {
   video: Video;
+  index: number;
   onDelete: (video: Video) => void;
 }
 
 /**
- * A horizontal media-archive row, not a grid card — the library reads
- * as a list of media objects with real metadata, not a wall of
- * identical tiles. The media surface shows this video's real,
- * extracted frame when one exists (see VideoThumbnail); otherwise it
- * stays the same honest abstract pattern it always has, never a faked
- * frame.
+ * The library's list view - a compact register for scanning many
+ * videos at once (the dial view is for browsing). Real extracted frame
+ * when one exists (see VideoThumbnail), otherwise the honest abstract
+ * surface.
  */
-export function VideoRow({ video, onDelete }: VideoRowProps) {
-  const [menuOpen, setMenuOpen] = useState(false);
-
+export function VideoRow({ video, index, onDelete }: VideoRowProps) {
   return (
-    <div className="group relative flex items-center gap-4 py-3 transition-colors duration-fast hover:bg-surface-hover sm:gap-5 sm:px-3">
+    <div className="group relative grid grid-cols-[auto_auto_minmax(0,1fr)_auto] items-center gap-4 border-b border-text-primary/20 py-3 transition-colors duration-fast hover:bg-surface sm:grid-cols-[3rem_auto_minmax(0,1fr)_auto_auto_auto] sm:gap-5 sm:px-2">
+      <span className="hidden font-mono text-caption text-text-muted sm:block">{String(index).padStart(3, "0")}</span>
+
       <Link
         href={ROUTES.video(video.id)}
         aria-label={video.title}
-        className="relative aspect-video w-28 shrink-0 overflow-hidden rounded-md bg-[radial-gradient(ellipse_at_top_left,rgb(var(--color-surface-elevated))_0%,rgb(var(--color-surface-sunken))_72%)] sm:w-36"
+        className="relative aspect-video w-24 shrink-0 overflow-hidden border border-text-primary/30 bg-surface-sunken sm:w-32"
       >
-        <VideoThumbnail video={video} patternSpacing={18} />
+        <VideoThumbnail video={video} patternSpacing={14} />
         <span className="absolute inset-0 flex items-center justify-center">
           <Icon
             name="play"
             size={16}
-            className={cn(
-              "transition-[opacity,transform] duration-base ease-calm group-hover:scale-110 group-hover:text-accent",
-              video.has_thumbnail
-                ? "rounded-full bg-bg/60 p-1.5 text-text-primary opacity-0 backdrop-blur-[2px] group-hover:opacity-100"
-                : "text-text-disabled opacity-70 group-hover:opacity-100",
-            )}
+            className="rounded-full bg-surface-elevated p-1.5 text-text-primary opacity-0 transition-opacity duration-base group-hover:opacity-100"
           />
         </span>
-        {video.duration > 0 && (
-          <span className="absolute bottom-1 right-1 rounded bg-bg/80 px-1 py-0.5 font-mono text-[10px] text-text-secondary backdrop-blur-[2px]">
-            {formatTimecode(video.duration)}
-          </span>
-        )}
       </Link>
 
-      <Link href={ROUTES.video(video.id)} className="min-w-0 flex-1">
-        <h3 className="truncate text-body-sm font-medium text-text-primary transition-colors duration-fast group-hover:text-accent">
+      <Link href={ROUTES.video(video.id)} className="min-w-0">
+        <h3 className="truncate font-display text-body-sm font-semibold text-text-primary transition-colors duration-fast group-hover:text-accent">
           {video.title}
         </h3>
-        <p className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-caption text-text-muted">
+        <p className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-caption text-text-secondary">
           <span>{formatDate(video.created_at)}</span>
           {video.language !== "unknown" && (
             <>
@@ -68,44 +57,15 @@ export function VideoRow({ video, onDelete }: VideoRowProps) {
         </p>
       </Link>
 
+      <span className="hidden font-mono text-caption text-text-secondary sm:block">
+        {video.duration > 0 ? formatTimecode(video.duration) : "--:--"}
+      </span>
+
       <div className="hidden shrink-0 sm:block">
         <VideoStatusBadge status={video.status} />
       </div>
 
-      <div className="relative shrink-0">
-        <button
-          type="button"
-          aria-label="Video actions"
-          aria-haspopup="menu"
-          aria-expanded={menuOpen}
-          onClick={() => setMenuOpen((value) => !value)}
-          className={cn(
-            "flex h-7 w-7 items-center justify-center rounded text-text-muted opacity-0 transition-opacity duration-fast hover:bg-surface-elevated hover:text-text-primary focus-visible:opacity-100 group-hover:opacity-100",
-            menuOpen && "opacity-100",
-          )}
-        >
-          <Icon name="more" size={16} />
-        </button>
-        {menuOpen && (
-          <>
-            <div className="fixed inset-0 z-dropdown" onClick={() => setMenuOpen(false)} />
-            <div role="menu" aria-label="Video actions" className="absolute right-0 top-8 z-dropdown w-36 rounded border border-border-strong bg-surface-elevated py-1 shadow-md">
-              <button
-                type="button"
-                role="menuitem"
-                onClick={() => {
-                  setMenuOpen(false);
-                  onDelete(video);
-                }}
-                className="flex w-full items-center gap-2 px-3 py-1.5 text-left text-body-sm text-error hover:bg-surface-hover"
-              >
-                <Icon name="trash" size={14} />
-                Delete
-              </button>
-            </div>
-          </>
-        )}
-      </div>
+      <VideoActionsMenu video={video} onDelete={onDelete} />
     </div>
   );
 }
