@@ -76,6 +76,7 @@ class TranscriptService:
         transcript.language = transcript_data.language
         transcript.text = transcript_data.text
         transcript.segments = segments
+        transcript.source = transcript_data.source
         transcript.word_count = len(
             transcript_data.text.strip().split()
         )

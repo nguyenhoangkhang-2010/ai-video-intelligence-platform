@@ -13,6 +13,8 @@ export interface SearchResult {
   /** Where in the video this chunk was spoken (seconds); null for videos processed before chunk times were stored. */
   start_time?: number | null;
   end_time?: number | null;
+  /** "speech" = said in the video; "visual" = shown on screen (read from keyframes). */
+  source?: "speech" | "visual";
 }
 
 export interface SemanticSearchResponse {

@@ -117,6 +117,13 @@ class Video(Base):
         passive_deletes=True,
     )
     
+    visual_segments = relationship(
+        "VisualSegment",
+        back_populates="video",
+        cascade="all, delete-orphan",
+        passive_deletes=True,
+    )
+
     embeddings = relationship(
         "Embedding",
         back_populates="video",

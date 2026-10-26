@@ -138,6 +138,8 @@ class SemanticSearchService:
                     # embedded before chunk times were stored.
                     "start_time": getattr(embedding_record, "start_time", None),
                     "end_time": getattr(embedding_record, "end_time", None),
+                    # "speech" (said) or "visual" (shown on screen).
+                    "source": getattr(embedding_record, "source", None) or "speech",
                 }
             )
 

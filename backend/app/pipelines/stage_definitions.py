@@ -11,6 +11,7 @@ persisted output).
 """
 
 METADATA = "metadata"
+VISUAL = "visual"
 TRANSCRIPTION = "transcription"
 SUMMARY = "summary"
 EMBEDDING = "embedding"
@@ -21,6 +22,7 @@ FLASHCARD = "flashcard"
 
 STAGE_ORDER: tuple[str, ...] = (
     METADATA,
+    VISUAL,
     TRANSCRIPTION,
     SUMMARY,
     EMBEDDING,
@@ -30,6 +32,11 @@ STAGE_ORDER: tuple[str, ...] = (
     FLASHCARD,
 )
 
+# visual (keyframe analysis, ai.vision) runs before transcription but
+# is independent of it and best-effort (never fails): when a video has
+# no speech, transcription builds the transcript from visual's
+# persisted segments instead of failing, so it must run first.
+#
 # stage_name -> the one stage it depends on, or None if independent.
 # metadata and transcription are both independent of each other.
 # summary/embedding/translation/quiz/chapter/flashcard are six
@@ -40,6 +47,7 @@ STAGE_ORDER: tuple[str, ...] = (
 # independent sibling from still being attempted.
 STAGE_DEPENDENCIES: dict[str, str | None] = {
     METADATA: None,
+    VISUAL: None,
     TRANSCRIPTION: None,
     SUMMARY: TRANSCRIPTION,
     EMBEDDING: TRANSCRIPTION,

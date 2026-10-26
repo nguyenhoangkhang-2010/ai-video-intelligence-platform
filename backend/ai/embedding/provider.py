@@ -29,6 +29,18 @@ class EmbeddingProvider(Protocol):
         """
         ...
 
+    def embed_texts(
+        self,
+        texts: list[str],
+        video_id: int | str | None = None,
+        start_index: int = 0,
+    ) -> list[dict]:
+        """
+        Embed each of `texts` as one chunk, without re-chunking - same
+        dict shape as `embed`, chunk indexes starting at `start_index`.
+        """
+        ...
+
     def embed_query(
         self,
         query: str,

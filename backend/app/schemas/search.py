@@ -22,6 +22,8 @@ class SearchResult(BaseModel):
     # before chunk times were stored.
     start_time: float | None = None
     end_time: float | None = None
+    # "speech" (said) or "visual" (shown on screen).
+    source: str = "speech"
 
 
 class SemanticSearchResponse(BaseModel):

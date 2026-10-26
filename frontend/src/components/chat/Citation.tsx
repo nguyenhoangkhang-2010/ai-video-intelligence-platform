@@ -41,6 +41,7 @@ export function Citation({ index, source }: { index: number; source: SearchResul
               </span>
             )}
             {hasTime && player && <SeekButton seconds={source.start_time} />}
+            {source.source === "visual" && <span className="index-label text-accent">Shown on screen</span>}
           </span>
           {source.chunk_text}
         </div>

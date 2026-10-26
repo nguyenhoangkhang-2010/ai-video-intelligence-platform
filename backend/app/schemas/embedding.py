@@ -13,6 +13,8 @@ class EmbeddingBase(BaseModel):
     # timed segments).
     start_time: float | None = None
     end_time: float | None = None
+    # "speech" or "visual" - see app.models.embedding.Embedding.source.
+    source: str | None = "speech"
 
 class EmbeddingCreate(EmbeddingBase):
     video_id: int

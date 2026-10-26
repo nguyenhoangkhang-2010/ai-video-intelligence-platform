@@ -144,6 +144,41 @@ class Embedder:
             )
         )
 
+    def embed_texts(
+        self,
+        texts: list[str],
+        video_id: int | str | None = None,
+        start_index: int = 0,
+    ) -> list[dict]:
+        """
+        Embed already-separate passages as-is, one chunk each (no
+        re-chunking) - for visual segments, whose boundaries are the
+        video's own scene changes. Same dict shape as embed(); chunk
+        indexes continue from `start_index` so vector ids never collide
+        with the transcript's chunks.
+        """
+        texts = [text.strip() for text in texts]
+        if not texts or not all(texts):
+            return []
+
+        vectors = self.model.encode(texts)["dense_vecs"]
+
+        return [
+            {
+                "chunk_index": start_index + offset,
+                "chunk_text": text,
+                "word_start": None,
+                "word_end": None,
+                "embedding_model": EMBEDDING_MODEL_NAME,
+                "vector": vector.tolist(),
+                "vector_id": self._build_vector_id(
+                    video_id=video_id,
+                    chunk_index=start_index + offset,
+                ),
+            }
+            for offset, (text, vector) in enumerate(zip(texts, vectors))
+        ]
+
     def embed_query(self, query: str) -> list[float]:
         
         if not query or not query.strip():

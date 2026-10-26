@@ -19,6 +19,7 @@ import {
 } from "@/components/workspace/sections";
 import { ChatPanel } from "@/components/workspace/panels/ChatPanel";
 import { ChaptersPanel } from "@/components/workspace/panels/ChaptersPanel";
+import { ScreenPanel } from "@/components/workspace/panels/ScreenPanel";
 import { FlashcardsPanel } from "@/components/workspace/panels/FlashcardsPanel";
 import { OverviewPanel } from "@/components/workspace/panels/OverviewPanel";
 import { QuizPanel } from "@/components/workspace/panels/QuizPanel";
@@ -256,6 +257,8 @@ function ActivePanel({
       return <ChatPanel videoId={videoId} videoTitle={video.title} />;
     case "chapters":
       return <ChaptersPanel videoId={videoId} videoStatus={video.status} />;
+    case "screen":
+      return <ScreenPanel videoId={videoId} videoStatus={video.status} />;
     // "quiz"/"flashcards" are rendered outside ActivePanel - see the
     // keepAliveSections blocks in VideoWorkspacePage above.
     default:

@@ -38,3 +38,28 @@ class EmbeddingWorker:
         )
 
         return embeddings
+
+    def process_texts(
+        self,
+        texts: list[str],
+        video_id: int | str | None = None,
+        start_index: int = 0,
+    ) -> list[dict]:
+        """Embed separate passages (visual segments) one chunk each."""
+        return self.embedder.embed_texts(
+            texts,
+            video_id=video_id,
+            start_index=start_index,
+        )
+
+    def similarity(
+        self,
+        a: str,
+        b: str,
+    ) -> float | None:
+        """Cosine similarity of two texts' query embeddings; None if either is blank."""
+        from ai.vision.segments import cosine
+
+        if not a.strip() or not b.strip():
+            return None
+        return cosine(self.embedder.embed_query(a), self.embedder.embed_query(b))

@@ -73,6 +73,7 @@ class OllamaClient:
     def _post(
         self,
         prompt: str,
+        images: list[str] | None = None,
     ) -> requests.Response:
         """
         Raw, retried network call only - kept separate from `generate`
@@ -83,7 +84,7 @@ class OllamaClient:
         """
         return requests.post(
             f"{self.base_url}/api/generate",
-            json=self._request_body(prompt, stream=False),
+            json=self._request_body(prompt, stream=False, images=images),
             timeout=settings.llm.request_timeout_seconds,
         )
 
@@ -91,6 +92,7 @@ class OllamaClient:
         self,
         prompt: str,
         stream: bool,
+        images: list[str] | None = None,
     ) -> dict:
         body = {
             "model": self.model,
@@ -101,11 +103,15 @@ class OllamaClient:
         # option for models or Ollama versions that don't accept it.
         if settings.llm.think is not None:
             body["think"] = settings.llm.think
+        # Base64-encoded images for vision models (ai.vision.describer).
+        if images:
+            body["images"] = images
         return body
 
     def generate(
         self,
         prompt: str,
+        images: list[str] | None = None,
     ) -> str:
         """
         Generate text using Ollama.
@@ -117,7 +123,7 @@ class OllamaClient:
         an LLM hiccup become an unhandled 500.
         """
         try:
-            response = self._post(prompt)
+            response = self._post(prompt, images)
         except requests.exceptions.ConnectionError as exc:
             # tenacity already retried this up to 3 times (reraise=True
             # re-raises the final attempt's exception unchanged) -

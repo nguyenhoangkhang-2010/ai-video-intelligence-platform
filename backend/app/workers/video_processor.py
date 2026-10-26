@@ -33,6 +33,8 @@ from app.services.chapter import ChapterService
 
 from app.repositories.flashcard import FlashcardRepository
 from app.services.flashcard import FlashcardService
+from app.repositories.visual_segment import VisualSegmentRepository
+from app.services.visual_segment import VisualSegmentService
 
 from app.storage.factory import get_storage_backend
 
@@ -118,6 +120,8 @@ def process_video(
         flashcard_repository = FlashcardRepository(db)
         flashcard_service = FlashcardService(flashcard_repository)
 
+        visual_segment_service = VisualSegmentService(VisualSegmentRepository(db))
+
         video_pipeline = VideoPipelineService(
             video_service=video_service,
             transcript_service=transcript_service,
@@ -130,6 +134,7 @@ def process_video(
             chapter_service=chapter_service,
             flashcard_service=flashcard_service,
             storage=get_storage_backend(),
+            visual_segment_service=visual_segment_service,
         )
 
         processing_pipeline = ProcessingPipeline(

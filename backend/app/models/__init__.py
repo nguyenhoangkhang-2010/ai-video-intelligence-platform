@@ -10,6 +10,7 @@ from app.models.quiz import Quiz
 from app.models.processing_job import ProcessingJob
 from app.models.processing_stage import ProcessingStage
 from app.models.chat_history import ChatHistory
+from app.models.visual_segment import VisualSegment
 
 __all__ = [
     "User",
@@ -24,4 +25,5 @@ __all__ = [
     "ProcessingJob",
     "ProcessingStage",
     "ChatHistory",
+    "VisualSegment",
 ]

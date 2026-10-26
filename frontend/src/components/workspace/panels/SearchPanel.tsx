@@ -128,6 +128,7 @@ export function SearchPanel({ videoId }: { videoId: number }) {
                   <div className="mb-1 flex items-center gap-2">
                     <p className="text-caption text-text-disabled">Segment {result.chunk_index + 1}</p>
                     <SeekButton seconds={result.start_time} />
+                    {result.source === "visual" && <span className="index-label text-accent">Shown on screen</span>}
                   </div>
                   <p className="text-body-sm leading-relaxed text-text-secondary">
                     <Highlight text={result.chunk_text} query={search.data.query} />

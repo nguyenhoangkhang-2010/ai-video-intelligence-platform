@@ -1,3 +1,4 @@
+import { Icon } from "@/components/ui/Icon";
 import { cn } from "@/lib/utils";
 
 /** SVG path for a gear of `teeth` teeth centred at the origin. */
@@ -19,6 +20,19 @@ function gearPath(teeth: number, outer: number, inner: number): string {
   return `M ${points.join(" L ")} Z`;
 }
 
+// Big/small gears alternate. Same tooth depth on both, and the centre
+// distance is the sum of their pitch radii, so neighbours' teeth really
+// interleave instead of floating apart.
+const TOOTH_DEPTH = 6;
+const BIG = { outer: 40, teeth: 18, seconds: 6 };
+// Small gear turns faster by the tooth ratio, like a real train.
+const SMALL = { outer: 30, teeth: 14, seconds: (6 * 14) / 18 };
+const PITCH = BIG.outer - TOOTH_DEPTH / 2 + (SMALL.outer - TOOTH_DEPTH / 2);
+const HEIGHT = BIG.outer * 2 + 8;
+// A big gear is wider than its half-pitch column: pad both ends so the
+// first and last gears aren't clipped (the label grid is inset to match).
+const PAD = BIG.outer - PITCH / 2 + 2;
+
 interface GearTrainProps {
   stages: readonly string[];
   /** Index of the stage currently running; stages before it are done. */
@@ -31,61 +45,96 @@ interface GearTrainProps {
 /**
  * The processing pipeline as a train of meshing gears: finished stages
  * are set in lume, the running stage turns in petrol, the rest wait in
- * outline. Gears alternate size so neighbours visibly mesh; adjacent
- * running/finished gears counter-rotate like a real train.
+ * outline. All gears sit on one axis with their teeth interleaved, so
+ * the train turns as one (adjacent gears counter-rotate, the small ones
+ * faster by the tooth ratio) and stops when processing completes.
+ *
+ * Labels are HTML, not SVG text: one grid column per gear, exactly one
+ * gear pitch wide, so each label sits under its own gear, never overlaps
+ * its neighbour, and keeps a readable size at any screen width (SVG text
+ * scaled down with the drawing).
  */
 export function GearTrain({ stages, activeIndex, complete = false, className }: GearTrainProps) {
-  const pitch = 96;
-  const width = pitch * (stages.length - 1) + 120;
+  const width = PITCH * stages.length + PAD * 2;
+  const cy = HEIGHT / 2;
 
   return (
-    <div className={cn("w-full", className)}>
-      <svg viewBox={`0 0 ${width} 150`} className="w-full" role="img" aria-label={`Pipeline: ${stages.join(", ")}`}>
+    <div className={cn("mx-auto w-full max-w-xl", className)}>
+      <svg
+        viewBox={`0 0 ${width} ${HEIGHT}`}
+        className="block w-full"
+        role="img"
+        aria-label={`Pipeline: ${stages.join(", ")}`}
+      >
         {stages.map((stage, index) => {
-          const big = index % 2 === 0;
-          const outer = big ? 40 : 30;
-          const inner = outer - 6;
-          const cx = 60 + index * pitch;
-          const cy = big ? 62 : 58;
+          const gear = index % 2 === 0 ? BIG : SMALL;
+          const inner = gear.outer - TOOTH_DEPTH;
+          const cx = PAD + PITCH / 2 + index * PITCH;
           const done = complete || index < activeIndex;
           const running = !complete && index === activeIndex;
           const fill = done ? "rgb(var(--color-lume))" : running ? "rgb(var(--color-ai))" : "rgb(var(--color-surface-elevated))";
           const stroke = done || running ? "rgb(var(--color-text-primary))" : "rgb(var(--color-text-primary) / 0.45)";
+          // Half a tooth of offset on every other gear so teeth fall into gaps.
+          const phase = index % 2 === 0 ? 0 : 180 / gear.teeth;
           return (
-            <g key={stage}>
-              <g transform={`translate(${cx} ${cy})`}>
-                <g
-                  className={cn(running && "animate-spin")}
-                  style={{
-                    transformBox: "fill-box",
-                    transformOrigin: "center",
-                    animationDuration: big ? "6s" : "4.5s",
-                    animationDirection: index % 2 === 0 ? "normal" : "reverse",
-                  }}
-                >
-                  <path d={gearPath(big ? 18 : 14, outer, inner)} style={{ fill, stroke }} strokeWidth={1.5} />
-                  <circle r={inner * 0.42} style={{ fill: "rgb(var(--color-surface-sunken))", stroke }} strokeWidth={1.5} />
-                  <line x1={0} y1={-inner * 0.42} x2={0} y2={-inner + 2} style={{ stroke }} strokeWidth={1.5} />
-                </g>
-                <circle r={3} style={{ fill: "rgb(var(--color-atmosphere))" }} />
-              </g>
-              <text
-                x={cx}
-                y={136}
-                textAnchor="middle"
-                className="font-mono"
+            <g key={stage} transform={`translate(${cx} ${cy}) rotate(${phase})`}>
+              <g
+                // Meshed gears can't turn alone: the whole train runs while
+                // processing and stops when done. State is shown by colour.
+                className={cn(!complete && "animate-spin motion-reduce:animate-none")}
                 style={{
-                  fontSize: 11,
-                  letterSpacing: "0.14em",
-                  fill: done || running ? "rgb(var(--color-text-primary))" : "rgb(var(--color-text-muted))",
+                  transformBox: "fill-box",
+                  transformOrigin: "center",
+                  animationDuration: `${gear.seconds}s`,
+                  animationDirection: index % 2 === 0 ? "normal" : "reverse",
                 }}
               >
-                {String(index + 1).padStart(2, "0")} {stage.toUpperCase()}
-              </text>
+                <path d={gearPath(gear.teeth, gear.outer, inner)} style={{ fill, stroke }} strokeWidth={1.5} />
+                <circle r={inner * 0.42} style={{ fill: "rgb(var(--color-surface-sunken))", stroke }} strokeWidth={1.5} />
+                <line x1={0} y1={-inner * 0.42} x2={0} y2={-inner + 2} style={{ stroke }} strokeWidth={1.5} />
+              </g>
+              <circle r={3} style={{ fill: "rgb(var(--color-atmosphere))" }} />
             </g>
           );
         })}
       </svg>
+
+      <ol
+        className="mt-4 grid"
+        style={{
+          gridTemplateColumns: `repeat(${stages.length}, minmax(0, 1fr))`,
+          paddingInline: `${(PAD / width) * 100}%`,
+        }}
+      >
+        {stages.map((stage, index) => {
+          const done = complete || index < activeIndex;
+          const running = !complete && index === activeIndex;
+          return (
+            <li
+              key={stage}
+              aria-current={running ? "step" : undefined}
+              className={cn(
+                "flex min-w-0 flex-col items-center gap-1 px-0.5 text-center font-mono",
+                done || running ? "text-text-primary" : "text-text-muted",
+              )}
+            >
+              <span className={cn("flex items-center gap-1 text-[10px] tracking-[0.14em]", running && "text-ai")}>
+                {done && <Icon name="check" size={10} />}
+                {String(index + 1).padStart(2, "0")}
+              </span>
+              <span
+                className={cn(
+                  // Wraps rather than truncates: a stage name is never hidden.
+                  "w-full text-[10px] uppercase leading-tight tracking-normal [overflow-wrap:anywhere] sm:text-[11px] sm:tracking-[0.06em]",
+                  running && "font-semibold",
+                )}
+              >
+                {stage}
+              </span>
+            </li>
+          );
+        })}
+      </ol>
     </div>
   );
 }

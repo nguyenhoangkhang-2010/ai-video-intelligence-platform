@@ -47,11 +47,9 @@ from app.repositories.processing_job import ProcessingJobRepository
 from app.repositories.processing_stage import ProcessingStageRepository
 from app.services.processing_job import ProcessingJobService
 from app.services.processing_stage import ProcessingStageService
+from app.pipelines.stage_definitions import STAGE_ORDER
 
-ALL_STAGES = (
-    "metadata", "transcription", "summary", "embedding",
-    "translation", "quiz", "chapter", "flashcard",
-)
+ALL_STAGES = STAGE_ORDER
 
 
 def _create_stale_running_job(db_session) -> ProcessingJob:
@@ -125,6 +123,7 @@ def _build_real_pipeline(db_session, shared_video_service):
         )
 
     video_pipeline.metadata_stage = MagicMock(name="metadata_stage")
+    video_pipeline.visual_stage = MagicMock(name="visual_stage", return_value=[])
     video_pipeline.transcription_stage = MagicMock(
         name="transcription_stage",
         return_value=(MagicMock(name="transcript"), [{"start": 0.0, "end": 1.0, "text": "x"}]),

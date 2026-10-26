@@ -42,6 +42,8 @@ from app.repositories.chapter import ChapterRepository
 from app.services.chapter import ChapterService
 
 from app.repositories.flashcard import FlashcardRepository
+from app.repositories.visual_segment import VisualSegmentRepository
+from app.services.visual_segment import VisualSegmentService
 from app.services.flashcard import FlashcardService
 
 from app.repositories.chat_history import ChatHistoryRepository
@@ -202,6 +204,11 @@ def get_chapter_service(
 ) -> ChapterService:
     repository = ChapterRepository(db)
     return ChapterService(repository)
+
+def get_visual_segment_service(
+    db: Session = Depends(get_db),
+) -> VisualSegmentService:
+    return VisualSegmentService(VisualSegmentRepository(db))
 
 def get_flashcard_service(
     db: Session = Depends(get_db),

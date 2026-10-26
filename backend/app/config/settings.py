@@ -370,6 +370,57 @@ class ChapterSettings(BaseConfig):
     )
 
 # =============================================================================
+# Visual understanding
+# =============================================================================
+class VisionSettings(BaseConfig):
+    """Keyframe analysis with a vision-language model (ai.vision)."""
+
+    enabled: bool = Field(
+        default=True,
+        alias="VISION_ENABLED",
+    )
+
+    # Any Ollama vision model. qwen2.5vl reads Vietnamese on-screen
+    # text; the 3B size keeps CPU inference at ~10-30 s per frame.
+    model: str = Field(
+        default="qwen2.5vl:3b",
+        alias="VISION_MODEL",
+    )
+
+    max_frames: int = Field(
+        default=20,
+        alias="VISION_MAX_FRAMES",
+    )
+
+    scene_threshold: float = Field(
+        default=0.3,
+        alias="VISION_SCENE_THRESHOLD",
+    )
+
+    min_gap_seconds: float = Field(
+        default=4.0,
+        alias="VISION_MIN_GAP_SECONDS",
+    )
+
+    max_gap_seconds: float = Field(
+        default=30.0,
+        alias="VISION_MAX_GAP_SECONDS",
+    )
+
+    frame_width: int = Field(
+        default=768,
+        alias="VISION_FRAME_WIDTH",
+    )
+
+    # Cosine similarity (BGE-M3) between a frame's description and what
+    # was said around it, at or above which the frame is treated as
+    # illustrating the speech rather than as unrelated b-roll.
+    related_threshold: float = Field(
+        default=0.45,
+        alias="VISION_RELATED_THRESHOLD",
+    )
+
+# =============================================================================
 # Summarization
 # =============================================================================
 class SummarySettings(BaseConfig):
@@ -795,6 +846,7 @@ class Settings(BaseModel):
     retrieval: RetrievalSettings = Field(default_factory=RetrievalSettings)
     speech: SpeechSettings = Field(default_factory=SpeechSettings)
     chapter: ChapterSettings = Field(default_factory=ChapterSettings)
+    vision: VisionSettings = Field(default_factory=VisionSettings)
     summary: SummarySettings = Field(default_factory=SummarySettings)
     translation: TranslationSettings = Field(default_factory=TranslationSettings)
     quiz: QuizSettings = Field(default_factory=QuizSettings)

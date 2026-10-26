@@ -74,5 +74,8 @@ class DenseRetriever:
                 "source": "dense",
                 "start_time": result.get("start_time"),
                 "end_time": result.get("end_time"),
+                # Said ("speech") or shown ("visual") - not the same as
+                # "source" above, which is the retriever that found it.
+                "content_source": result.get("source", "speech"),
             },
         )

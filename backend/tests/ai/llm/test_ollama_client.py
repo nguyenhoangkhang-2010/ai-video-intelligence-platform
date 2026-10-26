@@ -136,3 +136,17 @@ def test_think_defaults_off_and_empty_env_means_unset(monkeypatch):
 
     monkeypatch.setenv("OLLAMA_THINK", "")
     assert LLMSettings().think is None
+
+
+def test_generate_sends_images_for_vision_models():
+    with patch("ai.llm.ollama_client.requests.post", return_value=_ok_response()) as post:
+        _client().generate("describe", images=["aGVsbG8="])
+
+    assert post.call_args.kwargs["json"]["images"] == ["aGVsbG8="]
+
+
+def test_generate_omits_images_when_none_given():
+    with patch("ai.llm.ollama_client.requests.post", return_value=_ok_response()) as post:
+        _client().generate("prompt")
+
+    assert "images" not in post.call_args.kwargs["json"]

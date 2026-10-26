@@ -3,6 +3,7 @@ import type { IconName } from "@/components/ui/Icon";
 export type WorkspaceSection =
   | "overview"
   | "transcript"
+  | "screen"
   | "summary"
   | "translation"
   | "search"
@@ -29,6 +30,7 @@ export const WORKSPACE_SECTIONS: SectionDef[] = [
   { id: "overview", label: "Overview", icon: "video" },
   { id: "chapters", label: "Chapters", icon: "chapters" },
   { id: "transcript", label: "Transcript", icon: "transcript" },
+  { id: "screen", label: "On screen", icon: "eye" },
   { id: "summary", label: "Summary", icon: "summary" },
   { id: "translation", label: "Translation", icon: "translate" },
   { id: "chat", label: "AI Chat", icon: "chat", tone: "ai" },
@@ -46,7 +48,7 @@ export const WORKSPACE_SECTIONS: SectionDef[] = [
  */
 export const WORKSPACE_SECTION_GROUPS: Array<{ label: string; ids: WorkspaceSection[] }> = [
   { label: "Watch", ids: ["overview", "chapters"] },
-  { label: "Understand", ids: ["transcript", "summary", "translation"] },
+  { label: "Understand", ids: ["transcript", "screen", "summary", "translation"] },
   { label: "Ask", ids: ["chat", "search"] },
   { label: "Study", ids: ["quiz", "flashcards"] },
 ];

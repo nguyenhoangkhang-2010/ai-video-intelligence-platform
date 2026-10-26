@@ -89,6 +89,7 @@ class SparseRetriever:
                         "source": "sparse",
                         "start_time": getattr(chunk, "start_time", None),
                         "end_time": getattr(chunk, "end_time", None),
+                        "content_source": getattr(chunk, "source", None) or "speech",
                     },
                 )
             )

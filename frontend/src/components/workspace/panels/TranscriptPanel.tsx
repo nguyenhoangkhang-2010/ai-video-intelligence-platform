@@ -117,6 +117,17 @@ export function TranscriptPanel({ videoId, videoStatus }: { videoId: number; vid
             <span className="uppercase tracking-wide">{language}</span>
             <span aria-hidden="true">·</span>
             <span className="font-mono">{formatNumber(word_count)} words</span>
+            {transcript.data.source === "visual" && (
+              <>
+                <span aria-hidden="true">·</span>
+                <span
+                  className="text-accent"
+                  title="This video has no speech, so its transcript was built from what is shown on screen."
+                >
+                  From on-screen content
+                </span>
+              </>
+            )}
           </span>
         }
         actions={

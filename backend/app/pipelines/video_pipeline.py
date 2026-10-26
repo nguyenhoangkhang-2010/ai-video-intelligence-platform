@@ -1,4 +1,5 @@
 import logging
+import tempfile
 
 from app.core.retry import is_transient_error
 from app.pipelines.stage_definitions import (
@@ -12,9 +13,10 @@ from app.pipelines.stage_definitions import (
     SUMMARY,
     TRANSCRIPTION,
     TRANSLATION,
+    VISUAL,
 )
 from app.storage.base import StorageBackend
-from app.utils.ffprobe import extract_metadata
+from app.utils.ffprobe import extract_metadata, has_audio_stream
 from app.utils.thumbnail import extract_thumbnail
 from app.services.video import VideoService
 from app.services.processing_job import ProcessingJobService
@@ -63,7 +65,19 @@ from app.schemas.flashcard import FlashcardCreate
 
 from ai.chapter_detection.pipeline import ChapterTopicPipeline
 from ai.embedding.timing import chunk_time_range
+from ai.vision.describer import FrameDescriber
+from ai.vision.keyframes import extract_keyframes
+from ai.speech.pipeline import NoSpeechDetectedError
 from ai.speech.speech_result import SpeechSegment
+from ai.vision.segments import (
+    guess_language,
+    merge_frames,
+    segment_text,
+    speech_around,
+)
+from app.config.settings import settings
+from app.schemas.visual_segment import VisualSegmentCreate
+from app.services.visual_segment import VisualSegmentService
 
 logger = logging.getLogger(__name__)
 
@@ -124,6 +138,7 @@ class VideoPipelineService:
         chapter_service: ChapterService,
         flashcard_service: FlashcardService,
         storage: StorageBackend,
+        visual_segment_service: VisualSegmentService | None = None,
     ):
         self.video_service = video_service
         self.storage = storage
@@ -143,6 +158,9 @@ class VideoPipelineService:
         self.chapter_pipeline = ChapterTopicPipeline()
         self.flashcard_service = flashcard_service
         self.flashcard_worker = FlashcardWorker()
+        # Optional so pipelines built without it (tests, older call
+        # sites) simply skip visual analysis.
+        self.visual_segment_service = visual_segment_service
 
 
     def transcription_stage(
@@ -179,18 +197,31 @@ class VideoPipelineService:
             current_step="Transcribing",
         )
         
-        result = self.transcription_worker.process(
-            video_path=file_path,
-        )
-        
-        if not result["text"].strip():
+        result = None
+        if has_audio_stream(file_path):
+            try:
+                result = self.transcription_worker.process(
+                    video_path=file_path,
+                )
+            except NoSpeechDetectedError:
+                result = None
+        else:
+            logger.info("Video %s has no audio stream.", video_id)
+
+        if result is None or not result["text"].strip():
             logger.warning(
                 "No speech detected in video %s",
                 video_id,
             )
-            raise ValueError(
-                "No speech detected in audio."
-            )
+            # No speech (muted, music-only, or silent screen recording):
+            # build the transcript from what is on screen instead, if
+            # the visual stage found anything. Only fail when it didn't.
+            visual = self._visual_transcript(video_id)
+            if visual is None:
+                raise ValueError(
+                    "No speech detected in audio."
+                )
+            return visual
         
         logger.info(
             "Detected language: %s",
@@ -231,6 +262,132 @@ class VideoPipelineService:
         )
         return transcript, segments
     
+    def _visual_transcript(
+        self,
+        video_id: int,
+    ) -> tuple[Transcript, list[dict]] | None:
+        """
+        A transcript made of the video's visual segments (on-screen
+        text + description, each with its time span), marked
+        source="visual". None if there are none.
+        """
+        if self.visual_segment_service is None:
+            return None
+        rows = self.visual_segment_service.get_by_video_id(video_id)
+        segments = [
+            {
+                "start": row.start_time,
+                "end": row.end_time,
+                "text": segment_text(row.on_screen_text, row.description),
+            }
+            for row in rows
+        ]
+        segments = [segment for segment in segments if segment["text"]]
+        if not segments:
+            return None
+
+        text = "\n\n".join(segment["text"] for segment in segments)
+        language = guess_language(" ".join(row.on_screen_text for row in rows) or text)
+        logger.info(
+            "Using %s visual segment(s) as the transcript for video %s (no speech).",
+            len(segments),
+            video_id,
+        )
+        self.video_service.update_processing_result(
+            video_id=video_id,
+            language=language,
+        )
+        transcript = self.transcript_service.save_transcript(
+            TranscriptCreate(
+                video_id=video_id,
+                language=language,
+                text=text,
+                segments=_timed_segments(segments),
+                source="visual",
+            )
+        )
+        return transcript, segments
+
+    def visual_stage(
+        self,
+        job_id: int,
+        video_id: int,
+        file_path: str,
+    ) -> list:
+        """
+        Read the video's keyframes with a vision model: on-screen text
+        and a description per span of video showing the same thing.
+
+        Best-effort, like the thumbnail: any failure is logged and the
+        stage completes with no segments, so an optional enhancement
+        (or a vision model that isn't pulled yet) never fails a
+        video's processing.
+        """
+        if self.visual_segment_service is None or not settings.vision.enabled:
+            logger.info("Visual analysis disabled; skipping for video %s.", video_id)
+            return []
+
+        self.processing_job_service.update_progress(
+            job_id=job_id,
+            progress=20,
+            current_step="Reading the screen",
+        )
+
+        try:
+            return self._analyse_visuals(video_id, file_path)
+        except Exception:
+            logger.exception(
+                "Visual analysis failed for video %s; continuing without it.",
+                video_id,
+            )
+            return []
+
+    def _analyse_visuals(
+        self,
+        video_id: int,
+        file_path: str,
+    ) -> list:
+        vision = settings.vision
+        duration = float(extract_metadata(file_path).duration)
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            frames = extract_keyframes(
+                file_path,
+                tmp_dir,
+                duration=duration,
+                scene_threshold=vision.scene_threshold,
+                min_gap=vision.min_gap_seconds,
+                max_gap=vision.max_gap_seconds,
+                max_frames=vision.max_frames,
+                width=vision.frame_width,
+            )
+            described = FrameDescriber().describe(frames)
+            segments = merge_frames(described, duration)
+
+            rows = []
+            for index, segment in enumerate(segments):
+                key = f"frames/{video_id}/{index:03d}.jpg"
+                try:
+                    with open(segment.frame_path, "rb") as handle:
+                        self.storage.save(key, handle.read())
+                except OSError:
+                    logger.warning("Could not store keyframe %s.", key, exc_info=True)
+                    key = None
+                rows.append(
+                    VisualSegmentCreate(
+                        video_id=video_id,
+                        start_time=segment.start_time,
+                        end_time=segment.end_time,
+                        frame_key=key,
+                        on_screen_text=segment.text,
+                        description=segment.description,
+                    )
+                )
+
+        saved = self.visual_segment_service.replace_for_video(video_id, rows)
+        logger.info("Saved %s visual segment(s) for video %s.", len(saved), video_id)
+        return saved
+
     def summary_stage(
         self,
         job_id: int,
@@ -306,6 +463,38 @@ class VideoPipelineService:
             )
             raise ValueError(
                 "Failed to generate transcript embeddings."
+            )
+
+        # Where in the video each chunk was spoken, from the transcript's
+        # timed segments (None for transcripts without segments).
+        transcript_segments = getattr(transcript, "segments", None)
+        if not isinstance(transcript_segments, list):
+            transcript_segments = []
+        total_words = len(str(transcript.text).split())
+
+        # A transcript built from the screen (no speech) yields visual
+        # chunks already; otherwise the visual segments are added as
+        # extra chunks, labelled so search and chat can tell "shown"
+        # from "said".
+        transcript_source = "visual" if getattr(transcript, "source", "speech") == "visual" else "speech"
+        for embedding in embeddings:
+            times = chunk_time_range(
+                transcript_segments,
+                total_words,
+                embedding.get("word_start"),
+                embedding.get("word_end"),
+            )
+            embedding["start_time"] = times[0] if times else None
+            embedding["end_time"] = times[1] if times else None
+            embedding["source"] = transcript_source
+
+        if transcript_source == "speech":
+            embeddings.extend(
+                self._embed_visual_segments(
+                    video_id,
+                    start_index=len(embeddings),
+                    transcript_segments=transcript_segments,
+                )
             )
 
         # Generation succeeded: it is now safe to replace whatever
@@ -384,22 +573,6 @@ class VideoPipelineService:
         # VectorStore.replace() treats them as already-present
         # duplicates (no-op for FAISS), and only the Postgres write is
         # actually retried.
-        # Where in the video each chunk was spoken, from the transcript's
-        # timed segments (None for transcripts without segments).
-        transcript_segments = getattr(transcript, "segments", None)
-        if not isinstance(transcript_segments, list):
-            transcript_segments = []
-        total_words = len(str(transcript.text).split())
-        chunk_times = [
-            chunk_time_range(
-                transcript_segments,
-                total_words,
-                embedding.get("word_start"),
-                embedding.get("word_end"),
-            )
-            for embedding in embeddings
-        ]
-
         try:
             self.embedding_service.replace_for_video(
                 video_id,
@@ -410,10 +583,11 @@ class VideoPipelineService:
                         chunk_text=embedding["chunk_text"],
                         embedding_model=embedding["embedding_model"],
                         vector_id=embedding["vector_id"],
-                        start_time=times[0] if times else None,
-                        end_time=times[1] if times else None,
+                        start_time=embedding.get("start_time"),
+                        end_time=embedding.get("end_time"),
+                        source=embedding.get("source", "speech"),
                     )
-                    for embedding, times in zip(embeddings, chunk_times)
+                    for embedding in embeddings
                 ],
             )
         except Exception:
@@ -437,6 +611,62 @@ class VideoPipelineService:
         )
 
         return embeddings
+
+    def _embed_visual_segments(
+        self,
+        video_id: int,
+        start_index: int,
+        transcript_segments: list[dict],
+    ) -> list[dict]:
+        """
+        One retrieval chunk per visual segment (source="visual"), and
+        each segment's similarity to what was said while it was on
+        screen - high means the picture illustrates the speech, low
+        means unrelated footage (b-roll over a voice-over). Best-effort:
+        a failure here leaves the transcript's own chunks unaffected.
+        """
+        if self.visual_segment_service is None:
+            return []
+
+        rows = [
+            row
+            for row in self.visual_segment_service.get_by_video_id(video_id)
+            if segment_text(row.on_screen_text, row.description)
+        ]
+        if not rows:
+            return []
+
+        try:
+            embedded = self.embedding_worker.process_texts(
+                [segment_text(row.on_screen_text, row.description) for row in rows],
+                video_id=video_id,
+                start_index=start_index,
+            )
+            for embedding, row in zip(embedded, rows):
+                embedding.update(
+                    source="visual",
+                    start_time=row.start_time,
+                    end_time=row.end_time,
+                )
+
+            self.visual_segment_service.set_speech_similarity(
+                {
+                    row.id: self.embedding_worker.similarity(
+                        segment_text(row.on_screen_text, row.description),
+                        speech_around(row, transcript_segments),
+                    )
+                    for row in rows
+                }
+            )
+        except Exception:
+            logger.exception(
+                "Embedding visual segments failed for video %s; "
+                "continuing with transcript chunks only.",
+                video_id,
+            )
+            return []
+
+        return embedded
     
     def translation_stage(
         self,
@@ -851,6 +1081,11 @@ class VideoPipelineService:
         """
         if stage_name == METADATA:
             return self.metadata_stage(
+                job_id=job_id, video_id=video_id, file_path=file_path,
+            )
+
+        if stage_name == VISUAL:
+            return self.visual_stage(
                 job_id=job_id, video_id=video_id, file_path=file_path,
             )
 

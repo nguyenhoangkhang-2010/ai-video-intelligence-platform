@@ -3,6 +3,36 @@ import subprocess
 
 from app.types.video_metadata import VideoMetadata
 
+def has_audio_stream(
+    file_path: str,
+) -> bool:
+    """
+    Whether the file has any audio stream. A video with none (screen
+    recordings, muted exports) cannot be transcribed at all - ffmpeg's
+    audio extraction would just fail. True if ffprobe itself fails, so
+    an ffprobe problem never silently skips transcription.
+    """
+    command = [
+        "ffprobe",
+        "-v", "quiet",
+        "-select_streams", "a",
+        "-show_entries", "stream=index",
+        "-of", "csv=p=0",
+        file_path,
+    ]
+    try:
+        result = subprocess.run(
+            command,
+            capture_output=True,
+            text=True,
+            check=True,
+            timeout=30,
+        )
+    except (subprocess.CalledProcessError, subprocess.TimeoutExpired, FileNotFoundError):
+        return True
+    return bool(result.stdout.strip())
+
+
 def extract_metadata(
     file_path: str,
 ) -> VideoMetadata:

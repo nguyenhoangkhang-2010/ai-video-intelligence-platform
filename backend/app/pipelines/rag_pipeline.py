@@ -28,6 +28,20 @@ DEFAULT_TOP_K = 5
 MAX_CONTEXT_CHARS = 8000
 
 
+def _source_label(result: RetrievalResult) -> str:
+    """
+    Tells the LLM whether a chunk was said or shown, and when - so an
+    answer never presents on-screen text as speech (or the reverse),
+    and can report a conflict between them instead of picking one.
+    """
+    kind = "hiển thị trên màn hình" if result.metadata.get("content_source") == "visual" else "lời nói"
+    start = result.metadata.get("start_time")
+    if start is None:
+        return kind
+    start = int(start)
+    return f"{kind}, lúc {start // 60}:{start % 60:02d}"
+
+
 @dataclass(frozen=True)
 class PreparedAnswer:
     """
@@ -260,6 +274,7 @@ class RAGPipeline:
             distance=result.metadata.get("distance", 0.0),
             start_time=result.metadata.get("start_time"),
             end_time=result.metadata.get("end_time"),
+            source=result.metadata.get("content_source", "speech"),
         )
 
     @staticmethod
@@ -292,7 +307,7 @@ class RAGPipeline:
 
             block = (
                 f"[Source {position}] "
-                f"(chunk_index: {chunk_index})\n"
+                f"(chunk_index: {chunk_index}; {_source_label(result)})\n"
                 f"{result.text}"
             )
 

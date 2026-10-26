@@ -59,6 +59,16 @@ class Transcript(Base):
         nullable=True,
     )
 
+    # "speech" (Whisper) or "visual": a video with no speech gets a
+    # transcript built from what is on screen (ai.vision) instead of
+    # failing processing.
+    source: Mapped[str] = mapped_column(
+        String(20),
+        nullable=False,
+        default="speech",
+        server_default="speech",
+    )
+
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         default=datetime.utcnow,

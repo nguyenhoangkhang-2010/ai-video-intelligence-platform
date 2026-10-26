@@ -17,4 +17,6 @@ export interface Transcript {
   created_at: string;
   /** Whisper's timed segments; null for transcripts saved before these were stored. */
   segments?: TranscriptSegment[] | null;
+  /** "visual" when the video had no speech and this was built from what is on screen. */
+  source?: "speech" | "visual";
 }

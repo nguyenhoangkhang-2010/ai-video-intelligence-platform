@@ -69,6 +69,18 @@ class Embedding(Base):
         nullable=True,
     )
 
+    # Where the chunk's text came from: "speech" (transcript) or
+    # "visual" (on-screen text/description of a visual segment).
+    # Search results and RAG citations are labelled with it, so an
+    # answer never presents something shown on screen as something
+    # that was said, or vice versa.
+    source: Mapped[str] = mapped_column(
+        String(20),
+        nullable=False,
+        default="speech",
+        server_default="speech",
+    )
+
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         default=datetime.utcnow,

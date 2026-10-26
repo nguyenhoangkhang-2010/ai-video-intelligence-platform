@@ -10,6 +10,7 @@ from app.models.processing_job import ProcessingJob
 from app.models.user import User
 from app.models.video import Video
 from app.pipelines.video_pipeline import VideoPipelineService
+from app.pipelines.stage_definitions import STAGE_ORDER
 from app.repositories.processing_stage import ProcessingStageRepository
 from app.services.processing_stage import ProcessingStageService
 
@@ -86,6 +87,7 @@ def _make_pipeline(db_session):
     # own MagicMock - default every stage to a harmless success here
     # so a test only needs to override the ones it's actually testing.
     pipeline.metadata_stage = MagicMock(name="metadata_stage")
+    pipeline.visual_stage = MagicMock(name="visual_stage", return_value=[])
     pipeline.transcription_stage = MagicMock(
         name="transcription_stage",
         return_value=(MagicMock(name="transcript"), [{"start": 0.0, "end": 1.0, "text": "x"}]),
@@ -100,18 +102,19 @@ def _make_pipeline(db_session):
     return pipeline, video_service, processing_job_service, processing_stage_service
 
 
-def test_process_seeds_and_completes_all_eight_stages_on_first_run(db_session):
+def test_process_seeds_and_completes_every_stage_on_first_run(db_session):
     job = _create_job(db_session)
     pipeline, video_service, processing_job_service, stage_service = _make_pipeline(db_session)
 
     pipeline.process(job_id=job.id, video_id=job.video_id, file_path="/tmp/video.mp4")
 
     stages = {s.stage_name: s for s in stage_service.get_by_job_id(job.id)}
-    assert len(stages) == 8
+    assert len(stages) == len(STAGE_ORDER)
     assert all(stage.status == "COMPLETED" for stage in stages.values())
     assert all(stage.attempt_count == 1 for stage in stages.values())
 
     pipeline.metadata_stage.assert_called_once()
+    pipeline.visual_stage.assert_called_once()
     pipeline.transcription_stage.assert_called_once()
     pipeline.summary_stage.assert_called_once()
     pipeline.chapter_stage.assert_called_once()
