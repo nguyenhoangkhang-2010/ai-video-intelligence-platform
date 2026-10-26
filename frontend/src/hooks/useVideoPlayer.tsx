@@ -160,6 +160,16 @@ export function VideoPlayerProvider({ children }: { children: ReactNode }) {
   return <VideoPlayerContext.Provider value={value}>{children}</VideoPlayerContext.Provider>;
 }
 
+/**
+ * Like useVideoPlayer, but returns null instead of throwing when there
+ * is no player - for components (citations, search results) that can
+ * offer "jump to this moment" inside the workspace and still render
+ * elsewhere without it.
+ */
+export function useOptionalVideoPlayer(): VideoPlayerContextValue | null {
+  return useContext(VideoPlayerContext);
+}
+
 export function useVideoPlayer(): VideoPlayerContextValue {
   const context = useContext(VideoPlayerContext);
   if (!context) {

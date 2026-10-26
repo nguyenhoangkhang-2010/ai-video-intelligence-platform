@@ -77,10 +77,18 @@ class Embedder:
             "Generating embeddings for text."
         )
 
-        chunks = self.chunker.chunk(text)
+        # Word spans let the caller map each chunk back to when it was
+        # spoken. A custom chunker without chunk_with_spans still works;
+        # its chunks just carry no span.
+        if hasattr(self.chunker, "chunk_with_spans"):
+            spanned = self.chunker.chunk_with_spans(text)
+        else:
+            spanned = [(chunk, None, None) for chunk in self.chunker.chunk(text)]
 
-        if not chunks:
+        if not spanned:
             return []
+
+        chunks = [chunk for chunk, _, _ in spanned]
 
         result = self.model.encode(chunks)
         vectors = result["dense_vecs"]
@@ -88,13 +96,15 @@ class Embedder:
         embeddings = []
 
         for chunk_index, (
-            chunk_text,
+            (chunk_text, word_start, word_end),
             vector,
-        ) in enumerate(zip(chunks, vectors)):
+        ) in enumerate(zip(spanned, vectors)):
             embeddings.append(
                 {
                     "chunk_index": chunk_index,
                     "chunk_text": chunk_text,
+                    "word_start": word_start,
+                    "word_end": word_end,
                     "embedding_model": EMBEDDING_MODEL_NAME,
                     "vector": vector.tolist(),
                     "vector_id": self._build_vector_id(

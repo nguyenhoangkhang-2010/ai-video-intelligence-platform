@@ -9,6 +9,10 @@ class EmbeddingBase(BaseModel):
     chunk_text: str
     embedding_model: str
     vector_id: str
+    # Video seconds this chunk covers (None when the transcript has no
+    # timed segments).
+    start_time: float | None = None
+    end_time: float | None = None
 
 class EmbeddingCreate(EmbeddingBase):
     video_id: int

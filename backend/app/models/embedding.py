@@ -1,6 +1,7 @@
 from datetime import datetime
 
 from sqlalchemy import DateTime
+from sqlalchemy import Float
 from sqlalchemy import ForeignKey
 from sqlalchemy import Integer
 from sqlalchemy import String
@@ -52,6 +53,20 @@ class Embedding(Base):
         String(255),
         nullable=False,
         unique=True,
+    )
+
+    # The span of video (seconds) this chunk's text was spoken in,
+    # derived from the transcript's timed segments at embedding time
+    # (see ai.embedding.timing). NULL for chunks embedded before
+    # segments were stored, or when the transcript has none.
+    start_time: Mapped[float | None] = mapped_column(
+        Float,
+        nullable=True,
+    )
+
+    end_time: Mapped[float | None] = mapped_column(
+        Float,
+        nullable=True,
     )
 
     created_at: Mapped[datetime] = mapped_column(

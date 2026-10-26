@@ -134,6 +134,10 @@ class SemanticSearchService:
                         embedding_record.chunk_text
                     ),
                     "distance": float(distance),
+                    # Where this chunk was spoken; None for videos
+                    # embedded before chunk times were stored.
+                    "start_time": getattr(embedding_record, "start_time", None),
+                    "end_time": getattr(embedding_record, "end_time", None),
                 }
             )
 

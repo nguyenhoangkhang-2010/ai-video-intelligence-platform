@@ -27,7 +27,15 @@ class TextChunker:
         self.overlap = overlap
 
     def chunk(self, text: str) -> list[str]:
-        
+        return [chunk for chunk, _, _ in self.chunk_with_spans(text)]
+
+    def chunk_with_spans(self, text: str) -> list[tuple[str, int, int]]:
+        """
+        Same chunks as `chunk`, each with the half-open range of word
+        positions [start, end) it covers in the whitespace-split text.
+        The word positions are what lets a chunk be mapped back to the
+        time it was spoken (see ai.embedding.timing).
+        """
         if not text or not text.strip():
             return []
 
@@ -58,7 +66,7 @@ class TextChunker:
             )
 
             if chunk:
-                chunks.append(chunk)
+                chunks.append((chunk, start, end))
 
             if end >= len(words):
                 break

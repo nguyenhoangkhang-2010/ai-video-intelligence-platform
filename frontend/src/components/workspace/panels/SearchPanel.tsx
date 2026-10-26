@@ -8,6 +8,7 @@ import { ErrorState } from "@/components/ui/ErrorState";
 import { Highlight } from "@/components/ui/Highlight";
 import { Icon } from "@/components/ui/Icon";
 import { Skeleton, Spinner } from "@/components/ui/Spinner";
+import { SeekButton } from "@/components/video/SeekButton";
 import { PanelHeader } from "@/components/workspace/PanelHeader";
 import { useVideoSearch } from "@/hooks/useSearch";
 import { toApiError } from "@/lib/axios";
@@ -124,7 +125,10 @@ export function SearchPanel({ videoId }: { videoId: number }) {
                   {String(index + 1).padStart(2, "0")}
                 </span>
                 <div className="min-w-0 flex-1">
-                  <p className="mb-1 text-caption text-text-disabled">Segment {result.chunk_index + 1}</p>
+                  <div className="mb-1 flex items-center gap-2">
+                    <p className="text-caption text-text-disabled">Segment {result.chunk_index + 1}</p>
+                    <SeekButton seconds={result.start_time} />
+                  </div>
                   <p className="text-body-sm leading-relaxed text-text-secondary">
                     <Highlight text={result.chunk_text} query={search.data.query} />
                   </p>

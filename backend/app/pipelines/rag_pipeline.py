@@ -258,6 +258,8 @@ class RAGPipeline:
             chunk_index=result.metadata.get("chunk_index", 0),
             chunk_text=result.text,
             distance=result.metadata.get("distance", 0.0),
+            start_time=result.metadata.get("start_time"),
+            end_time=result.metadata.get("end_time"),
         )
 
     @staticmethod

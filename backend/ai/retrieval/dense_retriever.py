@@ -72,5 +72,7 @@ class DenseRetriever:
                 "chunk_index": result["chunk_index"],
                 "distance": distance,
                 "source": "dense",
+                "start_time": result.get("start_time"),
+                "end_time": result.get("end_time"),
             },
         )

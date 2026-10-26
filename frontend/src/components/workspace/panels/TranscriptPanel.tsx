@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 import { EmptyState } from "@/components/ui/EmptyState";
 import { ErrorState } from "@/components/ui/ErrorState";
@@ -10,22 +10,29 @@ import { ProcessingState } from "@/components/ui/ProcessingState";
 import { Skeleton } from "@/components/ui/Spinner";
 import { PanelHeader } from "@/components/workspace/PanelHeader";
 import { useTranscript } from "@/hooks/useTranscript";
+import { useOptionalVideoPlayer } from "@/hooks/useVideoPlayer";
 import { toApiError } from "@/lib/axios";
 import { isTerminalVideoStatus } from "@/lib/constants";
-import { cn, formatNumber } from "@/lib/utils";
+import { cn, formatNumber, formatTimecode } from "@/lib/utils";
 import type { VideoStatus } from "@/types/video";
 
 /**
- * Full transcript text only — the backend does not provide
- * timestamped segments (see docs/api/rest_api.md, Transcript
- * section), so no per-sentence timestamp is invented here; the
- * left-margin index is the paragraph's ordinal position, not a time.
- * Chapter navigation (real start_time data) lives in the Chapters
- * panel.
+ * The transcript as Whisper's timed segments when the backend has them:
+ * every line shows when it was said, clicking it plays the video from
+ * there, and the line being spoken right now is highlighted (and kept
+ * in view while playing). Transcripts saved before segments were
+ * stored fall back to plain paragraphs, with no timestamp invented.
  */
 export function TranscriptPanel({ videoId, videoStatus }: { videoId: number; videoStatus: VideoStatus }) {
   const transcript = useTranscript(videoId, videoStatus);
+  const player = useOptionalVideoPlayer();
   const [filter, setFilter] = useState("");
+  const segmentRefs = useRef<Array<HTMLLIElement | null>>([]);
+
+  const segments = useMemo(() => {
+    const raw = transcript.data?.segments;
+    return raw && raw.length > 0 ? raw : null;
+  }, [transcript.data]);
 
   const paragraphs = useMemo(() => {
     if (!transcript.data) return [];
@@ -38,11 +45,26 @@ export function TranscriptPanel({ videoId, videoStatus }: { videoId: number; vid
   const matchCount = useMemo(() => {
     const trimmed = filter.trim().toLowerCase();
     if (!trimmed) return 0;
-    return paragraphs.reduce((count, paragraph) => {
-      const occurrences = paragraph.toLowerCase().split(trimmed).length - 1;
+    const pieces = segments ? segments.map((segment) => segment.text) : paragraphs;
+    return pieces.reduce((count, piece) => {
+      const occurrences = piece.toLowerCase().split(trimmed).length - 1;
       return count + occurrences;
     }, 0);
-  }, [paragraphs, filter]);
+  }, [segments, paragraphs, filter]);
+
+  const currentTime = player?.currentTime ?? -1;
+  const activeIndex = useMemo(() => {
+    if (!segments) return -1;
+    return segments.findIndex((segment) => currentTime >= segment.start && currentTime < segment.end);
+  }, [segments, currentTime]);
+
+  // Keep the line being spoken in view while the video plays (not while
+  // paused, so reading ahead isn't yanked back).
+  const isPlaying = player?.isPlaying ?? false;
+  useEffect(() => {
+    if (!isPlaying || activeIndex < 0) return;
+    segmentRefs.current[activeIndex]?.scrollIntoView?.({ block: "nearest", behavior: "smooth" });
+  }, [activeIndex, isPlaying]);
 
   if (transcript.isLoading) {
     return (
@@ -123,29 +145,86 @@ export function TranscriptPanel({ videoId, videoStatus }: { videoId: number; vid
         }
       />
 
-      <div className="flex-1 overflow-y-auto px-6 py-6 sm:px-10">
-        <div className="relative mx-auto max-w-[68ch]">
-          {/* A continuous reading rail, not per-paragraph numbers - this is one linear stream, not a numbered list. */}
-          <div className="absolute bottom-0 left-0 top-1 w-px bg-border" aria-hidden="true" />
-          <div className="flex flex-col gap-5 pl-6">
-            {paragraphs.map((paragraph, index) => {
-              const hasMatch = Boolean(filter.trim()) && paragraph.toLowerCase().includes(filter.trim().toLowerCase());
+      {segments ? (
+        <div className="flex-1 overflow-y-auto px-4 py-5 sm:px-8">
+          <ol className="mx-auto flex max-w-[76ch] flex-col" aria-label="Timed transcript">
+            {segments.map((segment, index) => {
+              const active = index === activeIndex;
+              const hasMatch = Boolean(filter.trim()) && segment.text.toLowerCase().includes(filter.trim().toLowerCase());
               return (
-                <p
-                  key={index}
-                  className={cn(
-                    "text-body-lg leading-[1.75] text-text-secondary transition-colors duration-base",
-                    hasMatch && "-ml-[13px] border-l-2 border-accent pl-3 text-text-primary",
-                  )}
+                <li
+                  key={`${segment.start}-${index}`}
+                  ref={(element) => {
+                    segmentRefs.current[index] = element;
+                  }}
                 >
-                  <Highlight text={paragraph} query={filter} />
-                </p>
+                  <button
+                    type="button"
+                    disabled={!player}
+                    onClick={() => {
+                      player?.seek(segment.start);
+                      player?.play();
+                    }}
+                    aria-current={active ? "true" : undefined}
+                    className={cn(
+                      "group grid w-full grid-cols-[4.25rem_minmax(0,1fr)] gap-3 border-l-[3px] px-2 py-1.5 text-left transition-colors duration-fast disabled:cursor-default",
+                      active
+                        ? "border-lume bg-lume/15"
+                        : hasMatch
+                          ? "border-accent bg-surface-elevated"
+                          : "border-transparent enabled:hover:bg-surface-hover",
+                    )}
+                  >
+                    <span
+                      className={cn(
+                        "pt-[3px] font-mono text-caption",
+                        active ? "text-text-primary" : "text-text-muted group-enabled:group-hover:text-accent",
+                      )}
+                    >
+                      {formatTimecode(segment.start)}
+                    </span>
+                    <span
+                      className={cn(
+                        "text-body leading-relaxed",
+                        active ? "text-text-primary" : "text-text-secondary",
+                      )}
+                    >
+                      {segment.speaker && (
+                        <span className="index-label mr-2 text-ai">{segment.speaker}</span>
+                      )}
+                      <Highlight text={segment.text} query={filter} />
+                    </span>
+                  </button>
+                </li>
               );
             })}
-            {paragraphs.length === 0 && <p className="text-body-lg leading-[1.75] text-text-secondary">{text}</p>}
+          </ol>
+        </div>
+      ) : (
+        <div className="flex-1 overflow-y-auto px-6 py-6 sm:px-10">
+          <div className="relative mx-auto max-w-[68ch]">
+            {/* A continuous reading rail, not per-paragraph numbers - this is one linear stream, not a numbered list. */}
+            <div className="absolute bottom-0 left-0 top-1 w-px bg-border" aria-hidden="true" />
+            <div className="flex flex-col gap-5 pl-6">
+              {paragraphs.map((paragraph, index) => {
+                const hasMatch = Boolean(filter.trim()) && paragraph.toLowerCase().includes(filter.trim().toLowerCase());
+                return (
+                  <p
+                    key={index}
+                    className={cn(
+                      "text-body-lg leading-[1.75] text-text-secondary transition-colors duration-base",
+                      hasMatch && "-ml-[13px] border-l-2 border-accent pl-3 text-text-primary",
+                    )}
+                  >
+                    <Highlight text={paragraph} query={filter} />
+                  </p>
+                );
+              })}
+              {paragraphs.length === 0 && <p className="text-body-lg leading-[1.75] text-text-secondary">{text}</p>}
+            </div>
           </div>
         </div>
-      </div>
+      )}
     </div>
   );
 }

@@ -57,9 +57,16 @@ class TranscriptService:
             transcript_data.video_id
         )
 
+        segments = (
+            [segment.model_dump(exclude_none=True) for segment in transcript_data.segments]
+            if transcript_data.segments is not None
+            else None
+        )
+
         if transcript is None:
             transcript = Transcript(
-                **transcript_data.model_dump(),
+                **transcript_data.model_dump(exclude={"segments"}),
+                segments=segments,
                 word_count=len(
                     transcript_data.text.strip().split()
                 ),
@@ -68,6 +75,7 @@ class TranscriptService:
 
         transcript.language = transcript_data.language
         transcript.text = transcript_data.text
+        transcript.segments = segments
         transcript.word_count = len(
             transcript_data.text.strip().split()
         )

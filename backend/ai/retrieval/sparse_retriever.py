@@ -87,6 +87,8 @@ class SparseRetriever:
                     metadata={
                         "chunk_index": chunk.chunk_index,
                         "source": "sparse",
+                        "start_time": getattr(chunk, "start_time", None),
+                        "end_time": getattr(chunk, "end_time", None),
                     },
                 )
             )

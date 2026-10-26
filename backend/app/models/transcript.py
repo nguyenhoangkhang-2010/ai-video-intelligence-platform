@@ -3,6 +3,7 @@ from datetime import datetime
 from sqlalchemy import DateTime
 from sqlalchemy import ForeignKey
 from sqlalchemy import Integer
+from sqlalchemy import JSON
 from sqlalchemy import String
 from sqlalchemy import Text
 
@@ -45,6 +46,17 @@ class Transcript(Base):
     word_count: Mapped[int] = mapped_column(
         Integer,
         default=0,
+    )
+
+    # Whisper's timed segments - [{"start", "end", "text", "speaker"?}]
+    # in video seconds, in order. Powers the click-to-seek transcript,
+    # the timestamps on search results / chat citations (via the
+    # embedding chunk times derived from these), and chapter
+    # detection on resume. NULL for transcripts saved before segments
+    # were stored.
+    segments: Mapped[list[dict] | None] = mapped_column(
+        JSON,
+        nullable=True,
     )
 
     created_at: Mapped[datetime] = mapped_column(

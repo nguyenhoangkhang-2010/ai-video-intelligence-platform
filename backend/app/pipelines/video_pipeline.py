@@ -26,7 +26,7 @@ from app.workers.pipeline_metrics import (
 )
 from app.workers.transcription_worker import TranscriptionWorker
 
-from app.schemas.transcript import TranscriptCreate
+from app.schemas.transcript import TranscriptCreate, TranscriptSegment
 from app.models.transcript import Transcript
 
 from app.services.summary import SummaryService
@@ -62,9 +62,36 @@ from app.workers.flashcard_worker import FlashcardWorker
 from app.schemas.flashcard import FlashcardCreate
 
 from ai.chapter_detection.pipeline import ChapterTopicPipeline
+from ai.embedding.timing import chunk_time_range
 from ai.speech.speech_result import SpeechSegment
 
 logger = logging.getLogger(__name__)
+
+
+def _timed_segments(segments: list[dict]) -> list[TranscriptSegment]:
+    """
+    The part of Whisper's segment dicts worth persisting (start, end,
+    text, speaker) - not per-segment model diagnostics. Segments with
+    unusable timing are dropped rather than failing the stage.
+    """
+    timed = []
+    for segment in segments:
+        try:
+            start = float(segment["start"])
+            end = float(segment["end"])
+        except (KeyError, TypeError, ValueError):
+            continue
+        if start < 0 or end < start:
+            continue
+        timed.append(
+            TranscriptSegment(
+                start=start,
+                end=end,
+                text=str(segment.get("text", "")).strip(),
+                speaker=segment.get("speaker"),
+            )
+        )
+    return timed
 
 
 class ProcessingIncompleteError(Exception):
@@ -188,14 +215,21 @@ class VideoPipelineService:
         # regardless (see migration), so this is still exactly one
         # row per video, just atomically replaced on reprocess instead
         # of frozen on first write.
+        segments = result.get("segments", [])
+
         transcript = self.transcript_service.save_transcript(
             TranscriptCreate(
                 video_id=video_id,
                 language=result["language"],
                 text=result["text"],
+                # Keep Whisper's timing: it powers the click-to-seek
+                # transcript, timestamps on search results/citations,
+                # and lets chapter detection resume without re-running
+                # Whisper.
+                segments=_timed_segments(segments),
             )
         )
-        return transcript, result.get("segments", [])
+        return transcript, segments
     
     def summary_stage(
         self,
@@ -350,6 +384,22 @@ class VideoPipelineService:
         # VectorStore.replace() treats them as already-present
         # duplicates (no-op for FAISS), and only the Postgres write is
         # actually retried.
+        # Where in the video each chunk was spoken, from the transcript's
+        # timed segments (None for transcripts without segments).
+        transcript_segments = getattr(transcript, "segments", None)
+        if not isinstance(transcript_segments, list):
+            transcript_segments = []
+        total_words = len(str(transcript.text).split())
+        chunk_times = [
+            chunk_time_range(
+                transcript_segments,
+                total_words,
+                embedding.get("word_start"),
+                embedding.get("word_end"),
+            )
+            for embedding in embeddings
+        ]
+
         try:
             self.embedding_service.replace_for_video(
                 video_id,
@@ -360,8 +410,10 @@ class VideoPipelineService:
                         chunk_text=embedding["chunk_text"],
                         embedding_model=embedding["embedding_model"],
                         vector_id=embedding["vector_id"],
+                        start_time=times[0] if times else None,
+                        end_time=times[1] if times else None,
                     )
-                    for embedding in embeddings
+                    for embedding, times in zip(embeddings, chunk_times)
                 ],
             )
         except Exception:
@@ -816,18 +868,19 @@ class VideoPipelineService:
                 # Resume case: transcription_stage was already
                 # COMPLETED from a prior attempt, so it was skipped
                 # this run and never produced segments in memory.
-                # transcript_segments is the one piece of
-                # transcription's output that is NOT persisted
-                # anywhere (Transcript only stores flattened text -
-                # see transcription_stage's own docstring), so the
-                # only correct way to recover real, timestamped
-                # segments is to re-run the Whisper call. Accepted
-                # here as a bounded, explicit cost specific to
-                # resuming chapter detection alone - it does not
-                # re-run metadata/summary/embedding/translation/quiz/
-                # flashcard, and save_transcript's upsert (Phase 2)
-                # makes re-persisting the (should be near-identical)
-                # transcript text safe either way.
+                # Use the timed segments persisted on the Transcript.
+                persisted = self.transcript_service.get_by_video_id(video_id)
+                persisted_segments = getattr(persisted, "segments", None)
+                if isinstance(persisted_segments, list) and persisted_segments:
+                    segments = persisted_segments
+
+            if segments is None:
+                # A transcript saved before segments were persisted has
+                # no timing to reuse, so the only way to recover real,
+                # timestamped segments is to re-run the Whisper call -
+                # a bounded cost specific to resuming chapter detection
+                # alone (no other stage re-runs), and save_transcript's
+                # upsert makes re-persisting the transcript safe.
                 logger.warning(
                     "Re-running transcription to recover segments "
                     "for chapter detection on video %s - "
