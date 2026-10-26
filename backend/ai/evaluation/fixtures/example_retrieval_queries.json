@@ -1,0 +1,7 @@
+[
+  {
+    "_comment": "SCHEMA EXAMPLE ONLY - not a real evaluation dataset. Copy this file, point --video-id at a video you have actually watched, run `python scripts/run_evaluation.py list-chunks --video-id <id>` to see its real vector_ids, and fill relevant_chunk_ids with the ones a human judge confirms are actually relevant to the query. A fabricated relevant_chunk_ids list produces a meaningless score.",
+    "query": "example query - replace with a real question about your video",
+    "relevant_chunk_ids": []
+  }
+]

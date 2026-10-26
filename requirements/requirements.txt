@@ -1,0 +1,1097 @@
+# Fully pinned, machine-generated lock file - every line below (direct
+# and transitive) is pinned to an exact version. Generated 2026-10-09
+# with pip-tools (pip-compile) from requirements.in, constrained
+# (`-c`) against a `pip freeze` of the already-built, already-healthy
+# ai-video-api/celery containers at the time - i.e. pip-compile was
+# biased toward versions already verified to resolve and run
+# correctly together, not re-resolved fresh against "whatever's
+# newest on PyPI today" (which is exactly the mechanism that caused
+# both incidents below).
+#
+# Why this file exists: requirements.txt used to list bare package
+# names with no version pins (see requirements.in's own history/
+# comments for the two real incidents - ragas on 2026-10-07 and
+# av/faster-whisper on 2026-10-08 - that an unpinned transitive
+# resolution caused). A single reactive pin per incident fixes the
+# symptom but not the mechanism: the next `pip install` from an
+# unpinned file can still silently resolve a different, newer,
+# possibly-incompatible version of ANY of the ~140 packages this
+# project's AI/ML stack transitively depends on. This file pins all
+# of them, so a fresh build reproduces the exact same closure instead
+# of re-resolving it.
+#
+# To intentionally change a version: edit requirements.in (the
+# human-maintained direct-dependency list, same file this used to be)
+# and regenerate this file - do not hand-edit the pins below except
+# to fix a specific, understood incompatibility (as requirements.in's
+# own comments document for av/setuptools).
+#
+# Regeneration (run inside a container built from this project's own
+# Dockerfile, so resolution happens in the actual target Python/OS,
+# not the host machine):
+#   pip install pip-tools
+#   pip freeze > current-freeze.txt
+#   pip-compile requirements.in -c current-freeze.txt \
+#       --output-file=requirements.txt --allow-unsafe
+# Review the diff before committing - especially any package whose
+# version changed from what was already running, since that means
+# the old pin no longer resolves and something upstream moved.
+#
+absl-py==2.5.0
+    # via
+    #   -c current-freeze.txt
+    #   rouge-score
+accelerate==1.15.0
+    # via
+    #   -c current-freeze.txt
+    #   -r requirements.in
+    #   flagembedding
+    #   peft
+aiohappyeyeballs==2.7.1
+    # via
+    #   -c current-freeze.txt
+    #   aiohttp
+aiohttp==3.14.4
+    # via
+    #   -c current-freeze.txt
+    #   fsspec
+aiosignal==1.4.0
+    # via
+    #   -c current-freeze.txt
+    #   aiohttp
+alembic==1.20.0
+    # via
+    #   -c current-freeze.txt
+    #   -r requirements.in
+    #   optuna
+amqp==5.4.1
+    # via
+    #   -c current-freeze.txt
+    #   kombu
+annotated-doc==0.0.5
+    # via
+    #   -c current-freeze.txt
+    #   fastapi
+    #   typer
+annotated-types==0.8.0
+    # via
+    #   -c current-freeze.txt
+    #   pydantic
+anyio==4.15.1
+    # via
+    #   -c current-freeze.txt
+    #   httpx
+    #   starlette
+    #   watchfiles
+argon2-cffi==25.1.0
+    # via
+    #   -c current-freeze.txt
+    #   pwdlib
+argon2-cffi-bindings==26.1.0
+    # via
+    #   -c current-freeze.txt
+    #   argon2-cffi
+asteroid-filterbanks==0.4.0
+    # via
+    #   -c current-freeze.txt
+    #   pyannote-audio
+attrs==26.1.0
+    # via
+    #   -c current-freeze.txt
+    #   aiohttp
+av==18.1.0
+    # via
+    #   -c current-freeze.txt
+    #   -r requirements.in
+    #   faster-whisper
+bert-score==0.3.13
+    # via
+    #   -c current-freeze.txt
+    #   -r requirements.in
+billiard==4.3.1
+    # via
+    #   -c current-freeze.txt
+    #   celery
+boto3==1.43.109
+    # via
+    #   -c current-freeze.txt
+    #   -r requirements.in
+botocore==1.43.109
+    # via
+    #   -c current-freeze.txt
+    #   boto3
+    #   s3transfer
+celery==5.6.3
+    # via
+    #   -c current-freeze.txt
+    #   -r requirements.in
+certifi==2026.7.22
+    # via
+    #   -c current-freeze.txt
+    #   httpcore
+    #   httpx
+    #   requests
+cffi==2.1.1
+    # via
+    #   -c current-freeze.txt
+    #   argon2-cffi-bindings
+    #   soundfile
+charset-normalizer==3.5.2
+    # via
+    #   -c current-freeze.txt
+    #   requests
+click==8.5.0
+    # via
+    #   -c current-freeze.txt
+    #   celery
+    #   click-didyoumean
+    #   click-plugins
+    #   click-repl
+    #   huggingface-hub
+    #   nltk
+    #   uvicorn
+click-didyoumean==0.3.1
+    # via
+    #   -c current-freeze.txt
+    #   celery
+click-plugins==1.1.1.2
+    # via
+    #   -c current-freeze.txt
+    #   celery
+click-repl==0.4.1
+    # via
+    #   -c current-freeze.txt
+    #   celery
+cloudpickle==3.1.2
+    # via
+    #   -c current-freeze.txt
+    #   joblib
+colorlog==6.12.0
+    # via
+    #   -c current-freeze.txt
+    #   optuna
+contourpy==1.4.0
+    # via
+    #   -c current-freeze.txt
+    #   matplotlib
+coverage[toml]==7.16.2
+    # via
+    #   -c current-freeze.txt
+    #   pytest-cov
+ctranslate2==4.8.2
+    # via
+    #   -c current-freeze.txt
+    #   -r requirements.in
+    #   faster-whisper
+cuda-bindings==13.4.3
+    # via
+    #   -c current-freeze.txt
+    #   torch
+cuda-pathfinder==1.8.3
+    # via
+    #   -c current-freeze.txt
+    #   cuda-bindings
+cuda-toolkit[cublas,cudart,cufft,cufile,cupti,curand,cusolver,cusparse,nvjitlink,nvrtc,nvtx]==13.0.3.0
+    # via
+    #   -c current-freeze.txt
+    #   torch
+cycler==0.12.1
+    # via
+    #   -c current-freeze.txt
+    #   matplotlib
+datasets==5.1.0
+    # via
+    #   -c current-freeze.txt
+    #   flagembedding
+defusedxml==0.7.1
+    # via
+    #   -c current-freeze.txt
+    #   nltk
+dill==0.4.1
+    # via
+    #   -c current-freeze.txt
+    #   datasets
+    #   multiprocess
+dnspython==2.8.0
+    # via
+    #   -c current-freeze.txt
+    #   email-validator
+ecdsa==0.19.2
+    # via
+    #   -c current-freeze.txt
+    #   python-jose
+einops==0.8.2
+    # via
+    #   -c current-freeze.txt
+    #   pyannote-audio
+email-validator==2.3.0
+    # via
+    #   -c current-freeze.txt
+    #   pydantic
+faiss-cpu==1.15.1
+    # via
+    #   -c current-freeze.txt
+    #   -r requirements.in
+fastapi==0.142.2
+    # via
+    #   -c current-freeze.txt
+    #   -r requirements.in
+faster-whisper==1.2.1
+    # via
+    #   -c current-freeze.txt
+    #   -r requirements.in
+ffmpeg-python==0.2.0
+    # via
+    #   -c current-freeze.txt
+    #   -r requirements.in
+filelock==4.0.12
+    # via
+    #   -c current-freeze.txt
+    #   datasets
+    #   huggingface-hub
+    #   pyannote-pipeline
+    #   torch
+flagembedding==1.4.2
+    # via
+    #   -c current-freeze.txt
+    #   -r requirements.in
+flatbuffers==25.12.19
+    # via
+    #   -c current-freeze.txt
+    #   onnxruntime
+fonttools==4.66.1
+    # via
+    #   -c current-freeze.txt
+    #   matplotlib
+frozenlist==1.8.0
+    # via
+    #   -c current-freeze.txt
+    #   aiohttp
+    #   aiosignal
+fsspec[http]==2026.7.0
+    # via
+    #   -c current-freeze.txt
+    #   datasets
+    #   huggingface-hub
+    #   lightning
+    #   pytorch-lightning
+    #   torch
+future==1.0.0
+    # via
+    #   -c current-freeze.txt
+    #   ffmpeg-python
+googleapis-common-protos==1.75.5
+    # via
+    #   -c current-freeze.txt
+    #   opentelemetry-exporter-otlp-proto-grpc
+    #   opentelemetry-exporter-otlp-proto-http
+grpcio==1.84.0
+    # via
+    #   -c current-freeze.txt
+    #   opentelemetry-exporter-otlp-proto-grpc
+h11==0.16.0
+    # via
+    #   -c current-freeze.txt
+    #   httpcore
+    #   uvicorn
+hf-xet==1.7.0
+    # via
+    #   -c current-freeze.txt
+    #   huggingface-hub
+httpcore==1.0.9
+    # via
+    #   -c current-freeze.txt
+    #   httpx
+httptools==0.8.0
+    # via
+    #   -c current-freeze.txt
+    #   uvicorn
+httpx==0.28.1
+    # via
+    #   -c current-freeze.txt
+    #   -r requirements.in
+    #   huggingface-hub
+huggingface-hub==1.33.0
+    # via
+    #   -c current-freeze.txt
+    #   accelerate
+    #   datasets
+    #   faster-whisper
+    #   peft
+    #   pyannote-audio
+    #   sentence-transformers
+    #   tokenizers
+    #   transformers
+idna==3.20
+    # via
+    #   -c current-freeze.txt
+    #   anyio
+    #   email-validator
+    #   httpx
+    #   requests
+    #   yarl
+iniconfig==2.3.1
+    # via
+    #   -c current-freeze.txt
+    #   pytest
+ir-datasets==0.6.3
+    # via
+    #   -c current-freeze.txt
+    #   flagembedding
+jinja2==3.1.6
+    # via
+    #   -c current-freeze.txt
+    #   torch
+jmespath==1.1.0
+    # via
+    #   -c current-freeze.txt
+    #   boto3
+    #   botocore
+joblib==1.6.0
+    # via
+    #   -c current-freeze.txt
+    #   nltk
+    #   scikit-learn
+julius==0.2.8
+    # via
+    #   -c current-freeze.txt
+    #   torch-audiomentations
+kiwisolver==1.5.1
+    # via
+    #   -c current-freeze.txt
+    #   matplotlib
+kombu==5.6.2
+    # via
+    #   -c current-freeze.txt
+    #   celery
+langdetect==1.0.9
+    # via
+    #   -c current-freeze.txt
+    #   -r requirements.in
+lightning==2.6.6
+    # via
+    #   -c current-freeze.txt
+    #   pyannote-audio
+lightning-utilities==0.15.3
+    # via
+    #   -c current-freeze.txt
+    #   lightning
+    #   pytorch-lightning
+    #   torchmetrics
+lxml==6.1.3
+    # via
+    #   -c current-freeze.txt
+    #   ir-datasets
+lz4==4.4.5
+    # via
+    #   -c current-freeze.txt
+    #   ir-datasets
+mako==1.4.3
+    # via
+    #   -c current-freeze.txt
+    #   alembic
+markdown-it-py==4.2.0
+    # via
+    #   -c current-freeze.txt
+    #   rich
+markupsafe==3.0.4
+    # via
+    #   -c current-freeze.txt
+    #   jinja2
+    #   mako
+matplotlib==3.11.2
+    # via
+    #   -c current-freeze.txt
+    #   bert-score
+    #   pyannote-audio
+mdurl==0.1.2
+    # via
+    #   -c current-freeze.txt
+    #   markdown-it-py
+mpmath==1.3.0
+    # via
+    #   -c current-freeze.txt
+    #   sympy
+multidict==6.9.1
+    # via
+    #   -c current-freeze.txt
+    #   aiohttp
+    #   yarl
+multiprocess==0.70.19
+    # via
+    #   -c current-freeze.txt
+    #   datasets
+narwhals==2.26.0
+    # via
+    #   -c current-freeze.txt
+    #   scikit-learn
+networkx==3.7
+    # via
+    #   -c current-freeze.txt
+    #   torch
+nltk==3.10.3
+    # via
+    #   -c current-freeze.txt
+    #   rouge-score
+numpy==2.5.3
+    # via
+    #   -c current-freeze.txt
+    #   -r requirements.in
+    #   accelerate
+    #   asteroid-filterbanks
+    #   bert-score
+    #   contourpy
+    #   ctranslate2
+    #   datasets
+    #   faiss-cpu
+    #   ir-datasets
+    #   matplotlib
+    #   onnxruntime
+    #   optuna
+    #   pandas
+    #   peft
+    #   pyannote-core
+    #   pyannote-metrics
+    #   pytorch-metric-learning
+    #   rank-bm25
+    #   rouge-score
+    #   scikit-learn
+    #   scipy
+    #   sentence-transformers
+    #   soundfile
+    #   torchmetrics
+    #   torchvision
+    #   transformers
+nvidia-cublas==13.1.1.3
+    # via
+    #   -c current-freeze.txt
+    #   cuda-toolkit
+    #   nvidia-cudnn-cu13
+    #   nvidia-cusolver
+nvidia-cuda-cupti==13.0.85
+    # via
+    #   -c current-freeze.txt
+    #   cuda-toolkit
+nvidia-cuda-nvrtc==13.0.88
+    # via
+    #   -c current-freeze.txt
+    #   cuda-toolkit
+    #   nvidia-cublas
+nvidia-cuda-runtime==13.0.96
+    # via
+    #   -c current-freeze.txt
+    #   cuda-toolkit
+nvidia-cudnn-cu13==9.24.0.43
+    # via
+    #   -c current-freeze.txt
+    #   torch
+nvidia-cufft==12.0.0.61
+    # via
+    #   -c current-freeze.txt
+    #   cuda-toolkit
+nvidia-cufile==1.15.1.6
+    # via
+    #   -c current-freeze.txt
+    #   cuda-toolkit
+nvidia-curand==10.4.0.35
+    # via
+    #   -c current-freeze.txt
+    #   cuda-toolkit
+nvidia-cusolver==12.0.4.66
+    # via
+    #   -c current-freeze.txt
+    #   cuda-toolkit
+nvidia-cusparse==12.6.3.3
+    # via
+    #   -c current-freeze.txt
+    #   cuda-toolkit
+    #   nvidia-cusolver
+nvidia-cusparselt-cu13==0.8.1
+    # via
+    #   -c current-freeze.txt
+    #   torch
+nvidia-nccl-cu13==2.30.7
+    # via
+    #   -c current-freeze.txt
+    #   torch
+nvidia-nvjitlink==13.4.92
+    # via
+    #   -c current-freeze.txt
+    #   cuda-toolkit
+    #   nvidia-cufft
+    #   nvidia-cusolver
+    #   nvidia-cusparse
+nvidia-nvshmem-cu13==3.4.5
+    # via
+    #   -c current-freeze.txt
+    #   torch
+nvidia-nvtx==13.0.85
+    # via
+    #   -c current-freeze.txt
+    #   cuda-toolkit
+onnxruntime==1.30.0
+    # via
+    #   -c current-freeze.txt
+    #   faster-whisper
+opentelemetry-api==1.45.1
+    # via
+    #   -c current-freeze.txt
+    #   fastapi
+    #   opentelemetry-exporter-http-transport
+    #   opentelemetry-exporter-otlp-proto-grpc
+    #   opentelemetry-exporter-otlp-proto-http
+    #   opentelemetry-sdk
+    #   opentelemetry-semantic-conventions
+    #   pyannote-audio
+opentelemetry-exporter-http-transport[requests]==0.66b1
+    # via
+    #   -c current-freeze.txt
+    #   opentelemetry-exporter-otlp-proto-http
+opentelemetry-exporter-otlp==1.45.1
+    # via
+    #   -c current-freeze.txt
+    #   pyannote-audio
+opentelemetry-exporter-otlp-common==0.66b1
+    # via
+    #   -c current-freeze.txt
+    #   opentelemetry-exporter-otlp-proto-grpc
+    #   opentelemetry-exporter-otlp-proto-http
+opentelemetry-exporter-otlp-proto-common==1.45.1
+    # via
+    #   -c current-freeze.txt
+    #   opentelemetry-exporter-otlp-proto-grpc
+    #   opentelemetry-exporter-otlp-proto-http
+opentelemetry-exporter-otlp-proto-grpc==1.45.1
+    # via
+    #   -c current-freeze.txt
+    #   opentelemetry-exporter-otlp
+opentelemetry-exporter-otlp-proto-http==1.45.1
+    # via
+    #   -c current-freeze.txt
+    #   opentelemetry-exporter-otlp
+opentelemetry-proto==1.45.1
+    # via
+    #   -c current-freeze.txt
+    #   opentelemetry-exporter-otlp-proto-common
+    #   opentelemetry-exporter-otlp-proto-grpc
+    #   opentelemetry-exporter-otlp-proto-http
+opentelemetry-sdk==1.45.1
+    # via
+    #   -c current-freeze.txt
+    #   opentelemetry-exporter-otlp-common
+    #   opentelemetry-exporter-otlp-proto-grpc
+    #   opentelemetry-exporter-otlp-proto-http
+    #   pyannote-audio
+opentelemetry-semantic-conventions==0.66b1
+    # via
+    #   -c current-freeze.txt
+    #   opentelemetry-sdk
+optuna==5.0.0
+    # via
+    #   -c current-freeze.txt
+    #   pyannote-pipeline
+packaging==26.3
+    # via
+    #   -c current-freeze.txt
+    #   accelerate
+    #   bert-score
+    #   datasets
+    #   faiss-cpu
+    #   huggingface-hub
+    #   kombu
+    #   lightning
+    #   lightning-utilities
+    #   matplotlib
+    #   onnxruntime
+    #   optuna
+    #   peft
+    #   pytest
+    #   pytorch-lightning
+    #   torch-pitch-shift
+    #   torchmetrics
+    #   transformers
+pandas==3.0.6
+    # via
+    #   -c current-freeze.txt
+    #   bert-score
+    #   datasets
+    #   pyannote-core
+    #   pyannote-database
+    #   pyannote-metrics
+peft==0.21.2
+    # via
+    #   -c current-freeze.txt
+    #   flagembedding
+pillow==12.3.0
+    # via
+    #   -c current-freeze.txt
+    #   matplotlib
+    #   torchvision
+pluggy==1.6.0
+    # via
+    #   -c current-freeze.txt
+    #   pytest
+    #   pytest-cov
+primepy==1.3
+    # via
+    #   -c current-freeze.txt
+    #   torch-pitch-shift
+prometheus-client==0.26.0
+    # via
+    #   -c current-freeze.txt
+    #   -r requirements.in
+prompt-toolkit==3.0.53
+    # via
+    #   -c current-freeze.txt
+    #   click-repl
+propcache==0.5.4
+    # via
+    #   -c current-freeze.txt
+    #   aiohttp
+    #   yarl
+protobuf==7.36.2
+    # via
+    #   -c current-freeze.txt
+    #   flagembedding
+    #   googleapis-common-protos
+    #   onnxruntime
+    #   opentelemetry-proto
+psutil==7.2.2
+    # via
+    #   -c current-freeze.txt
+    #   accelerate
+    #   peft
+psycopg[binary]==3.3.6
+    # via
+    #   -c current-freeze.txt
+    #   -r requirements.in
+psycopg-binary==3.3.6
+    # via
+    #   -c current-freeze.txt
+    #   psycopg
+pwdlib[argon2]==0.3.1
+    # via
+    #   -c current-freeze.txt
+    #   -r requirements.in
+pyannote-audio==4.0.7
+    # via
+    #   -c current-freeze.txt
+    #   -r requirements.in
+pyannote-core==6.0.1
+    # via
+    #   -c current-freeze.txt
+    #   pyannote-audio
+    #   pyannote-database
+    #   pyannote-metrics
+    #   pyannote-pipeline
+pyannote-database==6.1.1
+    # via
+    #   -c current-freeze.txt
+    #   pyannote-audio
+    #   pyannote-metrics
+    #   pyannote-pipeline
+pyannote-metrics==4.1
+    # via
+    #   -c current-freeze.txt
+    #   pyannote-audio
+pyannote-pipeline==4.0.0
+    # via
+    #   -c current-freeze.txt
+    #   pyannote-audio
+pyannoteai-sdk==0.4.0
+    # via
+    #   -c current-freeze.txt
+    #   pyannote-audio
+pyarrow==25.0.1
+    # via
+    #   -c current-freeze.txt
+    #   datasets
+pyasn1==0.6.4
+    # via
+    #   -c current-freeze.txt
+    #   python-jose
+    #   rsa
+pycparser==3.0
+    # via
+    #   -c current-freeze.txt
+    #   cffi
+pydantic[email]==2.13.5
+    # via
+    #   -c current-freeze.txt
+    #   -r requirements.in
+    #   fastapi
+    #   pydantic-settings
+pydantic-core==2.46.5
+    # via
+    #   -c current-freeze.txt
+    #   pydantic
+pydantic-settings==2.15.0
+    # via
+    #   -c current-freeze.txt
+    #   -r requirements.in
+pygments==2.21.0
+    # via
+    #   -c current-freeze.txt
+    #   pytest
+    #   rich
+pyparsing==3.3.3
+    # via
+    #   -c current-freeze.txt
+    #   matplotlib
+pytest==9.1.1
+    # via
+    #   -c current-freeze.txt
+    #   -r requirements.in
+    #   pytest-cov
+pytest-cov==7.1.0
+    # via
+    #   -c current-freeze.txt
+    #   -r requirements.in
+python-dateutil==2.9.0.post0
+    # via
+    #   -c current-freeze.txt
+    #   botocore
+    #   celery
+    #   matplotlib
+    #   pandas
+python-dotenv==1.2.4
+    # via
+    #   -c current-freeze.txt
+    #   -r requirements.in
+    #   pydantic-settings
+    #   uvicorn
+python-jose==3.5.0
+    # via
+    #   -c current-freeze.txt
+    #   -r requirements.in
+python-multipart==0.0.32
+    # via
+    #   -c current-freeze.txt
+    #   -r requirements.in
+pytorch-lightning==2.6.6
+    # via
+    #   -c current-freeze.txt
+    #   lightning
+pytorch-metric-learning==2.9.0
+    # via
+    #   -c current-freeze.txt
+    #   pyannote-audio
+pyyaml==6.0.3
+    # via
+    #   -c current-freeze.txt
+    #   accelerate
+    #   ctranslate2
+    #   datasets
+    #   huggingface-hub
+    #   ir-datasets
+    #   lightning
+    #   optuna
+    #   peft
+    #   pyannote-database
+    #   pyannote-pipeline
+    #   pytorch-lightning
+    #   transformers
+    #   uvicorn
+rank-bm25==0.2.2
+    # via
+    #   -c current-freeze.txt
+    #   -r requirements.in
+redis==8.1.0
+    # via
+    #   -c current-freeze.txt
+    #   -r requirements.in
+regex==2026.9.29
+    # via
+    #   -c current-freeze.txt
+    #   nltk
+    #   tiktoken
+    #   transformers
+requests==2.34.2
+    # via
+    #   -c current-freeze.txt
+    #   -r requirements.in
+    #   bert-score
+    #   ir-datasets
+    #   opentelemetry-exporter-http-transport
+    #   opentelemetry-exporter-otlp-proto-http
+    #   pyannoteai-sdk
+    #   tiktoken
+rich==15.0.0
+    # via
+    #   -c current-freeze.txt
+    #   -r requirements.in
+    #   pyannote-audio
+    #   typer
+rouge-score==0.1.2
+    # via
+    #   -c current-freeze.txt
+    #   -r requirements.in
+rsa==4.9.1
+    # via
+    #   -c current-freeze.txt
+    #   python-jose
+ruff==0.16.10
+    # via
+    #   -c current-freeze.txt
+    #   -r requirements.in
+s3transfer==0.19.2
+    # via
+    #   -c current-freeze.txt
+    #   boto3
+safetensors==0.8.0
+    # via
+    #   -c current-freeze.txt
+    #   -r requirements.in
+    #   accelerate
+    #   peft
+    #   pyannote-audio
+    #   transformers
+scikit-learn==1.9.1
+    # via
+    #   -c current-freeze.txt
+    #   pyannote-metrics
+    #   pytorch-metric-learning
+    #   sentence-transformers
+scipy==1.18.1
+    # via
+    #   -c current-freeze.txt
+    #   pyannote-metrics
+    #   scikit-learn
+    #   sentence-transformers
+sentence-transformers==6.1.0
+    # via
+    #   -c current-freeze.txt
+    #   -r requirements.in
+    #   flagembedding
+sentencepiece==0.2.2
+    # via
+    #   -c current-freeze.txt
+    #   -r requirements.in
+    #   flagembedding
+shellingham==1.5.4
+    # via
+    #   -c current-freeze.txt
+    #   typer
+six==1.17.0
+    # via
+    #   -c current-freeze.txt
+    #   ecdsa
+    #   langdetect
+    #   python-dateutil
+    #   rouge-score
+sortedcontainers==2.4.0
+    # via
+    #   -c current-freeze.txt
+    #   pyannote-core
+soundfile==0.14.0
+    # via
+    #   -c current-freeze.txt
+    #   -r requirements.in
+sqlalchemy==2.1.4
+    # via
+    #   -c current-freeze.txt
+    #   -r requirements.in
+    #   alembic
+    #   optuna
+starlette==1.7.0
+    # via
+    #   -c current-freeze.txt
+    #   fastapi
+sympy==1.14.0
+    # via
+    #   -c current-freeze.txt
+    #   torch
+tenacity==9.2.1
+    # via
+    #   -c current-freeze.txt
+    #   -r requirements.in
+threadpoolctl==3.7.0
+    # via
+    #   -c current-freeze.txt
+    #   scikit-learn
+tiktoken==0.14.0
+    # via
+    #   -c current-freeze.txt
+    #   -r requirements.in
+tokenizers==0.23.2
+    # via
+    #   -c current-freeze.txt
+    #   faster-whisper
+    #   sentence-transformers
+    #   transformers
+torch==2.14.1
+    # via
+    #   -c current-freeze.txt
+    #   -r requirements.in
+    #   accelerate
+    #   asteroid-filterbanks
+    #   bert-score
+    #   flagembedding
+    #   julius
+    #   lightning
+    #   peft
+    #   pyannote-audio
+    #   pytorch-lightning
+    #   pytorch-metric-learning
+    #   sentence-transformers
+    #   torch-audiomentations
+    #   torch-pitch-shift
+    #   torchmetrics
+    #   torchvision
+torch-audiomentations==0.12.0
+    # via
+    #   -c current-freeze.txt
+    #   pyannote-audio
+torch-pitch-shift==1.2.5
+    # via
+    #   -c current-freeze.txt
+    #   torch-audiomentations
+torchaudio==2.11.0
+    # via
+    #   -c current-freeze.txt
+    #   -r requirements.in
+    #   pyannote-audio
+    #   torch-audiomentations
+    #   torch-pitch-shift
+torchcodec==0.17.0
+    # via
+    #   -c current-freeze.txt
+    #   pyannote-audio
+torchmetrics==1.9.0
+    # via
+    #   -c current-freeze.txt
+    #   lightning
+    #   pyannote-audio
+    #   pytorch-lightning
+torchvision==0.29.1
+    # via
+    #   -c current-freeze.txt
+    #   -r requirements.in
+tqdm==4.70.1
+    # via
+    #   -c current-freeze.txt
+    #   -r requirements.in
+    #   bert-score
+    #   datasets
+    #   faster-whisper
+    #   huggingface-hub
+    #   ir-datasets
+    #   lightning
+    #   nltk
+    #   optuna
+    #   peft
+    #   pyannote-pipeline
+    #   pytorch-lightning
+    #   pytorch-metric-learning
+    #   sentence-transformers
+    #   transformers
+transformers==5.19.0
+    # via
+    #   -c current-freeze.txt
+    #   -r requirements.in
+    #   bert-score
+    #   flagembedding
+    #   peft
+    #   sentence-transformers
+triton==3.8.0
+    # via
+    #   -c current-freeze.txt
+    #   torch
+typer==0.27.3
+    # via
+    #   -c current-freeze.txt
+    #   transformers
+typing-extensions==4.16.0
+    # via
+    #   -c current-freeze.txt
+    #   aiohttp
+    #   aiosignal
+    #   alembic
+    #   anyio
+    #   asteroid-filterbanks
+    #   click-repl
+    #   fastapi
+    #   grpcio
+    #   huggingface-hub
+    #   lightning
+    #   lightning-utilities
+    #   opentelemetry-api
+    #   opentelemetry-exporter-otlp-proto-grpc
+    #   opentelemetry-exporter-otlp-proto-http
+    #   opentelemetry-sdk
+    #   opentelemetry-semantic-conventions
+    #   psycopg
+    #   pydantic
+    #   pydantic-core
+    #   pytorch-lightning
+    #   sentence-transformers
+    #   soundfile
+    #   sqlalchemy
+    #   starlette
+    #   torch
+    #   typing-inspection
+typing-inspection==0.4.4
+    # via
+    #   -c current-freeze.txt
+    #   fastapi
+    #   pydantic
+    #   pydantic-settings
+tzdata==2026.5
+    # via
+    #   -c current-freeze.txt
+    #   kombu
+tzlocal==5.4.4
+    # via
+    #   -c current-freeze.txt
+    #   celery
+urllib3==2.8.0
+    # via
+    #   -c current-freeze.txt
+    #   botocore
+    #   requests
+uvicorn[standard]==0.54.0
+    # via
+    #   -c current-freeze.txt
+    #   -r requirements.in
+uvloop==0.23.0
+    # via
+    #   -c current-freeze.txt
+    #   uvicorn
+vine==5.1.0
+    # via
+    #   -c current-freeze.txt
+    #   amqp
+    #   celery
+    #   kombu
+watchfiles==1.3.0
+    # via
+    #   -c current-freeze.txt
+    #   uvicorn
+wcwidth==0.9.2
+    # via
+    #   -c current-freeze.txt
+    #   prompt-toolkit
+webrtcvad==2.0.10
+    # via
+    #   -c current-freeze.txt
+    #   -r requirements.in
+websockets==17.2
+    # via
+    #   -c current-freeze.txt
+    #   -r requirements.in
+    #   uvicorn
+xxhash==4.0.1
+    # via
+    #   -c current-freeze.txt
+    #   datasets
+yarl==1.25.1
+    # via
+    #   -c current-freeze.txt
+    #   aiohttp
+
+# The following packages are considered to be unsafe in a requirements file:
+setuptools==80.10.2
+    # via
+    #   -c current-freeze.txt
+    #   -r requirements.in
+    #   torch

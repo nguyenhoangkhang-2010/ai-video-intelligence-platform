@@ -1,0 +1,40 @@
+{
+  "_comment": "Small, fixed, hand-authored regression dataset for ai/evaluation - consumed ONLY by tests/ai/evaluation/test_golden_dataset.py. Deliberately generic/synthetic (no real video content, no domain-specific entities) so it never needs updating when product content changes. Unlike example_retrieval_queries.json / example_rag_questions.json (schema templates for a real deployment's own data), every expected score for this dataset is hand-computed and asserted in the test - it exists to catch a future regression in metric math or BenchmarkRunner's aggregation, not to measure this deployment's real retrieval/RAG quality.",
+
+  "retrieval_cases": [
+    {
+      "query": "q1",
+      "retrieved_ids": ["c1", "c2", "c3", "c4", "c5"],
+      "relevant_ids": ["c1", "c3"]
+    },
+    {
+      "query": "q2",
+      "retrieved_ids": ["d1", "d2", "d3"],
+      "relevant_ids": ["d2"]
+    }
+  ],
+
+  "generation_cases": [
+    {
+      "candidate": "the quick brown fox jumps over the lazy dog",
+      "reference": "the quick brown fox jumps over the lazy dog"
+    },
+    {
+      "candidate": "alpha beta gamma delta",
+      "reference": "zeta eta theta iota"
+    }
+  ],
+
+  "rag_cases": [
+    {
+      "question": "what color is the sky",
+      "answer": "the sky is blue",
+      "retrieved_contexts": ["the sky appears blue during the day"]
+    },
+    {
+      "question": "is the grass green",
+      "answer": "yes the grass is green",
+      "retrieved_contexts": ["grass is typically green due to chlorophyll"]
+    }
+  ]
+}

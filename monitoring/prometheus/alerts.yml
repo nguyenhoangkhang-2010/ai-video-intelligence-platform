@@ -1,0 +1,48 @@
+# A handful of justified, low-noise alert rules - not an exhaustive
+# alerting system. Extend deliberately; avoid alert fatigue.
+groups:
+  - name: ai-video-platform
+    rules:
+      - alert: APIDown
+        expr: up{job="api"} == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "API is not reachable by Prometheus"
+          description: "The api target has been down for more than 1 minute."
+
+      - alert: HighAPIErrorRate
+        expr: |
+          sum(rate(http_requests_total{status_code=~"5.."}[5m]))
+          /
+          sum(rate(http_requests_total[5m]))
+          > 0.05
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "API 5xx error rate above 5%"
+          description: "More than 5% of HTTP responses have been 5xx over the last 5 minutes."
+
+      - alert: HighCeleryTaskFailureRate
+        expr: |
+          sum(rate(celery_task_total{status="failure"}[15m]))
+          /
+          sum(rate(celery_task_total[15m]))
+          > 0.2
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Celery task failure rate above 20%"
+          description: "More than 20% of Celery tasks have failed over the last 15 minutes."
+
+      - alert: ProcessingJobBacklogGrowing
+        expr: processing_jobs_active > 20
+        for: 15m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Processing job backlog is large"
+          description: "More than 20 processing jobs have been PENDING/RUNNING for 15+ minutes - workers may be under-provisioned or stuck."

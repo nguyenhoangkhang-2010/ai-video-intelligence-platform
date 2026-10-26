@@ -1,0 +1,43 @@
+# ==================================================
+# VERSION 7
+# ==================================================
+# Workflow Orchestration
+prefect
+apache-airflow
+# Data / Experiment Versioning
+dvc
+# Configuration
+hydra-core
+# Data Validation
+great-expectations
+# Feature Store
+feast
+# Data Processing
+duckdb
+polars
+pyarrow
+# Vector Database
+lancedb
+pymilvus
+weaviate-client
+# Knowledge Graph
+neo4j
+# Redis
+# RedisJSON is a Redis server module, not a Python package.
+# Observability
+opentelemetry-api
+opentelemetry-sdk
+# Grafana
+grafana-api
+# Error Tracking
+sentry-sdk
+# Testing
+pytest-cov
+# Type Checking
+mypy
+# Security
+bandit
+# Linting
+ruff
+# Git Hooks
+pre-commit

@@ -79,6 +79,9 @@ frontend/.next/
 frontend/out/
 frontend/.turbo/
 frontend/.vercel/
+frontend/test-results/
+frontend/playwright-report/
+frontend/playwright/.cache/
 ############################
 # Package Managers
 ############################
@@ -93,7 +96,14 @@ docker-data/
 ############################
 # AI Models
 ############################
-models/
+# NOTE: a bare "models/" was removed here - it matched ANY directory
+# named "models" anywhere in the repo, including the real source code
+# package backend/app/models/ (SQLAlchemy ORM models), silently
+# excluding it from git entirely (confirmed via `git ls-files` - none
+# of its .py files were tracked). checkpoints/, weights/, and the
+# extension patterns below already cover downloaded model artifacts;
+# scope a replacement to the actual weights directory if one is
+# introduced (e.g. "data/models/"), not a bare "models/".
 checkpoints/
 weights/
 *.ckpt
@@ -163,3 +173,28 @@ temp/
 *.db
 *.bak
 *.tmp
+############################
+# Database
+############################
+uploads/
+############################
+# Large Demo Files
+############################
+assets/demo/*.mp4
+assets/demo/*.wav
+assets/demo/*.mov
+assets/demo/*.mkv
+############################
+# FAISS index
+############################
+backend/storage/faiss/*
+!backend/storage/faiss/.gitkeep
+
+############################
+# TLS certificates/keys - locally-generated for dev/staging HTTPS
+# termination (deployment/nginx/certs/). A real deployment supplies
+# its own certificate (e.g. Let's Encrypt) out of band; the private
+# key must never be committed regardless of how it was generated.
+############################
+deployment/nginx/certs/*
+!deployment/nginx/certs/.gitkeep

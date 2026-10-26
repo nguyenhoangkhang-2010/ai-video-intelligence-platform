@@ -1,0 +1,284 @@
+# Local development stack: backend API, Celery worker, Redis, Postgres,
+# and (optional, --profile frontend) the frontend app. Not for
+# production use - see deployment/docker/docker-compose.prod.yml for
+# that. Internal services talk to each other using these Compose
+# service names (db/redis/api), never localhost.
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: ai-video-db
+    restart: unless-stopped
+
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      POSTGRES_DB: ${POSTGRES_DB:-ai_video}
+
+    ports:
+      - "5432:5432"
+
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "pg_isready -U ${POSTGRES_USER:-postgres} -d ${POSTGRES_DB:-ai_video}",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  redis:
+    image: redis:7-alpine
+    container_name: ai-video-redis
+    restart: unless-stopped
+
+    ports:
+      - "6379:6379"
+
+    volumes:
+      - redis_data:/data
+
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 5s
+
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+
+    container_name: ai-video-api
+    restart: unless-stopped
+
+    ports:
+      - "8001:8000"
+
+    env_file:
+      - .env
+
+    environment:
+      DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@db:5432/${POSTGRES_DB:-ai_video}
+      REDIS_URL: redis://redis:6379/0
+      CELERY_BROKER_URL: redis://redis:6379/0
+      CELERY_RESULT_BACKEND: redis://redis:6379/0
+      # RateLimitSettings.redis_url defaults to localhost, which inside
+      # a container means the container itself, not the redis service -
+      # without this override the rate limiter's Redis client silently
+      # fails to connect and fails open (see app/core/rate_limit.py).
+      RATE_LIMIT_REDIS_URL: redis://redis:6379/0
+      # Deliberately under ./storage rather than a separate volume/
+      # path - it's already the one persistent, writable location this
+      # container has (docker-entrypoint.sh chowns it to the non-root
+      # "app" user at startup, both here and in docker-compose.prod.yml
+      # - see that script's own comment for the real mechanism), so
+      # reusing it for the HF model cache avoids declaring and
+      # permissioning a second volume for no reason.
+      HF_HOME: /app/storage/.cache/huggingface
+
+    volumes:
+      - ./storage:/app/storage
+
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/api/v1/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+
+  celery:
+    build:
+      context: .
+      dockerfile: Dockerfile
+
+    container_name: ai-video-celery
+    restart: unless-stopped
+
+    # Listens to both queues by default so this single CPU worker
+    # keeps consuming everything out of the box, whether or not the
+    # optional "celery-gpu" worker below is also running - see
+    # CelerySettings' docstring in app/config/settings.py. For strict
+    # CPU/GPU task separation, override this to `-Q celery_cpu` only.
+    command:
+      - celery
+      - -A
+      - app.workers.celery_app.celery_app
+      - worker
+      - --loglevel=info
+      - -Q
+      - celery_cpu,celery_gpu
+      - --concurrency=${CELERY_WORKER_CONCURRENCY:-2}
+
+    env_file:
+      - .env
+
+    environment:
+      DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@db:5432/${POSTGRES_DB:-ai_video}
+      REDIS_URL: redis://redis:6379/0
+      CELERY_BROKER_URL: redis://redis:6379/0
+      CELERY_RESULT_BACKEND: redis://redis:6379/0
+      # "api" is the single designated migrator (see
+      # backend/scripts/docker-entrypoint.sh) - this avoids two
+      # containers racing to create the same tables on a fresh DB.
+      RUN_MIGRATIONS_ON_START: "false"
+      # See the "api" service's HF_HOME comment above - same reasoning.
+      HF_HOME: /app/storage/.cache/huggingface
+
+    ports:
+      - "9100:9100"
+
+    volumes:
+      - ./storage:/app/storage
+
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+    # Overrides the image's baked-in Dockerfile HEALTHCHECK (which
+    # curls the API's uvicorn port 8000 - not listening in this
+    # container, since it runs `celery worker`, not `uvicorn`). This
+    # worker has no HTTP API of its own; instead it reuses the
+    # existing worker-side Prometheus metrics server
+    # (app/workers/metrics.py, started on worker_process_init) as the
+    # liveness signal - the same port this service already publishes
+    # below, just now also polled locally by Docker.
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:9100/ || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+
+  # Not started by a plain `docker compose up` - opt-in GPU worker for
+  # transcription/embedding/LLM workloads. Requires the NVIDIA
+  # Container Toolkit on the host; enable with
+  # `docker compose --profile gpu up`. The default "celery" worker
+  # above works fully without this - CPU is always the fallback.
+  celery-gpu:
+    profiles: ["gpu"]
+
+    build:
+      context: .
+      dockerfile: Dockerfile
+
+    container_name: ai-video-celery-gpu
+    restart: unless-stopped
+
+    command:
+      - celery
+      - -A
+      - app.workers.celery_app.celery_app
+      - worker
+      - --loglevel=info
+      - -Q
+      - celery_cpu,celery_gpu
+      - --concurrency=${CELERY_GPU_WORKER_CONCURRENCY:-1}
+
+    env_file:
+      - .env
+
+    environment:
+      DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@db:5432/${POSTGRES_DB:-ai_video}
+      REDIS_URL: redis://redis:6379/0
+      CELERY_BROKER_URL: redis://redis:6379/0
+      CELERY_RESULT_BACKEND: redis://redis:6379/0
+      RUN_MIGRATIONS_ON_START: "false"
+      WHISPER_DEVICE: cuda
+      METRICS_WORKER_PORT: 9101
+
+    ports:
+      - "9101:9101"
+
+    volumes:
+      - ./storage:/app/storage
+
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: ["gpu"]
+
+  # Not started by a plain `docker compose up` - minimal local
+  # Prometheus + Grafana for testing monitoring/. Enable with
+  # `docker compose --profile monitoring up`.
+  prometheus:
+    profiles: ["monitoring"]
+    image: prom/prometheus:v2.55.1
+    container_name: ai-video-prometheus
+    restart: unless-stopped
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./monitoring/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./monitoring/prometheus/alerts.yml:/etc/prometheus/alerts.yml:ro
+      - prometheus_data:/prometheus
+
+  grafana:
+    profiles: ["monitoring"]
+    image: grafana/grafana:11.3.0
+    container_name: ai-video-grafana
+    restart: unless-stopped
+    ports:
+      - "3001:3000"
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:-admin}
+      GF_AUTH_ANONYMOUS_ENABLED: "false"
+    volumes:
+      - ./monitoring/grafana/datasource.yml:/etc/grafana/provisioning/datasources/datasource.yml:ro
+      - ./monitoring/grafana/dashboard-provider.yml:/etc/grafana/provisioning/dashboards/dashboard-provider.yml:ro
+      - ./monitoring/grafana/dashboard.json:/var/lib/grafana/dashboards/ai-video-overview.json:ro
+      - grafana_data:/var/lib/grafana
+    depends_on:
+      - prometheus
+
+  # Not started by a plain `docker compose up` - opt-in production-build
+  # frontend container for testing the built (not `next dev`) app
+  # locally. Activate with `docker compose --profile frontend up`.
+  # Day-to-day frontend development still uses `npm run dev` directly
+  # (frontend/) against this stack's api service, which is faster to
+  # iterate on than rebuilding this image on every change.
+  frontend:
+    profiles: ["frontend"]
+
+    build:
+      context: ./frontend
+      dockerfile: ../deployment/docker/frontend.Dockerfile
+      args:
+        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:8001}
+
+    container_name: ai-video-frontend
+    restart: unless-stopped
+
+    ports:
+      - "3000:3000"
+
+    depends_on:
+      - api
+
+volumes:
+  redis_data:
+  postgres_data:
+  prometheus_data:
+  grafana_data:

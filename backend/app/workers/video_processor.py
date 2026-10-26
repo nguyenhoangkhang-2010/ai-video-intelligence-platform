@@ -1,0 +1,147 @@
+import logging
+
+from app.database.session import SessionLocal
+
+from app.repositories.video import VideoRepository
+from app.services.video import VideoService
+from app.pipelines.video_pipeline import VideoPipelineService
+from app.pipelines.processing_pipeline import ProcessingPipeline
+
+from app.repositories.processing_job import ProcessingJobRepository
+from app.services.processing_job import ProcessingJobService
+
+from app.repositories.processing_stage import ProcessingStageRepository
+from app.services.processing_stage import ProcessingStageService
+
+from app.repositories.transcript import TranscriptRepository
+from app.services.transcript import TranscriptService
+
+from app.repositories.summary import SummaryRepository
+from app.services.summary import SummaryService
+
+from app.repositories.embedding import EmbeddingRepository
+from app.services.embedding import EmbeddingService
+
+from app.repositories.translation import TranslationRepository
+from app.services.translation import TranslationService
+
+from app.repositories.quiz import QuizRepository
+from app.services.quiz import QuizService
+
+from app.repositories.chapter import ChapterRepository
+from app.services.chapter import ChapterService
+
+from app.repositories.flashcard import FlashcardRepository
+from app.services.flashcard import FlashcardService
+
+from app.storage.factory import get_storage_backend
+
+from app.config.settings import settings
+from app.core.retry import TRANSIENT_EXCEPTIONS
+from app.workers.celery_app import celery_app
+
+
+logger = logging.getLogger(__name__)
+
+
+@celery_app.task(
+    bind=True,
+    # Bounded, backed-off retry scoped to TRANSIENT_EXCEPTIONS only
+    # (DB/Redis connectivity, network-level failures to Ollama, etc.)
+    # - see app.core.retry. This only provides real recovery for a
+    # failure that happens *before* the ProcessingJob is claimed
+    # (e.g. SessionLocal() or the claim query itself hitting a
+    # transient DB hiccup): the job is still PENDING, so a retry
+    # legitimately re-attempts the whole run.
+    #
+    # Once a job IS claimed (PENDING -> RUNNING), ProcessingPipeline.
+    # run() always marks it FAILED and re-raises on any exception
+    # (including a transient one that survived OllamaClient's own
+    # internal retry) before this decorator ever sees it. A Celery-
+    # level retry after that point is a deliberate, safe no-op:
+    # start_if_pending() finds the job no longer PENDING and skips
+    # re-running the pipeline (see ProcessingPipeline.run's
+    # docstring), so a FAILED job is never silently duplicated or
+    # resurrected - it stays FAILED, correctly, for manual/reprocess
+    # follow-up.
+    autoretry_for=TRANSIENT_EXCEPTIONS,
+    retry_backoff=True,
+    retry_backoff_max=settings.celery.task_retry_backoff_max,
+    retry_jitter=True,
+    max_retries=settings.celery.task_max_retries,
+)
+def process_video(
+    self,
+    job_id: int,
+    video_id: int,
+    file_path: str,
+):
+    """
+    Celery entry point for video processing.
+
+    Only wires up dependencies for one DB session/request; every
+    lifecycle decision (claiming the job, marking it
+    running/completed/failed, propagating exceptions) is delegated to
+    ProcessingPipeline.
+    """
+    db = SessionLocal()
+
+    try:
+        video_repository = VideoRepository(db)
+        video_service = VideoService(video_repository)
+
+        processing_repository = ProcessingJobRepository(db)
+        processing_service = ProcessingJobService(processing_repository)
+
+        processing_stage_repository = ProcessingStageRepository(db)
+        processing_stage_service = ProcessingStageService(processing_stage_repository)
+
+        transcript_repository = TranscriptRepository(db)
+        transcript_service = TranscriptService(transcript_repository)
+
+        summary_repository = SummaryRepository(db)
+        summary_service = SummaryService(summary_repository)
+
+        embedding_repository = EmbeddingRepository(db)
+        embedding_service = EmbeddingService(embedding_repository)
+
+        translation_repository = TranslationRepository(db)
+        translation_service = TranslationService(translation_repository)
+
+        quiz_repository = QuizRepository(db)
+        quiz_service = QuizService(quiz_repository)
+
+        chapter_repository = ChapterRepository(db)
+        chapter_service = ChapterService(chapter_repository)
+
+        flashcard_repository = FlashcardRepository(db)
+        flashcard_service = FlashcardService(flashcard_repository)
+
+        video_pipeline = VideoPipelineService(
+            video_service=video_service,
+            transcript_service=transcript_service,
+            summary_service=summary_service,
+            embedding_service=embedding_service,
+            translation_service=translation_service,
+            processing_job_service=processing_service,
+            processing_stage_service=processing_stage_service,
+            quiz_service=quiz_service,
+            chapter_service=chapter_service,
+            flashcard_service=flashcard_service,
+            storage=get_storage_backend(),
+        )
+
+        processing_pipeline = ProcessingPipeline(
+            processing_job_service=processing_service,
+            video_service=video_service,
+            video_pipeline=video_pipeline,
+        )
+
+        processing_pipeline.run(
+            job_id=job_id,
+            video_id=video_id,
+            file_path=file_path,
+        )
+
+    finally:
+        db.close()

@@ -1,0 +1,233 @@
+import logging
+
+from app.repositories.video import VideoRepository
+from app.types.video_metadata import VideoMetadata
+
+from fastapi import HTTPException
+from fastapi import status as http_status
+
+from app.models.video import Video
+
+logger = logging.getLogger(__name__)
+
+
+class VideoService:
+    """Service for video business logic."""
+
+    def __init__(
+        self,
+        repository: VideoRepository,
+    ):
+        self.repository = repository
+
+    def get_user_videos(
+        self,
+        user_id: int,
+    ):
+        return self.repository.get_by_owner(
+            owner_id=user_id,
+        )
+        
+    def get_video(
+        self,
+        video_id: int,
+        user_id: int,
+    ):
+        """
+        Get a video by ID for the current user.
+        """
+        video = self.repository.get_by_id_and_owner(
+            video_id=video_id,
+            owner_id=user_id,
+        )
+
+        if video is None:
+            raise HTTPException(
+                status_code=http_status.HTTP_404_NOT_FOUND,
+                detail="Video not found",
+            )
+
+        return video
+
+    def get_video_by_id(
+        self,
+        video_id: int,
+    ) -> Video | None:
+        """
+        Internal, unscoped lookup by id only - no ownership check,
+        returns None (never raises) on a miss. For system-internal
+        callers only (e.g. UploadPipeline.reconcile_orphaned_jobs,
+        which has no requesting user to scope against); every
+        user-facing route must use get_video instead.
+        """
+        return self.repository.get_by_id(video_id)
+
+    def upload_video(
+        self,
+        owner_id: int,
+        title: str,
+        filename: str,
+        language: str,
+        duration: int,
+    ) -> Video:
+        """
+        Save uploaded video metadata.
+        """
+
+        video = Video(
+            owner_id=owner_id,
+            title=title,
+            filename=filename,
+            language=language,
+            duration=duration,
+            status="uploaded",
+        )
+
+        return self.repository.create(video)
+    
+    def delete_video(
+        self,
+        video_id: int,
+        user_id: int,
+    ):
+        success = self.repository.delete_by_owner(
+            video_id=video_id,
+            owner_id=user_id,
+        )
+
+        if not success:
+            raise HTTPException(
+                status_code=http_status.HTTP_404_NOT_FOUND,
+                detail="Video not found",
+            )
+
+        return {
+            "message": "Video deleted successfully",
+        }
+        
+    def update_video(
+        self,
+        video_id: int,
+        user_id: int,
+        title: str | None,
+        language: str | None,
+        status: str | None,
+    ):
+        video = self.repository.get_by_id_and_owner(
+            video_id=video_id,
+            owner_id=user_id,
+        )
+
+        if video is None:
+            raise HTTPException(
+                status_code=http_status.HTTP_404_NOT_FOUND,
+                detail="Video not found",
+            )
+
+        if title is not None:
+            video.title = title
+
+        if language is not None:
+            video.language = language
+            
+        if status is not None:
+            video.status = status
+
+        return self.repository.update(video)
+    
+    def update_duration(
+        self,
+        video_id: int,
+        duration: int,
+    ) -> Video:
+        """
+        Update video duration after metadata extraction.
+        """
+        video = self.repository.get_by_id(video_id)
+
+        if video is None:
+            raise HTTPException(
+                status_code=http_status.HTTP_404_NOT_FOUND,
+                detail="Video not found",
+            )
+
+        video.duration = duration
+
+        return self.repository.update(video)
+    
+    def update_metadata(
+        self,
+        video_id: int,
+        metadata: VideoMetadata,
+    ) -> Video:
+        """
+        Update video metadata extracted by FFprobe.
+        """
+        video = self.repository.get_by_id(video_id)
+        if video is None:
+            raise HTTPException(
+                status_code=http_status.HTTP_404_NOT_FOUND,
+                detail="Video not found",
+            )
+        video.duration = metadata.duration
+        return self.repository.update(video)
+    
+    def update_processing_result(
+        self,
+        video_id: int,
+        language: str,
+    ) -> Video:
+        video = self.repository.get_by_id(video_id)
+
+        if video is None:
+            raise HTTPException(
+                status_code=http_status.HTTP_404_NOT_FOUND,
+                detail="Video not found",
+            )
+
+        video.language = language
+
+        return self.repository.update(video)
+
+    def update_thumbnail(
+        self,
+        video_id: int,
+        thumbnail_key: str,
+    ) -> Video:
+        """
+        Persist the storage key of a real, ffmpeg-extracted frame.
+
+        Looked up by id only (not owner-scoped) - called from inside
+        the processing pipeline, which already only ever operates on
+        a video it was dispatched for, the same convention every other
+        pipeline-stage update on this service already follows
+        (update_metadata/update_status/update_processing_result).
+        """
+        video = self.repository.get_by_id(video_id)
+
+        if video is None:
+            raise HTTPException(
+                status_code=http_status.HTTP_404_NOT_FOUND,
+                detail="Video not found",
+            )
+
+        video.thumbnail_key = thumbnail_key
+
+        return self.repository.update(video)
+
+    def update_status(
+        self,
+        video_id: int,
+        status: str,
+    ) -> Video:
+        video = self.repository.get_by_id(video_id)
+
+        if video is None:
+            raise HTTPException(
+                status_code=http_status.HTTP_404_NOT_FOUND,
+                detail="Video not found",
+            )
+
+        video.status = status
+
+        return self.repository.update(video)

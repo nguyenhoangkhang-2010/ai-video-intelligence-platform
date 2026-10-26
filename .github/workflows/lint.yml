@@ -1,0 +1,41 @@
+name: Lint
+
+"on":
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: lint-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  backend-lint:
+    name: Backend (ruff)
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install ruff
+        run: python -m pip install ruff
+
+      # backend/ruff.toml now exists and is lint-clean (select = ["F"]
+      # - Pyflakes only: unused imports/variables, undefined names.
+      # Checked before adopting it: ruff's raw default rule set
+      # produced 786 findings on this codebase, almost entirely style
+      # rules never agreed to (e.g. an 88-char line limit, demanding a
+      # shebang on every non-executable test file) - not real signal.
+      # `F` alone found 13 genuine issues, including one real latent
+      # bug (an `__all__` entry referencing a renamed symbol), all
+      # fixed. Blocking, not informational, now that there's a real,
+      # clean baseline to hold.
+      - name: Run ruff check
+        run: ruff check backend

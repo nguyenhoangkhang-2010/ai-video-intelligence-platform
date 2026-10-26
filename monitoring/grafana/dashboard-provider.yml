@@ -1,0 +1,13 @@
+# Tells Grafana to auto-load dashboard.json from the mounted
+# directory on startup - no manual "import dashboard" step needed.
+apiVersion: 1
+
+providers:
+  - name: ai-video-platform
+    orgId: 1
+    folder: ""
+    type: file
+    disableDeletion: false
+    updateIntervalSeconds: 30
+    options:
+      path: /var/lib/grafana/dashboards

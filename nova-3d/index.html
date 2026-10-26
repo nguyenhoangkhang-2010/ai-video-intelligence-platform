@@ -1,0 +1,162 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Nova viewer</title>
+<style>
+  :root { --bg: #0C0F16; --panel: #131824; --line: #2E3749; --text: #EEF1F6; --muted: #97A1B4; --signal: #5CF2E3; }
+  html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text); font-family: system-ui, sans-serif; overflow: hidden; }
+  canvas { display: block; }
+  #ui { position: fixed; left: 16px; right: 16px; bottom: 16px; display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; }
+  #ui button { min-height: 44px; padding: 0 16px; border-radius: 12px; border: 1px solid var(--line); background: var(--panel); color: var(--text); font: 13px ui-monospace, monospace; cursor: pointer; }
+  #ui button.on { background: var(--signal); border-color: var(--signal); color: #06201D; }
+  #hud { position: fixed; top: 16px; left: 16px; font: 12px ui-monospace, monospace; color: var(--muted); line-height: 1.6; }
+  #hud b { color: var(--signal); font-weight: 500; }
+</style>
+<script type="importmap">
+{ "imports": {
+  "three": "https://cdn.jsdelivr.net/npm/three@0.169.0/build/three.module.js",
+  "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.169.0/examples/jsm/"
+} }
+</script>
+</head>
+<body>
+<div id="hud">NOW PLAYING <b id="clip">…</b><br><span id="stats"></span></div>
+<div id="ui"></div>
+<script type="module">
+import * as THREE from 'three';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+
+const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+renderer.setSize(innerWidth, innerHeight);
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+document.body.prepend(renderer.domElement);
+
+const scene = new THREE.Scene();
+scene.environment = new THREE.PMREMGenerator(renderer).fromScene(new RoomEnvironment(), 0.04).texture;
+scene.environmentIntensity = 0.8;
+const key = new THREE.DirectionalLight('#ffffff', 1.6);
+key.position.set(1.5, 2.5, 3);
+scene.add(key);
+
+const camera = new THREE.PerspectiveCamera(30, innerWidth / innerHeight, 0.05, 50);
+camera.position.set(0, 0.62, 2.6);
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.target.set(0, 0.52, 0);
+controls.enableDamping = true;
+controls.update();
+
+const params = new URLSearchParams(location.search);
+const gltf = await new GLTFLoader().loadAsync('nova.glb');
+const nova = gltf.scene;
+scene.add(nova);
+
+const mixer = new THREE.AnimationMixer(nova);
+const actions = Object.fromEntries(gltf.animations.map((c) => [c.name, mixer.clipAction(c)]));
+const LOOPS = ['Idle_Breathe', 'Look_Around', 'Think', 'Float'];
+for (const [name, a] of Object.entries(actions)) {
+  if (!LOOPS.includes(name)) { a.setLoop(THREE.LoopOnce); a.clampWhenFinished = true; }
+}
+
+// Layer 0: Float always on. Blink is its own layer (eye bone scale only).
+actions.Float.play();
+let current = actions.Idle_Breathe;
+current.play();
+
+function play(name, fade = 0.35) {
+  const next = actions[name];
+  if (next === current) { next.reset().play(); return; }
+  next.reset().setEffectiveWeight(1).play();
+  current.crossFadeTo(next, fade, true);
+  current = next;
+  document.getElementById('clip').textContent = name;
+  renderButtons();
+}
+mixer.addEventListener('finished', (e) => {
+  if (e.action === actions.Blink) return;
+  if (e.action === current) play('Idle_Breathe');
+});
+
+(function blinkLoop() {
+  setTimeout(() => { actions.Blink.reset().play(); blinkLoop(); }, 2500 + Math.random() * 3500);
+})();
+
+// UI
+const ui = document.getElementById('ui');
+const names = ['Idle_Breathe', 'Look_Around', 'Look_At_Camera', 'Wave', 'Think', 'Greet', 'Excited', 'Nod', 'Blink'];
+function renderButtons() {
+  ui.innerHTML = '';
+  for (const n of names) {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.textContent = n;
+    if (actions[n] === current) b.className = 'on';
+    b.onclick = () => (n === 'Blink' ? actions.Blink.reset().play() : play(n));
+    ui.appendChild(b);
+  }
+}
+renderButtons();
+document.getElementById('clip').textContent = 'Idle_Breathe';
+
+// Look layer: head and eyes follow the cursor, applied on top of the mixer.
+const head = nova.getObjectByName('Head');
+const eyeL = nova.getObjectByName('Eye_L');
+const eyeR = nova.getObjectByName('Eye_R');
+const pointer = new THREE.Vector2();
+const look = new THREE.Vector2();
+let lastMove = performance.now();
+addEventListener('pointermove', (e) => {
+  pointer.set((e.clientX / innerWidth) * 2 - 1, -(e.clientY / innerHeight) * 2 + 1);
+  lastMove = performance.now();
+});
+const qHead = new THREE.Quaternion(), qEye = new THREE.Quaternion(), eul = new THREE.Euler();
+
+let tris = 0;
+nova.traverse((o) => { if (o.isMesh) tris += o.geometry.index.count / 3; });
+document.getElementById('stats').textContent = `${tris.toLocaleString()} tris · ${gltf.animations.length} clips`;
+
+const clock = new THREE.Clock();
+renderer.setAnimationLoop(() => {
+  const dt = clock.getDelta();
+  if (window.__freeze) { controls.update(); renderer.render(scene, camera); return; }
+  mixer.update(dt);
+  const k = 1 - Math.exp(-8 * dt);
+  const target = current === actions.Look_At_Camera ? new THREE.Vector2() : pointer;
+  look.lerp(target, k);
+  head.quaternion.multiply(qHead.setFromEuler(eul.set(-look.y * 0.3, look.x * 0.55, 0)));
+  qEye.setFromEuler(eul.set(-look.y * 0.18, look.x * 0.3, 0));
+  eyeL.quaternion.multiply(qEye);
+  eyeR.quaternion.multiply(qEye);
+  if (current === actions.Idle_Breathe && performance.now() - lastMove > 4000) play('Look_Around');
+  controls.update();
+  renderer.render(scene, camera);
+});
+
+addEventListener('resize', () => {
+  camera.aspect = innerWidth / innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth, innerHeight);
+});
+
+if (params.get('clip')) play(params.get('clip'), 0);
+if (params.get('t')) { mixer.update(parseFloat(params.get('t'))); }
+setTimeout(() => { if (!params.get('clip')) play('Wave'); }, 600);
+// Debug helper: pose(name, time) freezes the model on one clip frame.
+window.__nova = {
+  actions, play, mixer, camera, controls,
+  pose(name, t) {
+    window.__freeze = true;
+    mixer.stopAllAction();
+    const a = actions[name];
+    a.reset().setEffectiveWeight(1).play();
+    a.time = t;
+    mixer.update(0);
+  },
+};
+</script>
+</body>
+</html>

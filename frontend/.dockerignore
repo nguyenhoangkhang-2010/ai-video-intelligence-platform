@@ -1,0 +1,10 @@
+node_modules
+.next
+out
+.turbo
+.vercel
+.git
+.env
+.env.*
+!.env.example
+*.log
